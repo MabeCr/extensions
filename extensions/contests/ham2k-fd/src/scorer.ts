@@ -18,14 +18,8 @@
 //
 // The rules: https://field-day.arrl.org/
 
-import { tally } from "@ham2k/extension-sdk"
-import type {
-  ContestScorer,
-  HookContext,
-  JSONValue,
-  QsoScoreVerdict,
-  ScoreTally,
-} from "@ham2k/extension-sdk"
+import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
+import type { ContestScorer, HookContext, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
 import { fmtInteger } from "@ham2k/lib-format-tools"
 import { superModeForMode } from "@ham2k/lib-operation-data"
 
@@ -36,6 +30,12 @@ import { tFor } from "./i18n.ts"
 /// stays what the app's own built-in wrote there whatever this package is
 /// called: the manifest key names the package, `TYPE` names the activation.
 export const TYPE = 'fd'
+
+/// The contest as the operation's title names it — and so as its score is
+/// titled, so the two cannot disagree.
+export function contestTitle(): string {
+  return 'FD'
+}
 
 /// `1A`, `14F`, and `PC2B` for a station asking you to copy a bulletin.
 export const CLASS_REGEX = /^(PC)?([1-9][0-9]*)([ABCDEF])$/
@@ -60,11 +60,6 @@ export type FDScoresheet = {
   modesByCall: Record<string, Record<string, true>>
   qsoPoints: number
   qsoCount: number
-  /// Reset on each new UTC day. Field Day ALWAYS spans two of them (1800Z
-  /// Saturday to 2100Z Sunday), so without these the per-day header reports
-  /// the running total and re-adds the whole bonus to every day.
-  dayPoints: number
-  dayQsos: number
   /// The setup as it stood while these QSOs were scored.
   ///
   /// `summarizeScore` is handed the FIRST segment's ref, so reading the
@@ -178,8 +173,6 @@ export const FDScorer: ContestScorer<FDScoresheet> = {
       modesByCall: {},
       qsoPoints: 0,
       qsoCount: 0,
-      dayPoints: 0,
-      dayQsos: 0,
       multiplier: 1,
       bonus: 0,
       pleaseCopy: 0,
@@ -191,15 +184,8 @@ export const FDScorer: ContestScorer<FDScoresheet> = {
     }
   },
 
-  scoreQso({ scoresheet, qso, operation, ref, isNewDay }, _ctx) {
+  scoreQso({ scoresheet, qso, operation, ref }, _ctx) {
     const sheet = scoresheet
-
-    // The DUPE rule spans the whole event, so `worked` is never reset — only
-    // the day-scoped display counters are.
-    if (isNewDay) {
-      sheet.dayPoints = 0
-      sheet.dayQsos = 0
-    }
 
     // Latched per QSO from the segment-effective operation, so a setup change
     // partway through the contest counts for the QSOs after it.
@@ -260,8 +246,6 @@ export const FDScorer: ContestScorer<FDScoresheet> = {
     ;(sheet.modesByCall[call] ??= {})[superMode] = true
     sheet.qsoCount += 1
     sheet.qsoPoints += value
-    sheet.dayQsos += 1
-    sheet.dayPoints += value
     if (section) sheet.sectionsSeen[section] = true
     sheet.byMode[superMode] = (sheet.byMode[superMode] ?? 0) + 1
     if (CLASS_REGEX.test(theirClass) && theirClass.startsWith('PC')) sheet.pleaseCopy += 1
@@ -281,43 +265,39 @@ export const FDScorer: ContestScorer<FDScoresheet> = {
     return { scoresheet: sheet, score }
   },
 
-  summarizeScore({ scoresheet, scope }, ctx): Record<string, ScoreTally> {
+  summarizeScore({ scoresheet, scope }, ctx) {
     const t = tFor(ctx)
-    const isDay = scope === 'day'
     // Latched during the fold, not read off `ref` — the ref handed here is the
     // FIRST segment's, which loses a mid-contest power change.
     const multiplier = scoresheet.multiplier
-    const points = isDay ? scoresheet.dayPoints : scoresheet.qsoPoints
-    const qsos = isDay ? scoresheet.dayQsos : scoresheet.qsoCount
-    // Bonuses are claimed once for the whole entry, so they belong to the
-    // operation total and are left out of a day's figure entirely rather than
-    // being counted again on each one — the rule `stateparks` states.
-    const bonus = isDay ? 0 : scoresheet.bonus
-    const total = points * multiplier + bonus
+    const points = scoresheet.qsoPoints
+    const bonus = scoresheet.bonus
 
     const sections =
       Object.keys(scoresheet.arrlSections).length +
       Object.keys(scoresheet.racSections).length +
       Object.keys(scoresheet.otherSections).length
 
-    return {
-      contest: tally(TYPE, scope, total, {
-        // Without an icon the day-header renderer drops the whole badge, not
-        // just the glyph (the app's qso_list.dart).
+    return contestSummary(
+      {
+        // Saved postcard sections are keyed by it.
+        key: 'contest',
+        scope,
         icon: 'weather-sunny',
-        label: t('scoreLabel'),
-        summary: t('scoreSummary', { total: fmtInteger(total) }),
-        // Spelled out because an operator checking a claimed score wants the
-        // arithmetic, not just the answer.
-        longSummary: [
-          t('scoreQsos', { qsos: fmtInteger(qsos), points: fmtInteger(points), multiplier }),
-          bonus > 0 ? t('scoreBonus', { bonus: fmtInteger(bonus) }) : '',
+        title: contestTitle(),
+        total: points * multiplier + bonus,
+        arithmetic: contestArithmetic(
+          { qsos: scoresheet.qsoCount, points, mults: multiplier, multsNoun: t('powerMultiplier'), bonus },
+          ctx,
+        ),
+        detail: [
           t('scoreSections', { sections: fmtInteger(sections) }),
           scoresheet.pleaseCopy > 0 ? t('scorePleaseCopy', { copies: fmtInteger(scoresheet.pleaseCopy) }) : '',
         ]
           .filter((line) => line)
           .join('\n'),
-      }),
-    }
+      },
+      ctx,
+    )
   },
 }

@@ -32,9 +32,13 @@
 // The parks come from POTA refs this extension does not own — see parks.ts.
 
 import { fmtInteger } from "@ham2k/lib-format-tools"
-import type { ContestScorer, JSONValue, QsoScoreVerdict, ScoreTally } from "@ham2k/extension-sdk"
+import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
+import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
 
+import { tFor } from "./i18n.ts"
 import { ourPark, theirPark } from "./parks.ts"
+
+import manifest from "../manifest.json" with { type: "json" }
 
 /// "except 60, 30, 17 and 12 meters".
 export const EXCLUDED_BANDS = ['60m', '30m', '17m', '12m']
@@ -55,7 +59,6 @@ export type WipotaScoresheet = {
   bands: Record<string, number>
   qsos: number
   dupes: number
-  dayQsos: number
 }
 
 function str(value: JSONValue | undefined): string {
@@ -86,13 +89,11 @@ export function totalsFor(sheet: WipotaScoresheet): { qsos: number; worked: numb
 
 export const WipotaScorer: ContestScorer<WipotaScoresheet> = {
   startScoresheet(): WipotaScoresheet {
-    return { worked: {}, activated: {}, hunted: {}, bands: {}, qsos: 0, dupes: 0, dayQsos: 0 }
+    return { worked: {}, activated: {}, hunted: {}, bands: {}, qsos: 0, dupes: 0 }
   },
 
   // Mutates and returns the given scoresheet — see ContestScorer.scoreQso.
-  scoreQso({ scoresheet: sheet, qso, operation, isNewDay }) {
-    if (isNewDay) sheet.dayQsos = 0
-
+  scoreQso({ scoresheet: sheet, qso, operation }) {
     const call = str(((qso.their as Record<string, JSONValue>) ?? {}).call)
     if (!call) return { scoresheet: sheet, score: { value: 0 } }
 
@@ -136,37 +137,34 @@ export const WipotaScorer: ContestScorer<WipotaScoresheet> = {
     if (ours) sheet.activated[ours] = (sheet.activated[ours] ?? 0) + 1
     sheet.bands[band] = (sheet.bands[band] ?? 0) + 1
     sheet.qsos += 1
-    sheet.dayQsos += 1
 
     const score: QsoScoreVerdict = { value: 1, band }
     if (notices.length > 0) score.notices = notices
     return { scoresheet: sheet, score }
   },
 
-  summarizeScore({ scoresheet: sheet, scope }): Record<string, ScoreTally> {
-    const isDay = scope === 'day'
-    const { worked, activated, mults } = totalsFor(sheet)
-    // Multipliers are won across the whole contest, so a day's figure is its
-    // own QSOs against the running multiplier. `|| 1`: a log with no WI park
-    // yet is still worth its QSOs on the board, where a zero reads as broken.
-    const qsos = isDay ? sheet.dayQsos : sheet.qsos
+  summarizeScore({ scoresheet: sheet, scope }, ctx) {
+    const t = tFor(ctx)
+    const { qsos, worked, activated, mults } = totalsFor(sheet)
+    // `|| 1`: a log with no WI park yet is still worth its QSOs on the board,
+    // where a zero reads as broken.
     const mult = mults || 1
-    const total = qsos * mult
+    const part = (count: number, one: string, many: string) => (count === 1 ? t(one) : t(many, { formatted: fmtInteger(count) }))
+    const multParts = [
+      worked > 0 ? part(worked, 'parkWorkedOne', 'parkWorkedMany') : '',
+      activated > 0 ? part(activated, 'parkActivatedOne', 'parkActivatedMany') : '',
+    ].filter((p) => p)
 
-    return {
-      wispota: {
-        key: 'wispota',
-        for: scope,
-        icon: 'pine-tree',
-        total,
-        points: qsos,
-        mults: mult,
-        qsos,
-        label: `${fmtInteger(qsos)} × ${fmtInteger(mult)}`,
-        summary: `${fmtInteger(total)}`,
-        longSummary: longSummaryFor(sheet, { qsos, worked, activated }),
-      },
-    }
+    return contestSummary({
+      key: 'wispota',
+      scope,
+      icon: 'pine-tree',
+      title: manifest.shortName,
+      total: qsos * mult,
+      arithmetic: contestArithmetic({ qsos, points: qsos, mults: mult, multParts }, ctx),
+      detail: longSummaryFor(sheet, { qsos, worked, activated }),
+      extra: { points: qsos, mults: mult, qsos },
+    }, ctx)
   },
 }
 
@@ -175,7 +173,6 @@ export const WipotaScorer: ContestScorer<WipotaScoresheet> = {
 function longSummaryFor(sheet: WipotaScoresheet, totals: { qsos: number; worked: number; activated: number }): string {
   const parts: string[] = [
     [
-      // The scope's own count, so a day's body agrees with its heading.
       `**QSOs:** ${fmtInteger(totals.qsos)}`,
       `**WI Only Parks worked:** ${fmtInteger(totals.worked)}`,
       `**WI Parks Activated:** ${fmtInteger(totals.activated)}`,

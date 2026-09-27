@@ -59,7 +59,10 @@ test("§6.1.4.1: 40 SSB and 10 CW from one park is 60, plus 100 for the park", (
   // The sponsor's 260 includes the first-time activator bonus, which is claimed
   // on their form and is not in a log.
   assert.equal(tally.total, 160)
-  assert.equal(tally.label, '60 + 100')
+  assert.equal(tally.label, 'FSPOTA: 160 points')
+  // No multiplier clause at all: the event has none, and "× 1 mult" would
+  // suggest one the operator is missing.
+  assert.equal(String(tally.longSummary).split('\n')[0], '50 QSOs, 60 pts + 100 bonus')
 })
 
 test("§6.1.4.2: three parks, 60 SSB and 20 CW in all, is 100 + 300", () => {
@@ -171,14 +174,10 @@ test("another state-park event's legacy operation is declined without a word", (
   assert.deepEqual(summary(), {})
 })
 
-test("a day's tally is its own points, without the park bonus", () => {
+test("offers no per-day summary", () => {
+  // The park bonus is won across the whole event, so a day's share of the
+  // score is not a number the sponsor defines.
   const operation = operationFor(PARK_A)
-  let sheet: FlspotaScoresheet = FlspotaScorer.startScoresheet({ operation, ref: OWN_REF }, ctx)
-  const all = filler(12)
-  all.forEach((q, index) => {
-    sheet = FlspotaScorer.scoreQso({ scoresheet: sheet, qso: q, operation, ref: OWN_REF, isNewDay: index === 0 || index === 11 }, ctx).scoresheet
-  })
-  const day = FlspotaScorer.summarizeScore({ scoresheet: sheet, operation, ref: OWN_REF, scope: 'day' }, ctx).flspota
-  assert.equal(day.qsos, 1)
-  assert.equal(day.total, 1)
+  const { sheet } = run(filler(12), operation)
+  assert.deepEqual(FlspotaScorer.summarizeScore({ scoresheet: sheet, operation, ref: OWN_REF, scope: 'day' }, ctx), {})
 })

@@ -36,7 +36,7 @@ import type {
 } from "@ham2k/extension-sdk"
 
 import { ALL_SECTIONS, CALL_AREA_FOR_SECTION, PREFIX_TO_LOCATION } from "./sections.ts"
-import { CLASS_REGEX, OBJECTIVE_KEYS, TYPE, WFDScorer, refOfType } from "./scorer.ts"
+import { CLASS_REGEX, OBJECTIVE_KEYS, TYPE, WFDScorer, contestTitle, refOfType } from "./scorer.ts"
 import { nextRunningYear, relevanceFor } from "./schedule.ts"
 import { tFor } from "./i18n.ts"
 
@@ -360,7 +360,7 @@ const RefHandler = {
     const own = [str((ref as Record<string, JSONValue>).ourClass), str((ref as Record<string, JSONValue>).ourSection)]
       .filter((part) => part)
       .join(' ')
-    return { for: 'WFD', subtitle: own || undefined }
+    return { for: contestTitle(), subtitle: own || undefined }
   },
 
   /// The contest's published rules — a reference here names an event, not a

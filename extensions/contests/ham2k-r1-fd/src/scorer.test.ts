@@ -183,4 +183,20 @@ describe('R1FDScorer multipliers', () => {
     assert.equal(summary.r1fd.mults, 3)
     assert.equal(summary.r1fd.total, 30)
   })
+
+  it('titles itself as the operation does, with the score, over the arithmetic', () => {
+    // The title must name the running as the operation's title does, and the
+    // arithmetic must multiply out to its score — the two are computed apart.
+    const { sheet } = run([{ call: 'DL1AAA' }, { call: 'K1AAA/P' }, { call: 'F4AAA', band: '40m' }])
+    const summary = R1FDScorer.summarizeScore({ scoresheet: sheet, operation: {}, ref: SSB_RUNNING, scope: 'operation' }, {} as never)
+    assert.equal(summary.r1fd.label, 'R1FD SSB: 30 points')
+    assert.equal((summary.r1fd.longSummary as string).split('\n')[0], '3 QSOs, 10 pts × 3 mults')
+  })
+
+  it('offers no per-day summary', () => {
+    // Countries are a contest-long tally, so a day's share of the score is not
+    // a number the contest defines.
+    const { sheet } = run([{ call: 'DL1AAA' }])
+    assert.deepEqual(R1FDScorer.summarizeScore({ scoresheet: sheet, operation: {}, ref: SSB_RUNNING, scope: 'day' }, {} as never), {})
+  })
 })

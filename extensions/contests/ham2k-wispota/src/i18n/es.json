@@ -3,5 +3,9 @@
   "addPota": "**Agrega también tu activación POTA** — WIPOTA no tiene intercambio propio. Se puntúa con el parque de Wisconsin que activas y los parques de Wisconsin que trabajas, como referencias POTA.",
   "period": "**Período:** {{period}}",
   "scoring": "**Puntuación:** QSOs × parques únicos de Wisconsin. Una estación cuenta una vez por banda y modo; 60, 30, 17 y 12 m no cuentan. Un parque desde el que operas es multiplicador cuando tiene 10 QSOs.",
-  "submit": "**Envía** tu log antes de fin de septiembre en [wipota.com/logs]({{url}}). El formulario pide los tres conteos del panel de puntuación."
+  "submit": "**Envía** tu log antes de fin de septiembre en [wipota.com/logs]({{url}}). El formulario pide los tres conteos del panel de puntuación.",
+  "parkActivatedOne": "1 parque activado",
+  "parkActivatedMany": "{{formatted}} parques activados",
+  "parkWorkedOne": "1 parque trabajado",
+  "parkWorkedMany": "{{formatted}} parques trabajados"
 }

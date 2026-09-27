@@ -22,7 +22,7 @@
     "@ham2k/qso-parties": "^0.1.0"
   },
   "devDependencies": {
-    "@ham2k/extension-sdk": "^0.8.1",
+    "@ham2k/extension-sdk": "^0.9.0",
     "@ham2k/extension-tools": "^0.7.0",
     "@ham2k/lib-format-tools": "^1.0.0",
     "@ham2k/lib-operation-data": "^1.0.0",

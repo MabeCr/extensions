@@ -26,6 +26,7 @@ import { qsoPartyAdifFields, qsoPartyExport } from "./exports.ts"
 import type { QsoPartyExtensionParams } from "./params.ts"
 import { qsoPartyRefHandler } from "./refHandler.ts"
 import { qsoPartyScorer } from "./scorer.ts"
+import type { MultKind } from "./scorer.ts"
 
 export type {
   ModeClass,
@@ -75,6 +76,11 @@ export type QsoPartyScoresheet = {
   /// Multiplier key (band/mode prefix + code) → times claimed. Its SIZE is the
   /// multiplier.
   mults: Record<string, number>
+  /// Multiplier key → what kind of place it names, recorded as the key is
+  /// credited. The key alone cannot say: a county code and a state code can be
+  /// the same letters, and a county may multiply as its state. Optional because
+  /// a scoresheet cached by an earlier build has none.
+  multKinds?: Record<string, MultKind>
   /// The party's own counties worked, for the checklist the operator reads
   /// while deciding what to chase.
   counties: Record<string, number>

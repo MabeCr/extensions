@@ -110,3 +110,24 @@ test('a band outside the running event is rejected', () => {
   assert.equal(scores[0].value, 0)
   assert.deepEqual(scores[0].alerts, ['invalidBand'])
 })
+
+// Titled as the operation is (the event's short name), over arithmetic whose
+// points and km add up to that title: every point here IS a kilometre times a
+// band factor, so an operator checks the claim against the distance worked.
+test('the summary is titled by the event, over its arithmetic', () => {
+  const operation = { grid: 'IO91wo' }
+  const ref = { type: 'r1-vhf-tests', ref: 'R1-VHF-145-SEPTEMBER' }
+  const { sheet } = run([qso('G4ABC', '2m', 'IO92wo')], operation, ref)
+  const tally = R1VHFScorer.summarizeScore({ scoresheet: sheet, operation, ref, scope: 'operation' }, ctx)['r1-vhf-tests']
+  assert.equal(tally.label, '145 MHz Test: 112 points')
+  assert.equal(tally.longSummary!.split('\n')[0], '1 QSO, 112 pts, 112 km')
+})
+
+// The distance total belongs to the whole entry, so a day's share of the score
+// is not a number the contest defines.
+test('offers no per-day summary', () => {
+  const operation = { grid: 'IO91wo' }
+  const ref = { type: 'r1-vhf-tests', ref: 'R1-VHF-145-SEPTEMBER' }
+  const { sheet } = run([qso('G4ABC', '2m', 'IO92wo')], operation, ref)
+  assert.deepEqual(R1VHFScorer.summarizeScore({ scoresheet: sheet, operation, ref, scope: 'day' }, ctx), {})
+})

@@ -23,7 +23,7 @@ import type {
 } from "@ham2k/extension-sdk"
 
 import { tFor } from "./i18n.ts"
-import { CQWWScorer, ZONE_PATTERN, normalizeZone } from "./scorer.ts"
+import { CQWWScorer, ZONE_PATTERN, contestTitle, normalizeZone } from "./scorer.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
 
@@ -208,10 +208,9 @@ const RefHandler = {
     { ref, operation }: { ref: Ref; operation: Record<string, JSONValue> },
     ctx: HookContext,
   ) {
-    const mode = str((ref as Record<string, JSONValue>).mode)
     const zone = ourZone(operation)
     return {
-      for: ['CQWW', mode].filter((x) => x).join(' '),
+      for: contestTitle(ref as Record<string, JSONValue>),
       subtitle: zone ? tFor(ctx)('ourZoneSubtitle', { zone }) : undefined,
     }
   },

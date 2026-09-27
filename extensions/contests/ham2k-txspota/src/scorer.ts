@@ -37,14 +37,18 @@
 // The contest period is not enforced, as in the other contests here.
 
 import { fmtInteger } from "@ham2k/lib-format-tools"
-import type { ContestScorer, JSONValue, QsoScoreVerdict, ScoreTally } from "@ham2k/extension-sdk"
+import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
+import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
 
 import {
   EXCLUDED_BANDS, HOST_STATION, HOST_STATION_BONUS, MANY_PARKS_BONUS, MANY_PARKS_OVER,
   PARKS, QSOS_TO_ACTIVATE, ROVER_BONUS, ROVER_PARKS, pointsForMode, slotMode,
 } from "./event.ts"
 import { powerTerm } from "./entry.ts"
+import { tFor } from "./i18n.ts"
 import { isListed, isOurRef, ourParks, theirParks } from "./parks.ts"
+
+import manifest from "../manifest.json" with { type: "json" }
 
 export type TxspotaScoresheet = {
   /// Whether any QSO was scored under THIS event's ref. The scope offers this
@@ -70,8 +74,6 @@ export type TxspotaScoresheet = {
   qsos: number
   points: number
   dupes: number
-  dayQsos: number
-  dayPoints: number
 }
 
 function str(value: JSONValue | undefined): string {
@@ -108,17 +110,12 @@ export const TxspotaScorer: ContestScorer<TxspotaScoresheet> = {
   startScoresheet(): TxspotaScoresheet {
     return {
       worked: {}, activated: {}, hunted: {}, parksByCall: {}, bands: {},
-      qsos: 0, points: 0, dupes: 0, dayQsos: 0, dayPoints: 0,
+      qsos: 0, points: 0, dupes: 0,
     }
   },
 
   // Mutates and returns the given scoresheet — see ContestScorer.scoreQso.
-  scoreQso({ scoresheet: sheet, qso, operation, ref, isNewDay }) {
-    if (isNewDay) {
-      sheet.dayQsos = 0
-      sheet.dayPoints = 0
-    }
-
+  scoreQso({ scoresheet: sheet, qso, operation, ref }) {
     // Another state-park event's legacy operation: not ours to judge, so no
     // alert either — an `unknownEvent` here would flag every Florida QSO.
     if (!isOurRef(ref)) return { scoresheet: sheet, score: { value: 0 } }
@@ -201,41 +198,34 @@ export const TxspotaScorer: ContestScorer<TxspotaScoresheet> = {
     sheet.bands[band] = (sheet.bands[band] ?? 0) + contacts
     sheet.qsos += contacts
     sheet.points += value
-    sheet.dayQsos += contacts
-    sheet.dayPoints += value
 
     const score: QsoScoreVerdict = { value, band }
     if (notices.length > 0) score.notices = notices
     return { scoresheet: sheet, score }
   },
 
-  summarizeScore({ scoresheet: sheet, scope }): Record<string, ScoreTally> {
+  summarizeScore({ scoresheet: sheet, scope }, ctx) {
     if (!sheet.ours) return {}
 
-    const isDay = scope === 'day'
+    const t = tFor(ctx)
     const totals = totalsFor(sheet)
-    const points = isDay ? sheet.dayPoints : sheet.points
-    // Multipliers and bonuses are won across the whole event, so a day's figure
-    // is its own points against the running multiplier, without the bonuses.
-    const bonus = isDay ? 0 : totals.bonus
-    const total = points * totals.mult + bonus
+    const part = (count: number, one: string, many: string) => (count === 1 ? t(one) : t(many, { formatted: fmtInteger(count) }))
+    const multParts = [
+      totals.activated > 0 ? part(totals.activated, 'parkActivatedOne', 'parkActivatedMany') : '',
+      totals.worked > 0 ? part(totals.worked, 'parkWorkedOne', 'parkWorkedMany') : '',
+      totals.power > 0 ? t('powerMultiplier', { formatted: fmtInteger(totals.power) }) : '',
+    ].filter((p) => p)
 
-    return {
-      txspota: {
-        key: 'txspota',
-        for: scope,
-        icon: 'star-circle',
-        total,
-        points,
-        mults: totals.mult,
-        qsos: isDay ? sheet.dayQsos : sheet.qsos,
-        label: bonus > 0
-          ? `${fmtInteger(points)} × ${fmtInteger(totals.mult)} + ${fmtInteger(bonus)}`
-          : `${fmtInteger(points)} × ${fmtInteger(totals.mult)}`,
-        summary: `${fmtInteger(total)}`,
-        longSummary: longSummaryFor(sheet, totals),
-      },
-    }
+    return contestSummary({
+      key: 'txspota',
+      scope,
+      icon: 'star-circle',
+      title: manifest.shortName,
+      total: sheet.points * totals.mult + totals.bonus,
+      arithmetic: contestArithmetic({ qsos: sheet.qsos, points: sheet.points, mults: totals.mult, multParts, bonus: totals.bonus }, ctx),
+      detail: longSummaryFor(sheet, totals),
+      extra: { points: sheet.points, mults: totals.mult, qsos: sheet.qsos },
+    }, ctx)
   },
 }
 

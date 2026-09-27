@@ -3,5 +3,9 @@
   "addPota": "**Add your POTA activation too** — WIPOTA has no exchange of its own. It is scored from the Wisconsin park you activate and the Wisconsin parks you work, as POTA references.",
   "period": "**Period:** {{period}}",
   "scoring": "**Score:** QSOs × unique Wisconsin parks. A station counts once per band and mode; 60, 30, 17 and 12 m do not count. A park you operate from is a multiplier once it has 10 QSOs.",
-  "submit": "**Submit** by the end of September at [wipota.com/logs]({{url}}). The form asks for the three counts on the score panel."
+  "submit": "**Submit** by the end of September at [wipota.com/logs]({{url}}). The form asks for the three counts on the score panel.",
+  "parkActivatedOne": "1 park activated",
+  "parkActivatedMany": "{{formatted}} parks activated",
+  "parkWorkedOne": "1 park worked",
+  "parkWorkedMany": "{{formatted}} parks worked"
 }

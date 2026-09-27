@@ -80,7 +80,10 @@ test("the sponsor's example: 37 contacts from PUN, 9 other parks — '9 plus PUN
     ...contacts(12, 0, { band: '15m', mode: 'CW' }, 'N8'),
   ])
   assert.equal(summary().total, 370)
-  assert.equal(summary().label, '37 × 10')
+  assert.equal(summary().label, 'OSPOTA: 370 points')
+  // Our own park is one of the ten: the arithmetic must multiply by the same
+  // count the score did, or it disagrees with the title.
+  assert.equal(String(summary().longSummary).split('\n')[0], '37 QSOs, 37 pts × 10 mults')
 })
 
 test("our own park is a multiplier from the first contact — no ten-contact threshold", () => {
@@ -156,7 +159,9 @@ test("each park we operate from is its own entry, and a station counts again at 
   assert.deepEqual(scores[3].notices, ['newRef'])
   // PUN: 3 × (PUN + ADA) = 6. ADA: 2 × ADA = 2. Not 5 × 2 as one entry.
   assert.equal(summary().total, 8)
-  assert.equal(summary().label, '6 + 2')
+  assert.equal(summary().label, 'OSPOTA: 8 points')
+  // Each entry's product, never one product over the pooled contacts (5 × 2).
+  assert.equal(String(summary().longSummary).split('\n')[0], '5 QSOs, 6 + 2')
   assert.match(String(summary().longSummary), /\*\*PUN:\*\* 3 × 2 = 6/)
 })
 
@@ -191,4 +196,12 @@ test("another state-park event's legacy operation is declined without a word", (
   const { scores, summary } = run([qso({ park: 'ADA' })], operation)
   assert.deepEqual(scores[0], { value: 0 })
   assert.equal(summary(), undefined)
+})
+
+test("offers no per-day summary", () => {
+  // Multipliers accumulate across each park's whole entry, so a day's share of
+  // the score is not a number the sponsor defines.
+  const operation = operationFor('PUN')
+  const { sheet } = run(contacts(3, 1), operation)
+  assert.deepEqual(OhspotaScorer.summarizeScore({ scoresheet: sheet, operation, ref: OWN_REF, scope: 'day' }, ctx), {})
 })

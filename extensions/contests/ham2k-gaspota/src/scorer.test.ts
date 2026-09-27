@@ -63,7 +63,10 @@ test("§6.1.2.1: 40 SSB and 10 CW, 6 of them with distinct Georgia parks, is 50 
   // table said so too, and Florida's and Texas's two-point CW must not leak in.
   const { summary } = run(contacts(50, 6))
   assert.equal(summary().gaspota.total, 80)
-  assert.equal(summary().gaspota.label, '(50 + 5×6) × 1')
+  assert.equal(summary().gaspota.label, 'GASPOTA: 80 points')
+  // The five points per distinct park are added INSIDE the parentheses: written
+  // after the product, the line would not multiply out to a two-park score.
+  assert.equal(String(summary().gaspota.longSummary).split('\n')[0], '50 QSOs, (50 pts + 30 bonus) × 1 mult')
 })
 
 test("§6.1.2.2: a second park the next day, 75 contacts and 12 parks, is 2 × (80 + 135) = 430", () => {
@@ -83,7 +86,9 @@ test("§6.2.2: a hunter with 45 contacts across 28 Georgia parks is 28 × 45 = 1
   const { summary, totals } = run(calls, operationFor())
   assert.deepEqual(totals().hunter, { contacts: 45, parks: 28, bonus: 0, total: 1260 })
   assert.equal(summary().gaspota.total, 1260)
-  assert.equal(summary().gaspota.label, '28 × 45')
+  assert.equal(summary().gaspota.label, 'GASPOTA: 1,260 points')
+  // The hunter's formula, not the activator's: no five-point term.
+  assert.equal(String(summary().gaspota.longSummary).split('\n')[0], '45 QSOs, 45 pts × 28 mults')
 })
 
 test("§6.2.1: a hunter's contact is one with a Georgia park, and nobody else", () => {
@@ -110,7 +115,8 @@ test("§6.2.3: hunting Georgia parks on both UTC days is worth 100", () => {
   assert.equal(oneDay.totals().hunter.total, 4)
   const bothDays = run([qso({ call: 'K4ABC', hunting: [park(1)] }), qso({ call: 'K4DEF', hunting: [park(2)], at: DAY_TWO })], operationFor())
   assert.equal(bothDays.totals().hunter.total, 2 * 2 + 100)
-  assert.equal(bothDays.summary().gaspota.label, '2 × 2 + 100')
+  // Outside the product: the bonus is paid once, not once per park.
+  assert.equal(String(bothDays.summary().gaspota.longSummary).split('\n')[0], '2 QSOs, 2 pts × 2 mults + 100 bonus')
   // A second day spent working nobody in a Georgia park is not a day of hunting.
   const idle = run([qso({ call: 'K4ABC', hunting: [park(1)] }), qso({ call: 'W5XYZ', at: DAY_TWO })], operationFor())
   assert.equal(idle.totals().hunter.bonus, 0)
@@ -181,4 +187,12 @@ test("an operation logged under the combined extension is scored; another event'
   const texas = run([qso()], operationFor(OUR_PARK), { type: 'stateparks', ref: 'TXSP' })
   assert.deepEqual(texas.scores[0], { value: 0 })
   assert.deepEqual(texas.summary(), {})
+})
+
+test("offers no per-day summary", () => {
+  // Parks and the two-day bonus are won across the whole event, so a day's
+  // share of the score is not a number the sponsor defines.
+  const operation = operationFor(OUR_PARK)
+  const { sheet } = run(contacts(3, 1), operation)
+  assert.deepEqual(GaspotaScorer.summarizeScore({ scoresheet: sheet, operation, ref: OWN_REF, scope: 'day' }, ctx), {})
 })

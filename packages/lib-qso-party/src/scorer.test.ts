@@ -534,6 +534,10 @@ test('a declared power class multiplies the score, and no claim multiplies by on
   })
   const undeclared = run([qso({ location: 'NJ', refType: DE.refType })], { params: DE, ourLocation: 'NDE' })
   assert.equal(qrp.summary().total, undeclared.summary().total * 3)
+  // The factor is part of how the total came about, so the arithmetic that
+  // explains the total has to show it; without a class it is noise.
+  assert.match((qrp.summary().longSummary as string).split('\n')[0], /× 1 mult \(1 state\) × 3 power$/)
+  assert.doesNotMatch((undeclared.summary().longSummary as string).split('\n')[0], /power/)
 })
 
 test('a power class the party does not publish is not submitted under it', () => {
@@ -565,32 +569,74 @@ test('a party may price a contact for itself, one pairing at a time', () => {
   assert.equal(run([qso({ location: 'CHA' })], { params }).scores[0].value, 2)
 })
 
-test('a party is one period: a day shows the running total, never a score of its own', () => {
-  const result = run([qso({ location: 'ERI' }), qso({ call: 'K2DEF', location: 'CHA' })])
-  const day = result.summary('day')
-  const whole = result.summary('operation')
-  // The same figure under both scopes — a "day's points against the running
-  // multiplier" is a number no sponsor publishes. Summarized from the same
-  // sheet, so this is what the last day header carries.
-  assert.equal(day.total, whole.total)
-  assert.equal(day.summary, whole.summary)
-  assert.equal(whole.total, result.sheet.points * multsOf(result))
-  // The checklist is the operation's; a day carries the number alone, so the
-  // panel shows its short summary instead of repeating the grid per day —
-  // and its title is the event's name alone, or the total would read twice.
-  assert.equal(day.longSummary, '')
-  assert.equal(day.label, whole.label!.split(':')[0])
-  assert.ok(!day.label!.includes(day.summary!))
+// A party is one period, however many UTC days it straddles: the sponsors
+// publish one total, and a day's share of it is not a number they define.
+test('a party is one period: it offers no per-day summary', () => {
+  const { summary } = run([qso({ location: 'ERI' }), qso({ call: 'K2DEF', location: 'CHA' })])
+  assert.equal(summary('day'), undefined)
 })
 
+// The label is the section's title in the information panel and the only
+// place the total shows, since a tally with a `longSummary` hides its short
+// `summary`; the arithmetic under it has to multiply out to that same total.
 test('the summary is titled with the event and its total, and opens on the arithmetic', () => {
   const result = run([qso({ mode: 'CW', location: 'ERI' }), qso({ call: 'K2DEF', mode: 'CW', location: 'CHA' })])
   const tally = result.summary()
-  // The label is what the information panel shows as the section title — and
-  // the only place the total is visible, since a tally with a `longSummary`
-  // does not show its short `summary`.
-  assert.equal(tally.label, `${NY.short}: ${tally.total}`)
-  assert.equal((tally.longSummary as string).split('\n\n')[0], `${tally.points} × ${tally.mults}`)
+  assert.equal(tally.label, `${NY.short}: ${tally.total} points`)
+  assert.equal(tally.total, 4 * 3)
+  // An in-state NYQP entrant's own state multiplies too, on top of the two
+  // counties worked.
+  assert.equal((tally.longSummary as string).split('\n')[0], '2 QSOs, 4 pts × 3 mults (2 counties, 1 state)')
+})
+
+// Counties and states are different things to chase; the split says which the
+// log is short of. A key alone cannot tell them apart, so a kind recorded
+// wrongly, or not at all, shows here as a split that no longer adds up.
+test('the arithmetic splits the multipliers by the kind of place', () => {
+  const { summary } = run(
+    [qso({ location: 'ERI' }), qso({ call: 'K2DEF', location: 'NJ' }), qso({ call: 'VE3ABC', location: 'ON', entityPrefix: 'VE' })],
+  )
+  assert.match((summary().longSummary as string).split('\n')[0], /× 4 mults \(1 county, 2 states, 1 province\)$/)
+  // A Canadian party's county multiplies as its province, and is named as one.
+  const acqp = run([qso({ location: 'NSANP', entityPrefix: 'VE', refType: ACQP.refType })], {
+    params: ACQP,
+    ourLocation: 'NSCOL',
+  })
+  assert.match((acqp.summary().longSummary as string).split('\n')[0], /× 1 mult \(1 province\)$/)
+})
+
+// A sponsor's own word for its counties reads in the split, or CPQP's
+// entrants would be counting "counties" the rules never mention.
+test('the split names counties in the party\'s own word', () => {
+  const params: QsoPartyParams = { ...NY, labelForCounties: 'Districts' }
+  const { summary } = run([qso({ location: 'ERI' }), qso({ call: 'K2DEF', location: 'CHA' })], { params })
+  assert.match((summary().longSummary as string).split('\n')[0], /\(2 districts, 1 state\)$/)
+})
+
+// Under a cap the multiplier is less than the keys worked, and a split of the
+// keys would add up to more than the figure it explains.
+test('the split is left out where an in-state cap trims the multiplier', () => {
+  const codes = [...Object.keys(US_STATES), ...Object.keys(CANADIAN_PROVINCES)].filter((code) => code !== 'DC')
+  const sent = (code: string) => (code === 'CA' ? 'LASS' : code)
+  const qsos = codes.map((code, index) =>
+    qso({ call: `K${index}ABC`, location: sent(code), entityPrefix: CANADIAN_PROVINCES[code] ? 'VE' : 'K', refType: CA.refType }))
+  const { summary } = run(qsos, { params: CA, ourLocation: 'ALAM' })
+  assert.match((summary().longSummary as string).split('\n')[0], /× 58 mults$/)
+})
+
+// A scoresheet checkpointed before kinds were recorded still scores; naming
+// the kinds of only the keys credited since would add up to less than the
+// multiplier beside them.
+test('a sheet with keys of no recorded kind names no split', () => {
+  const scorer = qsoPartyScorer(NY)
+  const operation: Record<string, JSONValue> = { uuid: 'op', refs: [{ type: NY.refType, location: 'ALB' }] }
+  const ref = { type: NY.refType, location: 'ALB' }
+  const sheet = scorer.startScoresheet({ operation, ref }, ctx)
+  sheet.mults = { ERI: 1 }
+  delete sheet.multKinds
+  scorer.scoreQso({ scoresheet: sheet, qso: qso({ call: 'K2DEF', location: 'CHA' }), operation, ref, isNewDay: false }, ctx)
+  const tally = scorer.summarizeScore({ scoresheet: sheet, operation, ref, scope: 'operation' }, ctx)[NY.refType]
+  assert.match((tally.longSummary as string).split('\n')[0], /× 3 mults$/)
 })
 
 test('the summary lists what is still out there, not just what is done', () => {
@@ -753,6 +799,18 @@ test('Pennsylvania counts all DX as one multiplier, and its bonus station per ba
   assert.equal(bonus.sheet.points, 4)
   assert.equal(multsOf(bonus), 2)
   assert.equal(bonus.summary().total, 4 * 2 + 400)
+  // Added after the product, so the arithmetic must not bracket it into the
+  // points: that reads as (4 + 400) × 2.
+  assert.equal((bonus.summary().longSummary as string).split('\n')[0], '2 QSOs, 4 pts × 2 mults (1 county, 1 section) + 400 bonus')
+})
+
+// Most parties fold a bonus into the points before multiplying; an arithmetic
+// line that added it after would multiply out to a different total.
+test('a bonus folded in before the multiplier is bracketed with the points', () => {
+  const params: QsoPartyParams = { ...NY, bonusStations: { K2BON: 100 } }
+  const { summary } = run([qso({ call: 'K2BON', location: 'ERI' })], { params })
+  assert.equal(summary().total, (2 + 100) * 2)
+  assert.equal((summary().longSummary as string).split('\n')[0], '1 QSO, (2 pts + 100 bonus) × 2 mults (1 county, 1 state)')
 })
 
 test('Pennsylvania: the summary lists the band/mode slots each bonus station has paid in', () => {

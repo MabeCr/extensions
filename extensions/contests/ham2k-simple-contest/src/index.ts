@@ -32,7 +32,7 @@ import type {
 } from "@ham2k/extension-sdk"
 
 import { tFor } from "./i18n.ts"
-import { SimpleContestScorer } from "./scorer.ts"
+import { SimpleContestScorer, contestTitle } from "./scorer.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
 
@@ -53,7 +53,7 @@ function str(value: JSONValue | undefined): string {
 /// The contest identifier the operator set at setup, defaulting to app-polo's
 /// "TEST" so an unconfigured operation still exports something sane.
 function contestId(operation: Record<string, JSONValue>, ctx: HookContext): string {
-  return str(refOfType(operation, TYPE)?.contestIdentifier) || tFor(ctx)('defaultContestId')
+  return contestTitle(refOfType(operation, TYPE), ctx)
 }
 
 const ActivityHook = {

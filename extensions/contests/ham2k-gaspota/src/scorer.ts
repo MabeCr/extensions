@@ -48,10 +48,13 @@
 // as in the other contests here.
 
 import { fmtInteger } from "@ham2k/lib-format-tools"
-import type { ContestScorer, JSONValue, QsoScoreVerdict, ScoreTally } from "@ham2k/extension-sdk"
+import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
+import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
 
 import { EXCLUDED_BANDS, POINTS_PER_DISTINCT_PARK, TWO_DAY_BONUS, slotMode } from "./event.ts"
 import { isListed, isOurRef, ourParks, theirParks } from "./parks.ts"
+
+import manifest from "../manifest.json" with { type: "json" }
 
 export type GaspotaScoresheet = {
   /// Whether any QSO was scored under THIS event's ref. The scope offers this
@@ -75,8 +78,6 @@ export type GaspotaScoresheet = {
   /// Contacts with listed parks — the hunter's total.
   parkContacts: number
   dupes: number
-  dayContacts: number
-  dayParkContacts: number
 }
 
 function str(value: JSONValue | undefined): string {
@@ -126,17 +127,12 @@ export const GaspotaScorer: ContestScorer<GaspotaScoresheet> = {
   startScoresheet(): GaspotaScoresheet {
     return {
       worked: {}, huntedSlots: {}, activated: {}, hunted: {}, huntDays: {}, bands: {},
-      contacts: 0, parkContacts: 0, dupes: 0, dayContacts: 0, dayParkContacts: 0,
+      contacts: 0, parkContacts: 0, dupes: 0,
     }
   },
 
   // Mutates and returns the given scoresheet — see ContestScorer.scoreQso.
-  scoreQso({ scoresheet: sheet, qso, operation, ref, isNewDay }) {
-    if (isNewDay) {
-      sheet.dayContacts = 0
-      sheet.dayParkContacts = 0
-    }
-
+  scoreQso({ scoresheet: sheet, qso, operation, ref }) {
     // Another state-park event's legacy operation: not ours to judge, so no
     // alert either — an `unknownEvent` here would flag every Texas QSO.
     if (!isOurRef(ref)) return { scoresheet: sheet, score: { value: 0 } }
@@ -205,48 +201,34 @@ export const GaspotaScorer: ContestScorer<GaspotaScoresheet> = {
     sheet.bands[band] = (sheet.bands[band] ?? 0) + value
     sheet.contacts += contacts
     sheet.parkContacts += freshListed.length
-    sheet.dayContacts += contacts
-    sheet.dayParkContacts += freshListed.length
 
     const score: QsoScoreVerdict = { value, band }
     if (notices.length > 0) score.notices = notices
     return { scoresheet: sheet, score }
   },
 
-  summarizeScore({ scoresheet: sheet, scope }): Record<string, ScoreTally> {
+  summarizeScore({ scoresheet: sheet, scope }, ctx) {
     if (!sheet.ours) return {}
 
-    const isDay = scope === 'day'
     const { activator, hunter } = totalsFor(sheet)
     const activating = activator.parksActivated > 0
+    const contacts = activating ? activator.contacts : hunter.contacts
+    const mults = activating ? activator.parksActivated : hunter.parks
 
-    // Parks — worked and activated — are won across the whole event, so a day's
-    // figure is its own contacts against the running counts, and the two-day
-    // bonus is left out of it rather than counted again on every day.
-    const contacts = isDay ? (activating ? sheet.dayContacts : sheet.dayParkContacts) : (activating ? activator.contacts : hunter.contacts)
-    const total = activating
-      ? (isDay ? (contacts + POINTS_PER_DISTINCT_PARK * activator.distinctParks) * activator.parksActivated : activator.total)
-      : (isDay ? hunter.parks * contacts : hunter.total)
-    const label = activating
-      ? `(${fmtInteger(contacts)} + ${POINTS_PER_DISTINCT_PARK}×${fmtInteger(activator.distinctParks)}) × ${fmtInteger(activator.parksActivated)}`
-      : hunter.bonus > 0 && !isDay
-        ? `${fmtInteger(hunter.parks)} × ${fmtInteger(contacts)} + ${fmtInteger(hunter.bonus)}`
-        : `${fmtInteger(hunter.parks)} × ${fmtInteger(contacts)}`
-
-    return {
-      gaspota: {
-        key: 'gaspota',
-        for: scope,
-        icon: 'fruit-cherries',
-        total,
-        points: contacts,
-        mults: activating ? activator.parksActivated : hunter.parks,
-        qsos: contacts,
-        label,
-        summary: `${fmtInteger(total)}`,
-        longSummary: longSummaryFor(sheet, { activator, hunter }),
-      },
-    }
+    return contestSummary({
+      key: 'gaspota',
+      scope,
+      icon: 'fruit-cherries',
+      title: manifest.shortName,
+      total: activating ? activator.total : hunter.total,
+      // The activator's five points per distinct park join the contacts BEFORE
+      // they are multiplied (§6.1.1); the hunter's two-day bonus is added after.
+      arithmetic: activating
+        ? contestArithmetic({ qsos: contacts, points: contacts, bonus: POINTS_PER_DISTINCT_PARK * activator.distinctParks, bonusFirst: true, mults }, ctx)
+        : contestArithmetic({ qsos: contacts, points: contacts, mults, bonus: contacts > 0 ? hunter.bonus : 0 }, ctx),
+      detail: longSummaryFor(sheet, { activator, hunter }),
+      extra: { points: contacts, mults, qsos: contacts },
+    }, ctx)
   },
 }
 

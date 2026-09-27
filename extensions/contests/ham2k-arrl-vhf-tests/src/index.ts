@@ -37,7 +37,7 @@ import type {
 import { EVENTS, eventFor, type VhfEvent } from "./events.ts"
 import { gridPatternFor, guessedGrid, trimmedGrid } from "./exchange.ts"
 import { tFor } from "./i18n.ts"
-import { ARRLVHFScorer } from "./scorer.ts"
+import { ARRLVHFScorer, contestTitle } from "./scorer.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
 
@@ -200,9 +200,9 @@ const RefHandler = {
     ctx: HookContext,
   ): Promise<TitleSuggestion | null> {
     const event = eventFor(ref.ref)
-    if (!event) return { for: manifest.shortName }
+    if (!event) return { for: contestTitle(ref) }
     const grid = trimmedGrid(str(operation.grid), event)
-    return { for: event.short, subtitle: grid ? tFor(ctx)('ourExchangeSubtitle', { grid }) : undefined }
+    return { for: contestTitle(ref), subtitle: grid ? tFor(ctx)('ourExchangeSubtitle', { grid }) : undefined }
   },
 
   /// The contest's published rules — a reference here names an event, not a

@@ -192,8 +192,31 @@ test('10 GHz: the summary reports the distance and QSO halves separately', () =>
   )
   const tally = ARRLVHFScorer.summarizeScore({ scoresheet: sheet, operation: {}, ref: TEN_GIG, scope: 'operation' }, ctx)['arrl-vhf-tests']
   assert.equal(tally.total, sheet.points)
-  assert.match(tally.summary!, /pts \(\d[\d,]* km total\)/)
+  assert.match(tally.label!, /^ARRL 10G Sep: [\d,]+ points$/)
+  // Distance events carry the km worked as a clause of the arithmetic.
+  assert.match(tally.longSummary!, /^2 QSOs, [\d,]+ pts, [\d,]+ km\n/)
   assert.match(tally.longSummary!, new RegExp(`${sheet.distancePoints} distance points \\+ 100 QSO points`))
+})
+
+// Titled as the operation is (the event's short name), over arithmetic that
+// adds up to that title — and a points-only event computes no distance, so a
+// "0 km" clause or a "Longest: 0 km" per band would read as a measurement
+// nobody took.
+test('a points-only event is titled by the event and names no distance', () => {
+  const ref = { type: 'arrl-vhf-tests', ref: 'ARRL-VHF-JAN' }
+  const { sheet } = run([qso('K1ABC', '6m', 'FM18'), qso('K2DEF', '1.25m', 'FM18')], { grid: 'FN31' }, ref)
+  const tally = ARRLVHFScorer.summarizeScore({ scoresheet: sheet, operation: {}, ref, scope: 'operation' }, ctx)['arrl-vhf-tests']
+  assert.equal(tally.label, 'VHF Jan: 3 points')
+  assert.equal(tally.longSummary!.split('\n')[0], '2 QSOs, 3 pts')
+  assert.doesNotMatch(tally.longSummary!, /km/)
+  assert.match(tally.longSummary!, /^\*\*6m\*\*: 1 QSOs$/m)
+})
+
+// A distance total and the QSO-points bonus belong to the whole entry, so a
+// day's share of the score is not a number the contest defines.
+test('offers no per-day summary', () => {
+  const { sheet } = run([qso('KN2X', '3cm', 'FN20aa')], { grid: 'FN31aa' }, TEN_GIG)
+  assert.deepEqual(ARRLVHFScorer.summarizeScore({ scoresheet: sheet, operation: {}, ref: TEN_GIG, scope: 'day' }, ctx), {})
 })
 
 test('a 2-character grid is malformed, not short', () => {

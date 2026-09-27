@@ -38,10 +38,13 @@
 // enforced, as in the other contests here.
 
 import { fmtInteger } from "@ham2k/lib-format-tools"
-import type { ContestScorer, JSONValue, QsoScoreVerdict, ScoreTally } from "@ham2k/extension-sdk"
+import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
+import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
 
 import { BANDS, MIN_CONTACTS, MIN_OTHER_PARKS, PARKS, slotMode } from "./event.ts"
 import { isOurRef, ourPark, theirExchange, theirPark } from "./parks.ts"
+
+import manifest from "../manifest.json" with { type: "json" }
 
 /// One entry: the contacts made from one park of ours, or from none (`''`).
 export type OhspotaEntry = {
@@ -57,15 +60,11 @@ export type OhspotaScoresheet = {
   ours?: boolean
   /// Our park (`''` for none) → that entry, in the order they were opened.
   entries: Record<string, OhspotaEntry>
-  /// The entry the last scored QSO belongs to — what a day's figure is read
-  /// against.
-  current?: string
   /// call → `OURPARK|band|MODE` → their parks already credited in that slot,
   /// `''` being a contact from no park, which still occupies the slot.
   worked: Record<string, Record<string, string[]>>
   bands: Record<string, number>
   dupes: number
-  dayQsos: number
 }
 
 function str(value: JSONValue | undefined): string {
@@ -88,13 +87,11 @@ export function scoreOf(park: string, entry: OhspotaEntry): number {
 
 export const OhspotaScorer: ContestScorer<OhspotaScoresheet> = {
   startScoresheet(): OhspotaScoresheet {
-    return { entries: {}, worked: {}, bands: {}, dupes: 0, dayQsos: 0 }
+    return { entries: {}, worked: {}, bands: {}, dupes: 0 }
   },
 
   // Mutates and returns the given scoresheet — see ContestScorer.scoreQso.
-  scoreQso({ scoresheet: sheet, qso, operation, ref, isNewDay }) {
-    if (isNewDay) sheet.dayQsos = 0
-
+  scoreQso({ scoresheet: sheet, qso, operation, ref }) {
     // Another state-park event's legacy operation: not ours to judge, so no
     // alert either — an `unknownEvent` here would flag every Texas QSO.
     if (!isOurRef(ref)) return { scoresheet: sheet, score: { value: 0 } }
@@ -153,9 +150,7 @@ export const OhspotaScorer: ContestScorer<OhspotaScoresheet> = {
     bySlot[slot] = [...(credited ?? []), their]
     entry.qsos += 1
     if (their) entry.hunted[their] = (entry.hunted[their] ?? 0) + 1
-    sheet.current = our
     sheet.bands[band] = (sheet.bands[band] ?? 0) + 1
-    sheet.dayQsos += 1
 
     const score: QsoScoreVerdict = { value: 1, band }
     if (notices.length > 0) score.notices = notices
@@ -163,39 +158,30 @@ export const OhspotaScorer: ContestScorer<OhspotaScoresheet> = {
     return { scoresheet: sheet, score }
   },
 
-  summarizeScore({ scoresheet: sheet, scope }): Record<string, ScoreTally> {
+  summarizeScore({ scoresheet: sheet, scope }, ctx) {
     if (!sheet.ours) return {}
 
+    // Every entry's claimed score, summed so the board has one number, with
+    // each entry stated beneath it. Separate entries' products do not fold into
+    // one, so with several the arithmetic lists them rather than multiplying.
     const entries = Object.entries(sheet.entries)
-    const isDay = scope === 'day'
-
-    // A day's figure is its own contacts against the running multiplier of the
-    // entry being made; the operation's is every entry's claimed score, summed
-    // so the board has one number, with each entry stated beneath it.
-    const current = sheet.entries[sheet.current ?? '']
-    const dayMult = current ? (multipliersOf(sheet.current ?? '', current) || 1) : 1
-    const qsos = isDay ? sheet.dayQsos : entries.reduce((sum, [, entry]) => sum + entry.qsos, 0)
-    const total = isDay ? sheet.dayQsos * dayMult : entries.reduce((sum, [park, entry]) => sum + scoreOf(park, entry), 0)
+    const qsos = entries.reduce((sum, [, entry]) => sum + entry.qsos, 0)
+    const total = entries.reduce((sum, [park, entry]) => sum + scoreOf(park, entry), 0)
     const single = entries.length === 1 ? entries[0] : undefined
+    const mults = single ? (multipliersOf(single[0], single[1]) || 1) : undefined
 
-    return {
-      ohspota: {
-        key: 'ohspota',
-        for: scope,
-        icon: 'flag-checkered',
-        total,
-        points: qsos,
-        mults: isDay ? dayMult : single ? (multipliersOf(single[0], single[1]) || 1) : undefined,
-        qsos,
-        label: isDay
-          ? `${fmtInteger(qsos)} × ${fmtInteger(dayMult)}`
-          : single
-            ? `${fmtInteger(qsos)} × ${fmtInteger(multipliersOf(single[0], single[1]) || 1)}`
-            : entries.map(([park, entry]) => fmtInteger(scoreOf(park, entry))).join(' + '),
-        summary: `${fmtInteger(total)}`,
-        longSummary: longSummaryFor(sheet),
-      },
-    }
+    return contestSummary({
+      key: 'ohspota',
+      scope,
+      icon: 'flag-checkered',
+      title: manifest.shortName,
+      total,
+      arithmetic: mults !== undefined
+        ? contestArithmetic({ qsos, points: qsos, mults }, ctx)
+        : contestArithmetic({ qsos, more: entries.length > 1 ? [entries.map(([park, entry]) => fmtInteger(scoreOf(park, entry))).join(' + ')] : [] }, ctx),
+      detail: longSummaryFor(sheet),
+      extra: { points: qsos, qsos, ...(mults !== undefined ? { mults } : {}) },
+    }, ctx)
   },
 }
 

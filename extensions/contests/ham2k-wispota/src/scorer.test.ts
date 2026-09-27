@@ -109,7 +109,8 @@ test("score is QSOs times unique WI parks worked", () => {
   ])
   assert.deepEqual(totals(), { qsos: 4, worked: 2, activated: 0, mults: 2 })
   assert.equal(summary().total, 8)
-  assert.equal(summary().label, '4 × 2')
+  assert.equal(summary().label, 'WIPOTA: 8 points')
+  assert.equal(String(summary().longSummary).split('\n')[0], '4 QSOs, 4 pts × 2 mults (2 parks worked)')
 })
 
 test("'you do not earn a multiplier for working out-of-state parks'", () => {
@@ -199,23 +200,22 @@ test("the summary states the form's three counts under the form's own names", ()
   assert.match(text, /\*\*WI Parks Activated:\*\* 1/)
 })
 
-test("a day's tally is its own QSOs against the running multiplier, heading and body alike", () => {
+test("the arithmetic names the form's two park counts, which add up to the multiplier", () => {
+  // A park we operated from AND worked someone in is one multiplier, counted
+  // as worked: naming it under both would list parts that sum past the product.
+  const { summary } = run([qso({ hunting: [HORICON] }), qso({ call: 'W9AV', hunting: [HAVENWOODS] }), ...filler(10)], operationFor(HORICON))
+  assert.equal(String(summary().longSummary).split('\n')[0], '12 QSOs, 12 pts × 2 mults (2 parks worked)')
+  const { summary: other } = run([qso({ hunting: [HAVENWOODS] }), ...filler(10)], operationFor(HORICON))
+  assert.equal(other().label, 'WIPOTA: 22 points')
+  assert.equal(String(other().longSummary).split('\n')[0], '11 QSOs, 11 pts × 2 mults (1 park worked, 1 park activated)')
+})
+
+test("offers no per-day summary", () => {
+  // Multipliers are won across the whole contest, so a day's share of the
+  // score is not a number the sponsor defines.
   const operation = operationFor()
-  const ref = { type: 'wispota' }
-  let sheet: WipotaScoresheet = WipotaScorer.startScoresheet({ operation, ref }, ctx)
-  const days = [[qso({ call: 'WA9TT', hunting: [HAVENWOODS] }), qso({ call: 'W9AV' })], [qso({ call: 'N9AAA' })]]
-  for (const day of days) {
-    day.forEach((q, index) => {
-      sheet = WipotaScorer.scoreQso({ scoresheet: sheet, qso: q, operation, ref, isNewDay: index === 0 }, ctx).scoresheet
-    })
-  }
-  const day = WipotaScorer.summarizeScore({ scoresheet: sheet, operation, ref, scope: 'day' }, ctx).wispota
-  assert.equal(day.qsos, 1)
-  assert.equal(day.total, 1)
-  assert.match(String(day.longSummary), /\*\*QSOs:\*\* 1\n/)
-  const whole = WipotaScorer.summarizeScore({ scoresheet: sheet, operation, ref, scope: 'operation' }, ctx).wispota
-  assert.equal(whole.qsos, 3)
-  assert.match(String(whole.longSummary), /\*\*QSOs:\*\* 3\n/)
+  const { sheet } = run([qso()], operation)
+  assert.deepEqual(WipotaScorer.summarizeScore({ scoresheet: sheet, operation, ref: { type: 'wispota' }, scope: 'day' }, ctx), {})
 })
 
 test("a QSO with no callsign is nothing yet", () => {

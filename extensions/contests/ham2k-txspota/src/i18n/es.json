@@ -8,5 +8,10 @@
   "period": "**Período:** {{period}}",
   "scoring": "**Puntuación:** puntos de QSO × (potencia + parques de Texas trabajados + parques activados) + bonos. CW vale 2 puntos, todo lo demás 1. Una estación cuenta una vez por banda, modo y parque; 60, 30, 17 y 12 m no cuentan. Fuera de un parque estatal de Texas, solo cuentan los contactos con uno.",
   "bonuses": "**Bonos:** 5 por K5LRK, 50 por activar más de tres parques, 50 por trabajar a un activador en tres parques. El bono por la foto del letrero del parque se reclama al subir el log.",
-  "submit": "**Envía** tu log en [tspota.org](https://www.tspota.org/) antes de fin de abril."
+  "submit": "**Envía** tu log en [tspota.org](https://www.tspota.org/) antes de fin de abril.",
+  "parkActivatedOne": "1 parque activado",
+  "parkActivatedMany": "{{formatted}} parques activados",
+  "parkWorkedOne": "1 parque trabajado",
+  "parkWorkedMany": "{{formatted}} parques trabajados",
+  "powerMultiplier": "{{formatted}} de potencia"
 }

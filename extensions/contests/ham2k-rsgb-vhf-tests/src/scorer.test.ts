@@ -149,3 +149,25 @@ test('a dupe never contributes a phantom bonus', () => {
   )
   assert.equal(sheet.bonus, 500, 'the dupe repeats the same grid4 key, so the bonus set does not grow')
 })
+
+// Titled as the operation is (the event's short name), with the bonus kept
+// apart from the distance points: RSGB awards it once per new square, so an
+// operator checking the claim needs to see what the contacts earned alone.
+test('the summary is titled by the event, over arithmetic that keeps the bonus apart', () => {
+  const operation = { grid: 'IO91wo' }
+  const ref = { type: 'rsgb-vhf-tests', ref: 'RSGB-BACKPACKERS-3' }
+  const { sheet } = run([qso('G4ABC', '2m', 'IO92wo')], operation, ref)
+  const tally = RSGBVHFScorer.summarizeScore({ scoresheet: sheet, operation, ref, scope: 'operation' }, ctx)['rsgb-vhf-tests']
+  assert.equal(tally.total, 612)
+  assert.equal(tally.label, '3rd Backpackers: 612 points')
+  assert.equal(tally.longSummary!.split('\n')[0], '1 QSO, 112 pts + 500 bonus, 112 km')
+})
+
+// Bonuses and distance belong to the whole entry, so a day's share of the
+// score is not a number the contest defines.
+test('offers no per-day summary', () => {
+  const operation = { grid: 'IO91wo' }
+  const ref = { type: 'rsgb-vhf-tests', ref: 'RSGB-BACKPACKERS-3' }
+  const { sheet } = run([qso('G4ABC', '2m', 'IO92wo')], operation, ref)
+  assert.deepEqual(RSGBVHFScorer.summarizeScore({ scoresheet: sheet, operation, ref, scope: 'day' }, ctx), {})
+})

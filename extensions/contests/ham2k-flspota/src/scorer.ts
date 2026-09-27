@@ -35,10 +35,13 @@
 // their entry.
 
 import { fmtInteger } from "@ham2k/lib-format-tools"
-import type { ContestScorer, JSONValue, QsoScoreVerdict, ScoreTally } from "@ham2k/extension-sdk"
+import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
+import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
 
 import { BANDS, POINTS_PER_PARK_ACTIVATED, QSOS_TO_ACTIVATE, pointsForMode, slotMode } from "./event.ts"
 import { isListed, isOurRef, ourParks, theirParks } from "./parks.ts"
+
+import manifest from "../manifest.json" with { type: "json" }
 
 export type FlspotaScoresheet = {
   /// Whether any QSO was scored under THIS event's ref. The scope offers this
@@ -57,8 +60,6 @@ export type FlspotaScoresheet = {
   qsos: number
   points: number
   dupes: number
-  dayQsos: number
-  dayPoints: number
 }
 
 function str(value: JSONValue | undefined): string {
@@ -71,16 +72,11 @@ export function parksActivated(sheet: FlspotaScoresheet): number {
 
 export const FlspotaScorer: ContestScorer<FlspotaScoresheet> = {
   startScoresheet(): FlspotaScoresheet {
-    return { worked: {}, activated: {}, hunted: {}, bands: {}, qsos: 0, points: 0, dupes: 0, dayQsos: 0, dayPoints: 0 }
+    return { worked: {}, activated: {}, hunted: {}, bands: {}, qsos: 0, points: 0, dupes: 0 }
   },
 
   // Mutates and returns the given scoresheet — see ContestScorer.scoreQso.
-  scoreQso({ scoresheet: sheet, qso, operation, ref, isNewDay }) {
-    if (isNewDay) {
-      sheet.dayQsos = 0
-      sheet.dayPoints = 0
-    }
-
+  scoreQso({ scoresheet: sheet, qso, operation, ref }) {
     // Another state-park event's legacy operation: not ours to judge, so no
     // alert either — an `unknownEvent` here would flag every Texas QSO.
     if (!isOurRef(ref)) return { scoresheet: sheet, score: { value: 0 } }
@@ -142,37 +138,28 @@ export const FlspotaScorer: ContestScorer<FlspotaScoresheet> = {
     sheet.bands[band] = (sheet.bands[band] ?? 0) + contacts
     sheet.qsos += contacts
     sheet.points += value
-    sheet.dayQsos += contacts
-    sheet.dayPoints += value
 
     const score: QsoScoreVerdict = { value, band }
     if (notices.length > 0) score.notices = notices
     return { scoresheet: sheet, score }
   },
 
-  summarizeScore({ scoresheet: sheet, scope }): Record<string, ScoreTally> {
+  summarizeScore({ scoresheet: sheet, scope }, ctx) {
     if (!sheet.ours) return {}
 
-    const isDay = scope === 'day'
-    const points = isDay ? sheet.dayPoints : sheet.points
-    // The park bonus is won across the whole event, so it is left out of a
-    // day's figure rather than counted again on every day.
-    const bonus = isDay ? 0 : parksActivated(sheet) * POINTS_PER_PARK_ACTIVATED
-    const total = points + bonus
+    // "There are no multipliers" (§6.1): the park bonus is simply added.
+    const bonus = parksActivated(sheet) * POINTS_PER_PARK_ACTIVATED
 
-    return {
-      flspota: {
-        key: 'flspota',
-        for: scope,
-        icon: 'palm-tree',
-        total,
-        points,
-        qsos: isDay ? sheet.dayQsos : sheet.qsos,
-        label: bonus > 0 ? `${fmtInteger(points)} + ${fmtInteger(bonus)}` : `${fmtInteger(points)}`,
-        summary: `${fmtInteger(total)}`,
-        longSummary: longSummaryFor(sheet),
-      },
-    }
+    return contestSummary({
+      key: 'flspota',
+      scope,
+      icon: 'palm-tree',
+      title: manifest.shortName,
+      total: sheet.points + bonus,
+      arithmetic: contestArithmetic({ qsos: sheet.qsos, points: sheet.points, bonus }, ctx),
+      detail: longSummaryFor(sheet),
+      extra: { points: sheet.points, qsos: sheet.qsos },
+    }, ctx)
   },
 }
 

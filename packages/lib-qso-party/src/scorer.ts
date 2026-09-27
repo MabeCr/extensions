@@ -25,9 +25,11 @@
 // the sponsor might well allow, and the other reading claims contacts a log
 // checker may strike; an over-claim in a submitted file is the worse error.
 
-import type { ContestScorer, JSONValue, QsoScoreVerdict, ScoreTally } from "@ham2k/extension-sdk"
+import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
+import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
 
 import { isMobile, ourLocationText, partyRefIn, powerMultiplier, str } from "./entry.ts"
+import { tFor } from "./i18n.ts"
 import type { QsoPartyLocation, QsoPartyParams } from "./params.ts"
 import {
   allInParty,
@@ -120,6 +122,15 @@ function entityOf(location: QsoPartyLocation): string {
   return location.multCode.startsWith('DX:') ? location.multCode.slice(3) : 'DX'
 }
 
+/// What kind of place a multiplier key names, for the summary's split of the
+/// multiplier ("12 counties, 3 states").
+export type MultKind = 'county' | 'state' | 'province' | 'section' | 'dx'
+
+/// A state or province multiplier's kind, from its code.
+function regionKind(code: string): MultKind {
+  return CANADIAN_PROVINCES[code] ? 'province' : 'state'
+}
+
 /// The multiplier keys one of their locations contributes, and the tables it
 /// belongs in. Split out because `stateCountsForInState` means a single county
 /// can be two multipliers at once — the county, and the state it is in.
@@ -133,11 +144,14 @@ function multipliersFor(
     /// Whether this location's entity has already been CREDITED in this log.
     worked: boolean
   },
-): { keys: string[]; county?: string; state?: string; province?: string; entity?: string } {
+): { keys: { key: string; kind: MultKind }[]; county?: string; state?: string; province?: string; entity?: string } {
   const code = location.code
 
   if (isInParty(party, code)) {
-    const keys = [`${prefix}${location.multCode}`]
+    // A multiplier code other than the county's own is the state it
+    // multiplies as (`multCodeFor`).
+    const keys = [{ key: `${prefix}${location.multCode}`, kind: location.multCode !== code ? regionKind(location.multCode) : 'county' as MultKind }]
+    const has = (key: string) => keys.some((entry) => entry.key === key)
     let claimedState: string | undefined
     // Where the county multiplies as its STATE, that state is what was claimed,
     // and the summary's states table has to say so — otherwise an entrant works
@@ -151,7 +165,7 @@ function multipliersFor(
       const state = stateForCounty(party, code)
       if (US_STATES[state] || CANADIAN_PROVINCES[state]) {
         const key = `${prefix}${state}`
-        if (!keys.includes(key)) keys.push(key)
+        if (!has(key)) keys.push({ key, kind: regionKind(state) })
         claimedState ??= state
       }
     }
@@ -160,7 +174,7 @@ function multipliersFor(
     const section = weAreInParty ? party.countySections[code] : undefined
     if (section) {
       const key = `${prefix}${section}`
-      if (!keys.includes(key)) keys.push(key)
+      if (!has(key)) keys.push({ key, kind: 'section' })
       claimedState ??= section
     }
     const isProvince = claimedState !== undefined && CANADIAN_PROVINCES[claimedState] !== undefined
@@ -173,8 +187,9 @@ function multipliersFor(
   }
 
   const tables = outOfPartyTables(party)
-  if (tables.us[code] || code === 'DC') return { keys: [`${prefix}${code}`], state: code }
-  if (tables.canada[code]) return { keys: [`${prefix}${code}`], province: code }
+  const kind = (fallback: MultKind): MultKind => (party.sectionsForOutOfState && code !== 'DC' ? 'section' : fallback)
+  if (tables.us[code] || code === 'DC') return { keys: [{ key: `${prefix}${code}`, kind: kind('state') }], state: code }
+  if (tables.canada[code]) return { keys: [{ key: `${prefix}${code}`, kind: kind('province') }], province: code }
 
   if (code === 'DX') {
     const entity = entityOf(location)
@@ -189,7 +204,7 @@ function multipliersFor(
     // second contact with an over-cap entity through, one multiplier past a
     // published cap.
     if (max !== undefined && entityCount >= max && !worked) return { keys: [], entity }
-    return { keys: [`${prefix}${location.multCode}`], entity }
+    return { keys: [{ key: `${prefix}${location.multCode}`, kind: 'dx' }], entity }
   }
 
   return { keys: [] }
@@ -201,7 +216,7 @@ export function qsoPartyScorer(params: QsoPartyParams): ContestScorer<QsoPartySc
   return {
     startScoresheet(): QsoPartyScoresheet {
       return {
-        mults: {}, counties: {}, states: {}, provinces: {}, entities: {}, creditedEntities: {},
+        mults: {}, multKinds: {}, counties: {}, states: {}, provinces: {}, entities: {}, creditedEntities: {},
         rareCounties: {}, bonuses: {}, bonusStations: {}, activatedCounties: {},
         worked: {}, lastLocation: {}, bands: {}, modes: {}, bandModes: {},
         qsos: 0, points: 0, dupes: 0,
@@ -210,11 +225,13 @@ export function qsoPartyScorer(params: QsoPartyParams): ContestScorer<QsoPartySc
 
     // Mutates and returns the given scoresheet — see ContestScorer.scoreQso.
     // `isNewDay` is deliberately not read: a party is one period, and nothing
-    // in its score resets at midnight (see `summarizeScore`).
+    // in its score resets at midnight.
     scoreQso({ scoresheet: sheet, qso, operation, ref }) {
       const their = (qso.their as Record<string, JSONValue>) ?? {}
       const call = str(their.call).toUpperCase()
       if (!call) return { scoresheet: sheet, score: { value: 0 } }
+      // A sheet checkpointed before kinds were recorded has no map to write to.
+      const kinds = (sheet.multKinds ??= {})
 
       const band = str(qso.band)
       if (!band || WARC_BANDS.includes(band)) {
@@ -349,6 +366,7 @@ export function qsoPartyScorer(params: QsoPartyParams): ContestScorer<QsoPartySc
           sheet.counties[ours.code] ??= 0
           sheet.mults[`${prefix}${ours.code}`] ??= 0
           sheet.mults[`${prefix}${ours.code}`] += 1
+          kinds[`${prefix}${ours.code}`] = 'county'
         }
       }
 
@@ -360,10 +378,11 @@ export function qsoPartyScorer(params: QsoPartyParams): ContestScorer<QsoPartySc
           entityCount: Object.keys(sheet.creditedEntities).length,
           worked: sheet.creditedEntities[entityOf(location)] !== undefined,
         })
-        for (const key of keys) {
+        for (const { key, kind } of keys) {
           if (sheet.mults[key] === undefined) {
             newMult = true
             sheet.mults[key] = 0
+            kinds[key] = kind
           }
           sheet.mults[key] += 1
         }
@@ -411,7 +430,8 @@ export function qsoPartyScorer(params: QsoPartyParams): ContestScorer<QsoPartySc
       return { scoresheet: sheet, score }
     },
 
-    summarizeScore({ scoresheet: sheet, scope }): Record<string, ScoreTally> {
+    summarizeScore({ scoresheet: sheet, scope }, ctx) {
+      const t = tFor(ctx)
       const workedMults = Object.keys(sheet.mults).length
       const max = sheet.weAreInParty ? party.inStateMultiplierMax : undefined
       const mult = Math.min(workedMults, max ?? workedMults) || 1
@@ -421,49 +441,66 @@ export function qsoPartyScorer(params: QsoPartyParams): ContestScorer<QsoPartySc
 
       // A party that adds its bonus after the multiplier says so; the rest fold
       // it in before.
-      const total = Math.round(party.bonusPostMultiplier
-        ? points * mult * power + bonusPoints
-        : (points + bonusPoints) * mult * power)
+      const bonusFirst = !party.bonusPostMultiplier
+      const total = Math.round(bonusFirst
+        ? (points + bonusPoints) * mult * power
+        : points * mult * power + bonusPoints)
 
-      // A QSO party is ONE period, however many UTC days it straddles — the
-      // sponsors publish one total, and the multipliers and bonuses are won
-      // across the whole log. So a day is never scored on its own: its tally
-      // is the party's running total as of that day's close (the harness
-      // hands over the sheet as it stood then), which on the last day IS the
-      // final score. The detail stays with the operation tally; a day shows
-      // the number alone.
-      const isDay = scope === 'day'
-
-      return {
-        [party.refType]: {
-          key: party.refType,
-          for: scope,
-          // The default for a QSO party, for an extension whose manifest names
-          // none. Each event's own manifest is where a distinct icon goes.
-          icon: party.icon ?? 'star-box',
-          total,
+      return contestSummary({
+        key: party.refType,
+        scope,
+        // The default for a QSO party, for an extension whose manifest names
+        // none. Each event's own manifest is where a distinct icon goes.
+        icon: party.icon ?? 'star-box',
+        // The party alone, without the county `suggestOperationTitle` adds: the
+        // summary is the whole operation's, and a rover's spans several.
+        title: party.short,
+        total,
+        arithmetic: contestArithmetic({
+          qsos: sheet.qsos,
           points,
           mults: mult,
-          qsos: sheet.qsos,
-          // The label is the section's TITLE in the information panel, and the
-          // short `summary` is not shown beside a tally that has a
-          // `longSummary` — so the event's name and its total go here, and the
-          // arithmetic behind the total opens the detail.
-          // A day carries the number alone in the score column, so its title is
-          // the event's name alone — the total would otherwise read twice.
-          label: isDay ? party.short : `${party.short}: ${fmtInteger(total)}`,
-          summary: `${fmtInteger(total)}`,
-          longSummary: isDay
-            ? ''
-            : [
-              arithmeticFor({ points, mult, bonusPoints, power }),
-              longSummaryFor(party, sheet, bonusPoints),
-            ].join('\n\n'),
-          grid: true,
-        },
-      }
+          // Left out under an in-state cap: the kinds would add up to more than
+          // the multiplier the cap leaves.
+          multParts: mult === workedMults ? multParts(party, sheet, t) : [],
+          bonus: bonusPoints,
+          bonusFirst,
+          // Only shown when it is doing something: most parties have no power
+          // table at all, and an entrant who declared no class multiplies by 1.
+          ...(power !== 1 ? { factor: { count: power, noun: t('powerFactor') } } : {}),
+        }, ctx),
+        detail: longSummaryFor(party, sheet, bonusPoints),
+        grid: true,
+        extra: { points, mults: mult, qsos: sheet.qsos },
+      }, ctx)
     },
   }
+}
+
+/// "12 counties, 3 states, 1 DX" — the multipliers worked, by kind. Counties
+/// go by the party's own word where it declares one (CPQP's Districts).
+function multParts(party: Party, sheet: QsoPartyScoresheet, t: ReturnType<typeof tFor>): string[] {
+  const counts: Record<MultKind, number> = { county: 0, state: 0, province: 0, section: 0, dx: 0 }
+  for (const key of Object.keys(sheet.mults)) {
+    const kind = sheet.multKinds?.[key]
+    // A key credited before kinds were recorded: the kinds would add up to
+    // less than the multiplier beside them, so name none rather than some.
+    if (!kind) return []
+    counts[kind] += 1
+  }
+  const part = (count: number, one: string, many: string) =>
+    count === 1 ? t(one) : t(many, { formatted: fmtInteger(count) })
+  const counties = party.labelForCounties.toLowerCase()
+  const county = (count: number) => counties === 'counties'
+    ? part(count, 'multCountyOne', 'multCountyMany')
+    : `${fmtInteger(count)} ${count === 1 ? counties.replace(/ies$/, 'y').replace(/s$/, '') : counties}`
+  return [
+    counts.county > 0 ? county(counts.county) : '',
+    counts.state > 0 ? part(counts.state, 'multStateOne', 'multStateMany') : '',
+    counts.province > 0 ? part(counts.province, 'multProvinceOne', 'multProvinceMany') : '',
+    counts.section > 0 ? part(counts.section, 'multSectionOne', 'multSectionMany') : '',
+    counts.dx > 0 ? part(counts.dx, 'multDxOne', 'multDxMany') : '',
+  ].filter((text) => text)
 }
 
 /// One band's line of the summary table: every mode the party can be worked
@@ -539,18 +576,6 @@ function activatedCounties(party: Party, sheet: QsoPartyScoresheet): string[] {
   return Object.entries(sheet.activatedCounties)
     .filter(([, qsos]) => qsos >= minimum)
     .map(([county]) => county)
-}
-
-/// How the total came about — `points × mults`, the bonus, the power factor.
-function arithmeticFor(
-  { points, mult, bonusPoints, power }: { points: number; mult: number; bonusPoints: number; power: number },
-): string {
-  const parts = [`${fmtInteger(points)} × ${fmtInteger(mult)}`]
-  if (bonusPoints > 0) parts.push(`+ ${fmtInteger(bonusPoints)}`)
-  // Only shown when it is doing something: most parties have no power table at
-  // all, and an entrant who declared no class multiplies by 1.
-  if (power !== 1) parts.push(`× ${power}`)
-  return parts.join(' ')
 }
 
 /// The tables an operator reads while operating: which counties are still out

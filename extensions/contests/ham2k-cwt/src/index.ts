@@ -54,7 +54,7 @@ import {
   sessionShortLabel,
   sessionsFrom,
 } from "./schedule.ts"
-import { CWTScorer } from "./scorer.ts"
+import { CWTScorer, contestTitle } from "./scorer.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
 
@@ -334,10 +334,9 @@ const RefHandler = {
     { ref }: { ref: Ref; operation: Record<string, JSONValue> },
     ctx: HookContext,
   ): Promise<TitleSuggestion | null> {
-    const session = sessionFor(ref.ref)
     const { name, number } = ourExchange(ref as Record<string, JSONValue>)
     return {
-      for: session ? sessionShortLabel(session) : manifest.shortName,
+      for: contestTitle(ref as Record<string, JSONValue>),
       subtitle: name || number ? tFor(ctx)('ourExchangeSubtitle', { name, number }) : undefined,
     }
   },

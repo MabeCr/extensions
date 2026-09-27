@@ -129,3 +129,19 @@ test('the score is points times multipliers', () => {
   assert.equal(summary.arrlDx.mults, 3)
   assert.equal(summary.arrlDx.total, 27)
 })
+
+test('the summary is titled as the operation is, over arithmetic that multiplies out to it', () => {
+  // The title's score and the arithmetic's factors are computed apart; this
+  // catches the two lines of the summary disagreeing.
+  const { sheet } = run([qso('DL1ABC', '20m'), qso('JA1ABC', '20m'), qso('PY2ABC', '40m')])
+  const summary = ARRLDXScorer.summarizeScore({ scoresheet: sheet, operation: usOperation, ref: cwRef, scope: 'operation' }, ctx)
+  assert.equal(summary.arrlDx.label, 'ARRL DX CW: 27 points')
+  assert.equal((summary.arrlDx.longSummary as string).split('\n')[0], '3 QSOs, 9 pts × 3 mults')
+})
+
+test('offers no per-day summary', () => {
+  // Multipliers are counted across the whole contest, so a day's share of the
+  // score is not a number ARRL DX defines.
+  const { sheet } = run([qso('DL1ABC', '20m')])
+  assert.deepEqual(ARRLDXScorer.summarizeScore({ scoresheet: sheet, operation: usOperation, ref: cwRef, scope: 'day' }, ctx), {})
+})

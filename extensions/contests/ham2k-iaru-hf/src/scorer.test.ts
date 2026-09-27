@@ -229,22 +229,28 @@ test('what we send depends on which kind of station we are', () => {
   assert.equal(ourExchange(usOperation, { type: 'iaru-hf' }), '7')
 })
 
-test('the day summary resets its counters but keeps the running multipliers', () => {
-  let sheet = IARUHFScorer.startScoresheet({ operation: usOperation, ref: mixedRef }, ctx)
-  const score = (q: Record<string, JSONValue>, isNewDay: boolean) => {
-    const r = IARUHFScorer.scoreQso({ scoresheet: sheet, qso: q, operation: usOperation, ref: mixedRef, isNewDay }, ctx)
-    sheet = r.scoresheet
-  }
-  score(qso('DL1ABC', '20m', 'CW', '28'), false)
-  score(qso('JA1ABC', '20m', 'CW', '45'), true)
+test('the summary names the contest and its score, and splits the multipliers by kind', () => {
+  // An official is keyed by its bare office, neither `Z` nor `HQ:` — counted
+  // by subtraction it would read as a zone, and a split that stops adding up
+  // to the multiplier count would contradict the line it sits in.
+  const { sheet } = run([qso('DL1ABC', '20m', 'CW', '28'), qso('DL0HQ', '20m', 'CW', 'DARC'), qso('K1ZZ', '20m', 'CW', 'R2')])
+  const summary = IARUHFScorer.summarizeScore({ scoresheet: sheet, operation: usOperation, ref: mixedRef, scope: 'operation' }, ctx)['iaru-hf']
+  assert.equal(summary.label, 'IARU HF: 21 points')
+  assert.equal((summary.longSummary as string).split('\n')[0], '3 QSOs, 7 pts × 3 mults (1 zone, 1 HQ, 1 official)')
+})
 
-  const day = IARUHFScorer.summarizeScore(
-    { scoresheet: sheet, operation: usOperation, ref: mixedRef, scope: 'day' },
-    ctx,
-  )
-  assert.equal(day['iaru-hf'].qsos, 1, 'the second day has one QSO')
-  assert.equal(day['iaru-hf'].points, 5)
-  // …but multipliers are a contest-long tally, so the day is scored against
-  // both of them.
-  assert.equal(day['iaru-hf'].total, 10)
+test('a restricted entry is titled by its mode, as the operation is', () => {
+  // Mixed is the default and goes unnamed; a CW-only entry must not read as
+  // the mixed contest in its own summary.
+  const cwOnly = { type: 'iaru-hf', modeRestriction: 'CW', stationType: 'normal', zone: '8' }
+  const { sheet } = run([qso('DL1ABC', '20m', 'CW', '28')], usOperation, cwOnly)
+  const summary = IARUHFScorer.summarizeScore({ scoresheet: sheet, operation: usOperation, ref: cwOnly, scope: 'operation' }, ctx)['iaru-hf']
+  assert.equal(summary.label, 'IARU HF CW: 5 points')
+})
+
+test('offers no per-day summary', () => {
+  // Multipliers are a contest-long tally, so a day's share of the score is not
+  // a number the contest defines.
+  const { sheet } = run([qso('DL1ABC', '20m', 'CW', '28')])
+  assert.deepEqual(IARUHFScorer.summarizeScore({ scoresheet: sheet, operation: usOperation, ref: mixedRef, scope: 'day' }, ctx), {})
 })

@@ -60,7 +60,9 @@ test("§6.5.1: QSO points × (power + parks worked + parks activated) — the th
   )
   assert.deepEqual(totals(), { worked: 2, activated: 1, power: 3, mult: 6, bonus: 0 })
   assert.equal(summary().txspota.total, 14 * 6)
-  assert.equal(summary().txspota.label, '14 × 6')
+  // Each term of the sum is a KIND of multiplier the arithmetic names, so the
+  // operator can see which one a missing multiplier belongs to.
+  assert.equal(String(summary().txspota.longSummary).split('\n')[0], '12 QSOs, 14 pts × 6 mults (1 park activated, 2 parks worked, 3 power)')
 })
 
 test("§6.3.4: QRP adds 3, LOW 2, HIGH 1 — and an undeclared class claims nothing", () => {
@@ -177,4 +179,21 @@ test("an operation logged under the combined extension keeps its power class; an
   const florida = run([qso()], operationFor(PARK_A), { type: 'stateparks', ref: 'FLSP' })
   assert.deepEqual(florida.scores[0], { value: 0 })
   assert.deepEqual(florida.summary(), {})
+})
+
+test("the title names the event and its score, over the arithmetic with the bonus outside the product", () => {
+  // The bonus is added AFTER the multiplier sum (§6.5.1); written inside the
+  // product, the line would multiply out to a different score than the title's.
+  const { summary } = run([qso({ call: 'K5LRK' }), ...filler(2, { mode: 'CW' })])
+  const tally = summary().txspota
+  assert.equal(tally.label, 'TSPOTA: 10 points')
+  assert.equal(String(tally.longSummary).split('\n')[0], '3 QSOs, 5 pts × 1 mult + 5 bonus')
+})
+
+test("offers no per-day summary", () => {
+  // Parks, the power term and the bonuses are won across the whole event, so a
+  // day's share of the score is not a number the sponsor defines.
+  const operation = operationFor(PARK_A)
+  const { sheet } = run([qso()], operation)
+  assert.deepEqual(TxspotaScorer.summarizeScore({ scoresheet: sheet, operation, ref: { type: 'txspota' }, scope: 'day' }, ctx), {})
 })

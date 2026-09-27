@@ -86,12 +86,18 @@ test('CW only, and only on the six contest bands', () => {
   assert.equal(scores[2].value, 1)
 })
 
-test("a day's summary scores its own points against the running multipliers", () => {
+test('the summary names the session and its score, over the arithmetic', () => {
+  // The title must name the session as the operation's title does, and the
+  // arithmetic must multiply out to its score — the two are computed apart.
   const { sheet } = run([qso('W1AW', '20m'), qso('K5XYZ', '40m')])
-  const day = CWTScorer.summarizeScore(
-    { scoresheet: sheet, operation, ref: sessionRef, scope: 'day' },
-    ctx,
-  ).cwt
-  assert.equal(day.for, 'day')
-  assert.equal(day.total, 4)
+  const summary = CWTScorer.summarizeScore({ scoresheet: sheet, operation, ref: sessionRef, scope: 'operation' }, ctx).cwt
+  assert.equal(summary.label, 'CWT 1300z: 4 points')
+  assert.equal((summary.longSummary as string).split('\n')[0], '2 QSOs, 2 pts × 2 mults')
+})
+
+test('offers no per-day summary', () => {
+  // Multipliers are counted over the whole session, so a day's share of the
+  // score is not a number the contest defines.
+  const { sheet } = run([qso('W1AW', '20m')])
+  assert.deepEqual(CWTScorer.summarizeScore({ scoresheet: sheet, operation, ref: sessionRef, scope: 'day' }, ctx), {})
 })

@@ -31,7 +31,7 @@ import type {
 
 import { tFor } from "./i18n.ts"
 import { nextRunningYear, relevanceFor } from "./schedule.ts"
-import { NFDScorer, TYPE, nfdMode, refOfType } from "./scorer.ts"
+import { NFDScorer, TYPE, contestTitle, nfdMode, refOfType } from "./scorer.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
 
@@ -301,7 +301,7 @@ const RefHandler = {
 
   async suggestOperationTitle({ ref }: { ref: Ref }, _ctx: HookContext): Promise<TitleSuggestion | null> {
     const designation = classDesignation(ref as Record<string, JSONValue>)
-    return { for: 'NFD', subtitle: designation || undefined }
+    return { for: contestTitle(), subtitle: designation || undefined }
   },
 
   /// The contest's published rules — a reference here names an event, not a

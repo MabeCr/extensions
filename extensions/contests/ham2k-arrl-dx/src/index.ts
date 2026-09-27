@@ -25,7 +25,7 @@ import type {
 } from "@ham2k/extension-sdk"
 
 import { tFor } from "./i18n.ts"
-import { ARRLDXScorer, POWER_PATTERN, isWveCall, weAreWve } from "./scorer.ts"
+import { ARRLDXScorer, POWER_PATTERN, contestTitle, isWveCall, weAreWve } from "./scorer.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
 
@@ -193,10 +193,9 @@ const RefHandler = {
     _ctx: HookContext,
   ) {
     const r = ref as Record<string, JSONValue>
-    const mode = str(r.mode)
     const sent = str(r.exchange)
     return {
-      for: ['ARRL DX', mode].filter((x) => x).join(' '),
+      for: contestTitle(r),
       subtitle: sent || undefined,
     }
   },

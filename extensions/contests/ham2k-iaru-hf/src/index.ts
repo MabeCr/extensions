@@ -28,7 +28,7 @@ import type {
 } from "@ham2k/extension-sdk"
 
 import { tFor } from "./i18n.ts"
-import { EXCHANGE_PATTERN, IARUHFScorer, normalizeZone, ourExchange } from "./scorer.ts"
+import { EXCHANGE_PATTERN, IARUHFScorer, contestTitle, normalizeZone, ourExchange } from "./scorer.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
 
@@ -263,10 +263,9 @@ const RefHandler = {
     { ref, operation }: { ref: Ref; operation: Record<string, JSONValue> },
     ctx: HookContext,
   ) {
-    const restriction = str((ref as Record<string, JSONValue>).modeRestriction)
     const sent = ourExchange(operation, ref as Record<string, JSONValue>)
     return {
-      for: ['IARU HF', restriction && restriction !== 'Mixed' ? restriction : undefined].filter(Boolean).join(' '),
+      for: contestTitle(ref as Record<string, JSONValue>),
       subtitle: sent ? tFor(ctx)('ourExchangeSubtitle', { exchange: sent }) : undefined,
     }
   },
