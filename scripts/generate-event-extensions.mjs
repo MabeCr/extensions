@@ -39,7 +39,7 @@ import { CANADIAN_PROVINCES, US_STATES } from "../packages/lib-qso-party/src/loc
 
 const EXTENSIONS_DIR = resolve(import.meta.dirname, "..", "extensions", "contests")
 
-const VERSION = "0.2.18"
+const VERSION = "0.2.19"
 
 /// The accent an event carries, by the flag of the country whose party it is.
 /// Two colors for the family rather than fifty — what tells two events apart

@@ -99,6 +99,16 @@ test('points come from the mode, per party', () => {
   assert.equal(run([qso({ mode: 'FT8', location: 'ERI' })]).scores[0].value, 3)
 })
 
+test('a DX entrant says DX, and scores', () => {
+  // We have no entity prefix of our own to resolve `DX` against, so without
+  // `parseOurLocations` it resolves to nothing and the whole log scores zero
+  // under `ourLocation`. NYQP counts no DX multiplier; the entry still counts.
+  const { scores, sheet } = run([qso({ location: 'ERI' })], { ourLocation: 'DX' })
+  assert.equal(scores[0].value, 2)
+  assert.deepEqual(scores[0].alerts, undefined)
+  assert.equal(sheet.weAreInParty, false)
+})
+
 test('a county line is worth every pairing of counties', () => {
   // Both of us on a line: four contacts in one exchange, and four multipliers.
   const { scores, sheet } = run([qso({ location: 'ERI/CHA' })], { ourLocation: 'ALB/REN' })

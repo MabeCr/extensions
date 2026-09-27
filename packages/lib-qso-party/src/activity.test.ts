@@ -18,6 +18,7 @@ import type {
 } from "@ham2k/extension-sdk"
 
 import { qsoPartyActivity } from "./activity.ts"
+import { registerEntityLookup } from "./dxcc.ts"
 import type { QsoPartyLabels, QsoPartyParams } from "./params.ts"
 import { qsoPartyRefHandler } from "./refHandler.ts"
 import { CA, MN, NEQP, NV, NY, WI } from "./testFixtures.ts"
@@ -174,9 +175,9 @@ test('the name is asked for only by the party that exchanges one', async () => {
 
 test('the county-line help is shown by the parties that have county lines', async () => {
   const ny = await setupForm(NY)
-  assert.ok(ny.elements.some((element) => element.type === 'markdown' && /county line/i.test(element.text)))
+  assert.ok(ny.elements.some((element) => element.type === 'markdown' && /county[- ]line/i.test(element.text)))
   const wi = await setupForm(WI)
-  assert.equal(wi.elements.some((element) => element.type === 'markdown' && /county line/i.test(element.text)), false)
+  assert.equal(wi.elements.some((element) => element.type === 'markdown' && /county[- ]line/i.test(element.text)), false)
 })
 
 test('the information panel says when the party runs and how far to trust that', async () => {
@@ -213,7 +214,7 @@ function localized(en: string, es: string) {
 const SPANISH: QsoPartyLabels = {
   ourLocation: localized('Our County', 'Nuestro Condado'),
   theirLocation: localized('County', 'Condado'),
-  countyLineHelp: localized('On a county line, send every county:', 'En una línea de condados, envía todos los condados:'),
+  countyLineHelp: localized('This event allows county-line operation', 'Este evento permite operar desde una línea de condados'),
   mobileHelp: localized('Roving?', '¿En movimiento?'),
   ourName: localized('Our Name', 'Nuestro nombre'),
   ourEmail: localized('E-mail', 'Correo para enviar el log'),
@@ -264,7 +265,7 @@ test("a party's own translator answers for every label the form asks", async () 
   // engine's English rather than as Cabrillo codes — with the sponsor's own
   // watts still beside them.
   assert.deepEqual(optionLabels(form, 'operator'), [
-    'Sin declarar', 'Operador único', 'Multi Operator, One Transmitter', 'Multi Operator, Unlimited',
+    'Sin declarar', 'Operador único', 'Multi Operator, One Transmitter', 'Multi Operator, Multiple Transmitters',
   ])
   assert.deepEqual(optionLabels(form, 'power'), [
     'Sin declarar', 'QRP — 5 watts', 'Potencia baja — 100 watts', 'High Power — >100 watts',
@@ -275,9 +276,7 @@ test("a party's own translator answers for every label the form asks", async () 
   assert.deepEqual(optionLabels(form, 'overlay'), ['Sin declarar', 'Novato', 'Youth', 'YL'])
 
   const markdown = markdownOf(form)
-  // The instruction is the party's; the EXAMPLE is its own county codes, which
-  // the engine appends — a translation states the words and no more.
-  assert.match(markdown, /En una línea de condados, envía todos los condados: ALB\/ALL/)
+  assert.match(markdown, /Este evento permite operar desde una línea de condados/)
   assert.match(markdown, /¿En movimiento\?/)
   // The headings translate; the dates, the status note and the sponsor's URL do
   // not, because they are the party's own data rather than the engine's words.
@@ -304,7 +303,7 @@ test('a party that supplies no translator reads exactly as it did before there w
   assert.equal(labelOf(form, 'operator'), 'Entry Class')
   assert.deepEqual(optionLabels(form, 'operator').slice(0, 2), ['Not declared', 'Single Operator'])
   const markdown = markdownOf(form)
-  assert.match(markdown, /On a county line, send every county: ALB\/ALL/)
+  assert.match(markdown, /This event allows county-line operation/)
   assert.match(markdown, /Roving\? Type BREAK/)
   assert.match(markdown, /\*\*Status:\*\* Verified for 2026/)
   assert.match(markdown, /\*\*Period:\*\* 2026-10-17 14:00Z/)
@@ -521,4 +520,50 @@ test('any ref of this type is this party, and carries no second name for it', as
   assert.equal(suggestion.ref, undefined)
   const decorated = await qsoPartyRefHandler(NY).decorateRef!({ ref: { type: NY.refType } }, ctx)
   assert.equal(decorated.ref, undefined)
+})
+
+test('our location suggests counties, then everything that may only stand alone', async () => {
+  // A county line is between the party's OWN counties: a state, a province or
+  // DX beside a county would claim ground the station is not on.
+  const field = fieldOf(await setupForm(NY), 'location')
+  const suggestions = field.suggestions ?? []
+  const byCode = Object.fromEntries(suggestions.map((option) => [option.code, option]))
+  assert.equal(byCode.ALB?.standalone, undefined)
+  assert.equal(byCode.NJ?.standalone, true)
+  assert.equal(byCode.ON?.standalone, true)
+  assert.equal(byCode.DX?.standalone, true)
+  // Nobody in the New York QSO Party is in New York without being in a county.
+  assert.equal(byCode.NY, undefined)
+  assert.deepEqual(field.multiValue, { separator: '/' })
+  assert.equal(field.uppercase, true)
+  // The scorer reads `ALB,SCH` as a line; without the rewrite the field would
+  // flag as unknown what the score counts.
+  assert.deepEqual(field.transforms, [{ pattern: ',', replacement: '/', flags: 'g' }])
+})
+
+test('a party without county lines takes one location, and no separator', async () => {
+  const field = fieldOf(await setupForm(WI), 'location')
+  assert.equal(field.multiValue, undefined)
+  assert.equal(field.transforms, undefined)
+})
+
+test('a station outside the US and Canada starts out as DX', async () => {
+  registerEntityLookup((call) => (call?.toUpperCase().startsWith('DL') ? 'DL' : call?.toUpperCase().startsWith('KL7') ? 'KL' : 'K'))
+  try {
+    const setup = async (stationCall: string, ref: Record<string, JSONValue> = {}) => {
+      const controls = await qsoPartyActivity(NY).operationControls!(
+        { operation: { ...operation(ref), stationCall } },
+        ctx,
+      )
+      return fieldOf((controls[0].input as FormInputDescriptor).form, 'location').value
+    }
+    assert.equal(await setup('DL1ABC'), 'DX')
+    // Alaska is a US state that does not sign K.
+    assert.equal(await setup('KL7ABC'), '')
+    assert.equal(await setup('N0DEV'), '')
+    // Only an EMPTY location: what the operator said stands.
+    assert.equal(await setup('DL1ABC', { location: 'ALB' }), 'ALB')
+  } finally {
+    registerEntityLookup(() => undefined)
+  }
 })

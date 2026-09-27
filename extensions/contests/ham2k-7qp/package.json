@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-7qp",
-  "version": "0.2.18",
+  "version": "0.2.19",
   "private": true,
   "description": "Ham2K Logger extension: the 7th Call Area QSO Party",
   "author": "Sebastian Delmont <sd@ham2k.com>",

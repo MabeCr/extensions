@@ -45,7 +45,8 @@ import {
   pastExchangeHolds,
   preferredCodesFor,
 } from "./exchange.ts"
-import { COUNTY_LINE_SEPARATOR, defaultTheirLocation, guessedStateOf } from "./location.ts"
+import { entityPrefixForCall } from "./dxcc.ts"
+import { COUNTY_LINE_SEPARATOR, defaultTheirLocation, guessedStateOf, stateForEntity } from "./location.ts"
 import type {
   ModeClass,
   OperatorClass,
@@ -118,7 +119,7 @@ async function priorExchange(
 /// party overrides one, and the reason no default is written down twice.
 const LABELS = {
   classNone: 'Not declared',
-  countyLineHelp: 'On a county line, send every county:',
+  countyLineHelp: 'This event allows county-line operation',
   lastUpdated: '**Data last updated:**',
   mobileHelp: 'Roving? Type BREAK and change your county each time you move.',
   mode: 'Mode',
@@ -161,7 +162,7 @@ const OPERATOR_LABELS: Record<OperatorClass, string> = {
   'SINGLE-OP-ASSISTED': 'Single Operator, Assisted',
   'MULTI-ONE': 'Multi Operator, One Transmitter',
   'MULTI-TWO': 'Multi Operator, Two Transmitters',
-  'MULTI-UNLIMITED': 'Multi Operator, Unlimited',
+  'MULTI-UNLIMITED': 'Multi Operator, Multiple Transmitters',
 }
 
 const POWER_LABELS: Record<PowerClass, string> = {
@@ -409,26 +410,47 @@ export function qsoPartyActivity(params: QsoPartyParams): ActivityHook {
       const ref = partyRefIn(party, operation as Record<string, unknown>)
       const t = labelsFor(party, ctx)
 
+      // A station outside the US and Canada has one answer, so it is offered
+      // rather than asked — the same entities `normalizeLocation` reads as DX.
+      const ourEntity = entityPrefixForCall(str(operation.stationCall)).toUpperCase()
+      const weAreDx = ourEntity !== '' && ourEntity !== 'K' && ourEntity !== 'VE' && !stateForEntity(party, ourEntity)
+
       const elements: FormElement[] = [
         {
           type: 'field',
           fieldType: 'text',
           key: 'location',
           label: t('ourLocation'),
-          value: ourLocationText(party, undefined, ref),
+          value: ourLocationText(party, undefined, ref) || (weAreDx ? 'DX' : ''),
           placeholder: Object.keys(party.counties)[0],
+          uppercase: true,
+          // Counties inside the party, states and provinces outside it — the
+          // same list an exchange from a station not yet looked up is checked
+          // against, which already leaves out the party's own states, the one
+          // mistake the scorer alerts on. And `DX`, which `parseOurLocations`
+          // accepts in every party.
+          //
+          // A county line is a line between the party's OWN counties, so
+          // everything else is only valid on its own. A host older than
+          // `suggestions` renders the plain text field.
+          suggestions: [...exchangeOptionsFor(party, undefined), { code: 'DX' }].map((option) =>
+            party.counties[option.code] === undefined ? { ...option, standalone: true } : option,
+          ),
+          ...(party.countyLine
+            ? {
+                multiValue: {
+                  separator: COUNTY_LINE_SEPARATOR,
+                  ...(exchangeInheritPrefix(party) ? { inheritPrefix: exchangeInheritPrefix(party) } : {}),
+                },
+                // A comma, which `splitLocations` reads as a separator too,
+                // written as the slash the field splits on.
+                transforms: exchangeTransforms(party),
+              }
+            : {}),
         },
       ]
 
-      if (party.countyLine) {
-        const [first, second] = Object.keys(party.counties)
-        elements.push({
-          type: 'markdown',
-          // The example is the party's own codes, appended: a translation states
-          // the instruction, and the codes are not words.
-          text: `${t('countyLineHelp')} ${first}${COUNTY_LINE_SEPARATOR}${second ?? first}`,
-        })
-      }
+      if (party.countyLine) elements.push({ type: 'markdown', text: t('countyLineHelp') })
       if (party.exchange.name) {
         elements.push({
           type: 'field',

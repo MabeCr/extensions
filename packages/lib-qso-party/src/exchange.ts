@@ -32,7 +32,7 @@ import {
   nameForLocation,
   ourOwnCodes,
   outOfPartyTables,
-  parseLocations,
+  parseOurLocations,
   splitLocations,
   stateForEntity,
   theirLocations,
@@ -97,7 +97,7 @@ export function resolvedExchanges(
   for (const qso of qsos) {
     if (qso.band === 'event' || qso.deleted === true) continue
     const uuid = str(qso.uuid)
-    const ours = parseLocations(party, ourLocationForQso(party, qso, operation, segments))
+    const ours = parseOurLocations(party, ourLocationForQso(party, qso, operation, segments))
     const text = theirLocationForFile(party, qso, {
       weAreInParty: allInParty(ours),
       // A contact the scorer refuses teaches it nothing, so it may not teach
@@ -155,7 +155,7 @@ export function cabrilloRowsFor(
   const remembered = call ? lastLocation?.[call] : undefined
   const theirText = typed || remembered || defaultTheirLocation(party, qso)
 
-  const ourLocations = parseLocations(party, ourLocationForQso(party, qso, operation, segments))
+  const ourLocations = parseOurLocations(party, ourLocationForQso(party, qso, operation, segments))
   const weAreIn = allInParty(ourLocations)
   const { locations, standing } = theirLocations(party, theirText, {
     entityPrefix,

@@ -29,7 +29,7 @@ import {
   resolvedExchanges,
   theirLocationForFile,
 } from "./exchange.ts"
-import { allInParty, parseLocations } from "./location.ts"
+import { allInParty, parseOurLocations } from "./location.ts"
 import type { QsoPartyExtensionParams, QsoPartyParams } from "./params.ts"
 import { type Party, resolveLabel, resolveParty } from "./party.ts"
 
@@ -69,7 +69,7 @@ export function qsoPartyAdifFields(params: QsoPartyParams): AdifFieldsHook {
       // `operation` is already the segment-effective one for this contact (the
       // core generator resolves it), so our county is simply the operation's.
       const ours = ourLocationText(party, operation as Record<string, unknown>, opRef)
-      const weAreInParty = allInParty(parseLocations(party, ours))
+      const weAreInParty = allInParty(parseOurLocations(party, ours))
       const ourSerial = serial(qsoRef?.ourSerial)
       const theirSerial = serial(qsoRef?.theirSerial)
       const theirName = str(qsoRef?.theirName)

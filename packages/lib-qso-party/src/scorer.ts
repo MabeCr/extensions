@@ -37,7 +37,7 @@ import {
   entityPrefixOf,
   ourOwnCodes,
   outOfPartyTables,
-  parseLocations,
+  parseOurLocations,
   theirLocations,
 } from "./location.ts"
 import { CANADIAN_PROVINCES, US_STATES } from "./locations.ts"
@@ -246,7 +246,7 @@ export function qsoPartyScorer(params: QsoPartyParams): ContestScorer<QsoPartySc
       const mode = scoringModeFor(party, superMode)
 
       // OUR side, from the segment-effective ref: this is what a rover changes.
-      const ourLocations = parseLocations(
+      const ourLocations = parseOurLocations(
         party,
         ourLocationText(party, operation as Record<string, unknown>, ref as Record<string, unknown>),
       )
