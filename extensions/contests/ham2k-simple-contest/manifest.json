@@ -2,7 +2,7 @@
   "key": "ham2k-simple-contest",
   "name": "Generic Simple Contest",
   "shortName": "Contest",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Log any contest with a single free-form exchange, scored one point per contact",
   "category": "contest",
   "icon": "flag-checkered",

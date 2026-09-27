@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-cwt",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "description": "Ham2K Logger extension: CWops CWT",
   "author": "Sebastian Delmont <sd@ham2k.com>",
