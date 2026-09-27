@@ -351,7 +351,7 @@ function packageJsonFor(key, party) {
     },
     devDependencies: {
       "@ham2k/extension-sdk": "^0.8.1",
-      "@ham2k/extension-tools": "^0.6.0",
+      "@ham2k/extension-tools": "^0.7.0",
       esbuild: "^0.25.5",
     },
     engines: { node: ">=24" },

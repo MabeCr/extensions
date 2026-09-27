@@ -19,7 +19,7 @@
   ],
   "devDependencies": {
     "@ham2k/extension-sdk": "^0.8.1",
-    "@ham2k/extension-tools": "^0.6.0",
+    "@ham2k/extension-tools": "^0.7.0",
     "@ham2k/lib-format-tools": "^1.2.0",
     "@ham2k/lib-operation-data": "^1.1.3",
     "esbuild": "^0.25.5"
