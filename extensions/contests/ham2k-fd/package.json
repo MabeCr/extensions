@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-fd",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "description": "Ham2K Logger extension: ARRL Field Day",
   "author": "Sebastian Delmont <sd@ham2k.com>",

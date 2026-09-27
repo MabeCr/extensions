@@ -1,8 +1,8 @@
 {
   "key": "ham2k-tnqp",
-  "name": "TNQP: Tennessee QSO Party",
+  "name": "Tennessee QSO Party",
   "shortName": "TNQP",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Work stations in Tennessee.",
   "category": "contest",
   "icon": "star-box",

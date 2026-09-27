@@ -1,8 +1,8 @@
 {
   "key": "ham2k-ohspota",
-  "name": "OSPOTA: Ohio State Parks On The Air",
+  "name": "Ohio State Parks On The Air",
   "shortName": "OSPOTA",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Ohio State Parks On The Air — PCARS's September contest, with the park-identifier exchange and the Cabrillo the sponsor takes",
   "category": "contest",
   "icon": "flag-checkered",
@@ -51,7 +51,7 @@
   },
   "translations": {
     "es": {
-      "name": "OSPOTA: Parques Estatales de Ohio en el Aire",
+      "name": "Parques Estatales de Ohio en el Aire",
       "description": "Ohio State Parks On The Air — el concurso de septiembre de PCARS, con el intercambio de identificador de parque y el Cabrillo que pide el organizador",
       "keywords": [
         "concurso",

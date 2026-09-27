@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-naqp",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "description": "Ham2K Logger extension: North American QSO Party",
   "author": "Sebastian Delmont <sd@ham2k.com>",

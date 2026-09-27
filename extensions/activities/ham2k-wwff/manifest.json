@@ -2,7 +2,7 @@
   "key": "ham2k-wwff",
   "name": "WWFF: World Wide Flora & Fauna",
   "shortName": "WWFF",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Park references, activation and hunting, spots and spotting",
   "category": "activity",
   "icon": "flower",
@@ -13,7 +13,8 @@
     "fauna",
     "parks",
     "activation",
-    "hunting"
+    "hunting",
+    "wwff"
   ],
   "hooks": [
     "activity",

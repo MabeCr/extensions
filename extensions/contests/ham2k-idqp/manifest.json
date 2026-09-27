@@ -1,8 +1,8 @@
 {
   "key": "ham2k-idqp",
-  "name": "IDQP: Idaho QSO Party",
+  "name": "Idaho QSO Party",
   "shortName": "IDQP",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Work stations in Idaho.",
   "category": "contest",
   "icon": "star-box",

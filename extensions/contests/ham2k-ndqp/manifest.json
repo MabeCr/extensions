@@ -1,8 +1,8 @@
 {
   "key": "ham2k-ndqp",
-  "name": "NDQP: North Dakota QSO Party",
+  "name": "North Dakota QSO Party",
   "shortName": "NDQP",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Work stations in North Dakota.",
   "category": "contest",
   "icon": "star-box",

@@ -1,8 +1,8 @@
 {
   "key": "ham2k-alqp",
-  "name": "ALQP: Alabama QSO Party",
+  "name": "Alabama QSO Party",
   "shortName": "ALQP",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Work stations in Alabama.",
   "category": "contest",
   "icon": "star-box",

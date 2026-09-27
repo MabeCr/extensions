@@ -1,8 +1,8 @@
 {
   "key": "ham2k-flspota",
-  "name": "FSPOTA: Florida State Parks on the Air",
+  "name": "Florida State Parks on the Air",
   "shortName": "FSPOTA",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Florida State Parks on the Air — the Tamiami ARC's April event, scored from the Florida state parks you activate alongside your POTA activation",
   "category": "contest",
   "icon": "palm-tree",
@@ -49,7 +49,7 @@
   },
   "translations": {
     "es": {
-      "name": "FSPOTA: Parques Estatales de Florida en el Aire",
+      "name": "Parques Estatales de Florida en el Aire",
       "description": "Florida State Parks on the Air — el evento de abril del Tamiami ARC, puntuado con los parques estatales de Florida que activas junto con tu activación POTA",
       "keywords": [
         "concurso",

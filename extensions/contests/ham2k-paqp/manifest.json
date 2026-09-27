@@ -1,8 +1,8 @@
 {
   "key": "ham2k-paqp",
-  "name": "PAQP: Pennsylvania QSO Party",
+  "name": "Pennsylvania QSO Party",
   "shortName": "PAQP",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Work stations in Pennsylvania.",
   "category": "contest",
   "icon": "star-box",

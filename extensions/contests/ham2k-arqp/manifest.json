@@ -1,8 +1,8 @@
 {
   "key": "ham2k-arqp",
-  "name": "ARQP: Arkansas QSO Party",
+  "name": "Arkansas QSO Party",
   "shortName": "ARQP",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Work stations in Arkansas.",
   "category": "contest",
   "icon": "star-box",

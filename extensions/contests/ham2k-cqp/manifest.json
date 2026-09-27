@@ -1,8 +1,8 @@
 {
   "key": "ham2k-cqp",
-  "name": "CQP: California QSO Party",
+  "name": "California QSO Party",
   "shortName": "CQP",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Work stations in California.",
   "category": "contest",
   "icon": "star-box",

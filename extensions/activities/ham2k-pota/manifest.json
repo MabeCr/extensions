@@ -2,7 +2,7 @@
   "key": "ham2k-pota",
   "name": "POTA: Parks on the Air",
   "shortName": "POTA",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Park references, spots, and activation logging",
   "category": "activity",
   "icon": "pine-tree",
@@ -11,7 +11,8 @@
   "keywords": [
     "parks",
     "activation",
-    "hunting"
+    "hunting",
+    "pota"
   ],
   "hooks": [
     "activity",

@@ -2,7 +2,7 @@
   "key": "ham2k-r1-vhf-tests",
   "name": "IARU R1 VHF Contests",
   "shortName": "IARU R1 VHF",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Great-circle distance and per-band points across IARU Region 1's VHF/UHF/microwave contest family, submitted as REG1TEST/EDI",
   "category": "contest",
   "icon": "flag-checkered",
@@ -16,7 +16,9 @@
     "distance",
     "reg1test",
     "edi",
-    "iaru"
+    "iaru",
+    "iaru r1 vhf",
+    "iarur1vhf"
   ],
   "relevance": {
     "ituRegions": [

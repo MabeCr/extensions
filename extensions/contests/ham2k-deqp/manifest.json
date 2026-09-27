@@ -1,8 +1,8 @@
 {
   "key": "ham2k-deqp",
-  "name": "DEQP: Delaware QSO Party",
+  "name": "Delaware QSO Party",
   "shortName": "DEQP",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Work stations in Delaware.",
   "category": "contest",
   "icon": "star-box",

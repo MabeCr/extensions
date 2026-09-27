@@ -2,7 +2,7 @@
   "key": "ham2k-pga",
   "name": "PGA: Polish Gmina Award",
   "shortName": "PGA",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Polish gmina references and activation logging",
   "category": "activity",
   "icon": "map-outline",
@@ -11,7 +11,8 @@
   "keywords": [
     "gmina",
     "poland",
-    "activation"
+    "activation",
+    "pga"
   ],
   "relevance": {
     "entities": [

@@ -1,8 +1,8 @@
 {
   "key": "ham2k-kyqp",
-  "name": "KYQP: Kentucky QSO Party",
+  "name": "Kentucky QSO Party",
   "shortName": "KYQP",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Work stations in Kentucky.",
   "category": "contest",
   "icon": "star-box",

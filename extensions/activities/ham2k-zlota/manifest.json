@@ -2,7 +2,7 @@
   "key": "ham2k-zlota",
   "name": "ZLOTA: ZL on the Air",
   "shortName": "ZLOTA",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "New Zealand references, activation and chasing, and spots",
   "category": "activity",
   "icon": "fa-kiwi-bird",
@@ -13,7 +13,8 @@
     "islands",
     "huts",
     "lakes",
-    "activation"
+    "activation",
+    "zlota"
   ],
   "relevance": {
     "entities": [

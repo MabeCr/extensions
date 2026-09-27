@@ -1,8 +1,8 @@
 {
   "key": "ham2k-wiqp",
-  "name": "WIQP: Wisconsin QSO Party",
+  "name": "Wisconsin QSO Party",
   "shortName": "WIQP",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Work stations in Wisconsin.",
   "category": "contest",
   "icon": "star-box",

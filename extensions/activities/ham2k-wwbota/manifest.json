@@ -2,7 +2,7 @@
   "key": "ham2k-wwbota",
   "name": "WWBOTA: Bunkers on the Air",
   "shortName": "WWBOTA",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Bunker references, activation and chasing, spots and spotting",
   "category": "activity",
   "icon": "nuke",
@@ -11,7 +11,8 @@
   "keywords": [
     "bunkers",
     "activation",
-    "chasing"
+    "chasing",
+    "wwbota"
   ],
   "hooks": [
     "activity",

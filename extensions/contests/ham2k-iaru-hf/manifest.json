@@ -2,7 +2,7 @@
   "key": "ham2k-iaru-hf",
   "name": "IARU HF World Championship",
   "shortName": "IARU HF",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Work the world's societies: ITU zones, HQ stations and IARU officials",
   "category": "contest",
   "icon": "earth",
@@ -13,7 +13,9 @@
     "iaru",
     "zone",
     "hq",
-    "cabrillo"
+    "cabrillo",
+    "iaru hf",
+    "iaruhf"
   ],
   "hooks": [
     "activity",

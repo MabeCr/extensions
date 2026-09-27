@@ -1,8 +1,8 @@
 {
   "key": "ham2k-nrrl-nfd",
-  "name": "NFD: NRRL Nasjonal Field Day",
+  "name": "NRRL Nasjonal Field Day",
   "shortName": "NFD",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Norway's national field day — all three modes at once, country-per-band-and-mode multipliers, and large bonuses",
   "category": "contest",
   "icon": "pine-tree",

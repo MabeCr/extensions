@@ -1,8 +1,8 @@
 {
   "key": "ham2k-nyqp",
-  "name": "NYQP: New York QSO Party",
+  "name": "New York QSO Party",
   "shortName": "NYQP",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Work stations in New York.",
   "category": "contest",
   "icon": "star-box",

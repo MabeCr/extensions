@@ -2,7 +2,7 @@
   "key": "ham2k-satellites",
   "name": "Satellite Operations",
   "shortName": "Sats",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Log contacts through amateur satellites, with the bird and its transponder",
   "category": "activity",
   "icon": "satellite-variant",
@@ -12,7 +12,8 @@
     "satellite",
     "sat",
     "amsat",
-    "transponder"
+    "transponder",
+    "sats"
   ],
   "hooks": [
     "activity",

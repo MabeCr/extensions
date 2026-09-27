@@ -2,7 +2,7 @@
   "key": "ham2k-siota",
   "name": "SiOTA: Silos on the Air",
   "shortName": "SiOTA",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Silo references, activation and chasing",
   "category": "activity",
   "icon": "silo",
@@ -12,7 +12,8 @@
     "silos",
     "australia",
     "activation",
-    "chasing"
+    "chasing",
+    "siota"
   ],
   "relevance": {
     "entities": [

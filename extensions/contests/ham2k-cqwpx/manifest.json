@@ -2,7 +2,7 @@
   "key": "ham2k-cqwpx",
   "name": "CQ WPX Contest",
   "shortName": "CQ WPX",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Every callsign prefix is a multiplier; serial numbers are the exchange",
   "category": "contest",
   "icon": "flag-checkered",
@@ -12,7 +12,9 @@
     "contest",
     "prefix",
     "serial",
-    "cabrillo"
+    "cabrillo",
+    "cq wpx",
+    "cqwpx"
   ],
   "hooks": [
     "activity",

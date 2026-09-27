@@ -1,8 +1,8 @@
 {
   "key": "ham2k-ksqp",
-  "name": "KSQP: Kansas QSO Party",
+  "name": "Kansas QSO Party",
   "shortName": "KSQP",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Work stations in Kansas.",
   "category": "contest",
   "icon": "star-box",

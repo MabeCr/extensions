@@ -39,7 +39,7 @@ import { CANADIAN_PROVINCES, US_STATES } from "../packages/lib-qso-party/src/loc
 
 const EXTENSIONS_DIR = resolve(import.meta.dirname, "..", "extensions", "contests")
 
-const VERSION = "0.2.17"
+const VERSION = "0.2.18"
 
 /// The accent an event carries, by the flag of the country whose party it is.
 /// Two colors for the family rather than fifty — what tells two events apart
@@ -279,7 +279,9 @@ function manifestFor(code, key, party) {
 
   return {
     key,
-    name: `${party.short}: ${party.name}`,
+    // A contest is known by its full name; the abbreviation is what a search
+    // finds it by, which is why the keywords carry it.
+    name: party.name,
     shortName: party.short,
     version: VERSION,
     description: party.state

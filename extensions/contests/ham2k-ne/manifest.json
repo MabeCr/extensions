@@ -1,8 +1,8 @@
 {
   "key": "ham2k-ne",
-  "name": "NEQP: Nebraska QSO Party",
+  "name": "Nebraska QSO Party",
   "shortName": "NEQP",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Work stations in Nebraska.",
   "category": "contest",
   "icon": "star-box",

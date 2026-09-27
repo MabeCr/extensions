@@ -1,8 +1,8 @@
 {
   "key": "ham2k-njqp",
-  "name": "NJQP: New Jersey QSO Party",
+  "name": "New Jersey QSO Party",
   "shortName": "NJQP",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Work stations in New Jersey.",
   "category": "contest",
   "icon": "star-box",

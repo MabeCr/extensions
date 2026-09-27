@@ -1,8 +1,8 @@
 {
   "key": "ham2k-vtqp",
-  "name": "VTQP: Vermont QSO Party",
+  "name": "Vermont QSO Party",
   "shortName": "VTQP",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Work stations in Vermont.",
   "category": "contest",
   "icon": "star-box",

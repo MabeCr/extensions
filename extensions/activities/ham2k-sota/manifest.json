@@ -2,7 +2,7 @@
   "key": "ham2k-sota",
   "name": "SOTA: Summits on the Air",
   "shortName": "SOTA",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Summit references, spots, and activation logging",
   "category": "activity",
   "icon": "image-filter-hdr",
@@ -11,7 +11,8 @@
   "keywords": [
     "summits",
     "activation",
-    "chasing"
+    "chasing",
+    "sota"
   ],
   "hooks": [
     "account",

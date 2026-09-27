@@ -1,8 +1,8 @@
 {
   "key": "ham2k-msqp",
-  "name": "MSQP: Mississippi QSO Party",
+  "name": "Mississippi QSO Party",
   "shortName": "MSQP",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Work stations in Mississippi.",
   "category": "contest",
   "icon": "star-box",

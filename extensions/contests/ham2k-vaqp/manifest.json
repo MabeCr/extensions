@@ -1,8 +1,8 @@
 {
   "key": "ham2k-vaqp",
-  "name": "VAQP: Virginia QSO Party",
+  "name": "Virginia QSO Party",
   "shortName": "VAQP",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Work stations in Virginia.",
   "category": "contest",
   "icon": "star-box",

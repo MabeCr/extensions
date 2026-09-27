@@ -2,7 +2,7 @@
   "key": "ham2k-mota",
   "name": "MOTA: Mills on the Air",
   "shortName": "MOTA",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Mill references, activation and chasing, and spotting",
   "category": "activity",
   "icon": "wind-turbine",
@@ -12,7 +12,8 @@
     "mills",
     "windmills",
     "activation",
-    "chasing"
+    "chasing",
+    "mota"
   ],
   "hooks": [
     "activity",

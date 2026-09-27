@@ -1,8 +1,8 @@
 {
   "key": "ham2k-miqp",
-  "name": "MIQP: Michigan QSO Party",
+  "name": "Michigan QSO Party",
   "shortName": "MIQP",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Work stations in Michigan.",
   "category": "contest",
   "icon": "star-box",

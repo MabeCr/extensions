@@ -1,8 +1,8 @@
 {
   "key": "ham2k-hiqp",
-  "name": "HIQP: Hawaii QSO Party",
+  "name": "Hawaii QSO Party",
   "shortName": "HIQP",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Work stations in Hawaii.",
   "category": "contest",
   "icon": "star-box",

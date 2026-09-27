@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-cqwpx",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "description": "Ham2K Logger extension: CQ WPX Contest",
   "author": "Sebastian Delmont <sd@ham2k.com>",

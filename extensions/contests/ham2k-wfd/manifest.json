@@ -1,8 +1,8 @@
 {
   "key": "ham2k-wfd",
-  "name": "WFD: Winter Field Day",
+  "name": "Winter Field Day",
   "shortName": "WFD",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "The January field event — class and section exchange, with a multiplier earned from objectives",
   "category": "contest",
   "icon": "snowflake",

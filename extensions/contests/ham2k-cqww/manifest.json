@@ -1,8 +1,8 @@
 {
   "key": "ham2k-cqww",
-  "name": "CQ WW: CQ World Wide DX Contest",
+  "name": "CQ World Wide DX Contest",
   "shortName": "CQ WW",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Work the world: zone and country multipliers on every band",
   "category": "contest",
   "icon": "earth",
@@ -12,7 +12,9 @@
     "contest",
     "dx",
     "zone",
-    "cabrillo"
+    "cabrillo",
+    "cq ww",
+    "cqww"
   ],
   "hooks": [
     "activity",
@@ -34,7 +36,7 @@
   },
   "translations": {
     "es": {
-      "name": "CQ WW: Concurso CQ World Wide DX",
+      "name": "Concurso CQ World Wide DX",
       "description": "Trabaja el mundo: multiplicadores de zona y país en cada banda",
       "keywords": [
         "concurso",

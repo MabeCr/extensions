@@ -2,7 +2,7 @@
   "key": "ham2k-llota",
   "name": "LLOTA: Lakes and Lagoons on the Air",
   "shortName": "LLOTA",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Lake references, activation and hunting, spots and spotting",
   "category": "activity",
   "icon": "waves",
@@ -12,7 +12,8 @@
     "lakes",
     "lagoons",
     "activation",
-    "hunting"
+    "hunting",
+    "llota"
   ],
   "hooks": [
     "activity",
