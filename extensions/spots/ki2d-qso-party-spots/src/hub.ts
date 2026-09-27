@@ -5,15 +5,16 @@
 // one form per party that takes a new one. No API — the table is scraped
 // off the page and the spot is the same form the site's own button submits.
 //
-// Reached through LoFi's reverse proxy rather than directly, because the hub
-// is plain http and the sandbox's fetch is not.
+// Plain http, because the Hub serves nothing else. The app fetches it over
+// https through its own proxy from extension API 4 on — which is why the
+// manifest declares 4: an older app refuses any http URL.
 
 import { bandForFrequency, modeForFrequency } from "@ham2k/lib-operation-data"
 import { fmtFreq, parseFreq } from "@ham2k/lib-format-tools"
 import type { QsoPartyIdentity } from "@ham2k/qso-parties/identity"
 import type { Spot } from "@ham2k/extension-sdk"
 
-export const HUB_BASE = 'https://lofi.ham2k.net/ham2k-proxy/qsopartyhub'
+export const HUB_BASE = 'http://qsopartyhub.com'
 
 /// What every spot from either feed is stamped with — app-polo's `qp`
 /// extension's key, which is what it stamps its own. The feed a spot came

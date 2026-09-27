@@ -48,7 +48,7 @@ test("on a party weekend every running party's feeds are read, a shared hub page
   const now = mock.method(Date, 'now', () => NEQP_SATURDAY)
   try {
     requests.length = 0
-    answers['https://lofi.ham2k.net/ham2k-proxy/qsopartyhub/in7qpne_de-table.php'] = { status: 200, body: HUB_PAGE }
+    answers['http://qsopartyhub.com/in7qpne_de-table.php'] = { status: 200, body: HUB_PAGE }
     answers['https://mobiletracker.stateqso.com/NEWE/stations.geojson'] = { status: 200, body: TRACKER('N1GHI-9', 'NHHIL') }
     answers['https://mobiletracker.stateqso.com/7QP/stations.geojson'] = { status: 200, body: TRACKER('W7JKL-9', 'ORDES') }
 
@@ -56,7 +56,7 @@ test("on a party weekend every running party's feeds are read, a shared hub page
 
     const urls = requests.map((r) => r.url).sort()
     assert.deepEqual(urls, [
-      'https://lofi.ham2k.net/ham2k-proxy/qsopartyhub/in7qpne_de-table.php',
+      'http://qsopartyhub.com/in7qpne_de-table.php',
       'https://mobiletracker.stateqso.com/7QP/stations.geojson',
       'https://mobiletracker.stateqso.com/DE/stations.geojson',
       'https://mobiletracker.stateqso.com/IN/stations.geojson',
@@ -98,7 +98,7 @@ test("every feed failing is an error; one feed failing is not", async () => {
     // A hub page that is not there is a party with no hub (404 → no spots);
     // a hub that is down is an error, and with every tracker down too there
     // is nothing to soften it.
-    answers['https://lofi.ham2k.net/ham2k-proxy/qsopartyhub/in7qpne_de-table.php'] = { status: 503, body: '' }
+    answers['http://qsopartyhub.com/in7qpne_de-table.php'] = { status: 503, body: '' }
     await assert.rejects(ext.runHook('spots', 'fetchSpots', {}, { ctx: { online: true } }), /HTTP 503/)
     answers['https://mobiletracker.stateqso.com/NEWE/stations.geojson'] = { status: 200, body: TRACKER('N1GHI-9', 'NHHIL') }
     const spots = (await ext.runHook('spots', 'fetchSpots', {}, { ctx: { online: true } })) as any[]
@@ -119,7 +119,7 @@ test("self-spotting is offered to an operation in a party, by either ref spellin
 
 test("a self-spot is posted to the party's hub page as its form", async () => {
   requests.length = 0
-  answers['https://lofi.ham2k.net/ham2k-proxy/qsopartyhub/in7qpne_de-spots.php'] = { status: 200, body: 'ok' }
+  answers['http://qsopartyhub.com/in7qpne_de-spots.php'] = { status: 200, body: 'ok' }
   const operation = fixtureOperation({
     stationCall: 'KI2D/OP1',
     refs: [{ type: 'neqp', location: 'MAWOR/MID' }],
@@ -129,7 +129,7 @@ test("a self-spot is posted to the party's hub page as its form", async () => {
   assert.deepEqual(result, { ok: true })
   assert.equal(requests.length, 1)
   assert.equal(requests[0].method, 'POST')
-  assert.equal(requests[0].url, 'https://lofi.ham2k.net/ham2k-proxy/qsopartyhub/in7qpne_de-spots.php')
+  assert.equal(requests[0].url, 'http://qsopartyhub.com/in7qpne_de-spots.php')
   assert.deepEqual(Object.fromEntries(new URLSearchParams(requests[0].body)), {
     station: 'KI2D/OP1',
     frequency: '14.250',
@@ -150,7 +150,7 @@ test("a self-spot with no county is refused before anything is sent", async () =
 
 test("the poster falls back to the profile's call when the operation names no operator", async () => {
   requests.length = 0
-  answers['https://lofi.ham2k.net/ham2k-proxy/qsopartyhub/txqp-spots.php'] = { status: 500, body: '' }
+  answers['http://qsopartyhub.com/txqp-spots.php'] = { status: 500, body: '' }
   const operation = fixtureOperation({ refs: [{ type: 'txqp', location: 'TRAV' }] })
   const result = (await ext.runHook('spots', 'postSelfSpot', { operation, freq: 7235 })) as any
   assert.equal(Object.fromEntries(new URLSearchParams(requests[0].body)).poster, 'N0DEV')

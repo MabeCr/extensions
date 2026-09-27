@@ -114,8 +114,8 @@ test("a page with no table, or an empty one, is no spots rather than an error", 
 })
 
 test("the hub's pages are the party's, and shared where the sponsors share one", () => {
-  assert.equal(hubTableUrl(NEQP), 'https://lofi.ham2k.net/ham2k-proxy/qsopartyhub/in7qpne_de-table.php')
-  assert.equal(hubSpotUrl(NEBRASKA), 'https://lofi.ham2k.net/ham2k-proxy/qsopartyhub/neqp-spots.php')
+  assert.equal(hubTableUrl(NEQP), 'http://qsopartyhub.com/in7qpne_de-table.php')
+  assert.equal(hubSpotUrl(NEBRASKA), 'http://qsopartyhub.com/neqp-spots.php')
 })
 
 test("a self-spot is the hub's own form, county line and Ham2K tag in the comment", () => {

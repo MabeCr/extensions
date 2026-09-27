@@ -2,8 +2,8 @@
   "key": "ki2d-qso-party-spots",
   "name": "QSO Party Spots",
   "shortName": "QP Spots",
-  "version": "0.1.0",
-  "api": 1,
+  "version": "0.2.0",
+  "api": 4,
   "description": "Spots from the QSO Party Hub and the QSO Party APRS Tracker during a state QSO party, and self-spots to the Hub",
   "category": "spots",
   "icon": "star-box",
@@ -28,7 +28,7 @@
     "spots"
   ],
   "domains": [
-    "lofi.ham2k.net",
+    "qsopartyhub.com",
     "mobiletracker.stateqso.com"
   ],
   "sharedDependencies": {
