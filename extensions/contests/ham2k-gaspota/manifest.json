@@ -2,8 +2,8 @@
   "key": "ham2k-gaspota",
   "name": "Georgia State Parks on the Air",
   "shortName": "GASPOTA",
-  "version": "0.1.2",
-  "description": "Georgia State Parks on the Air — the April event, scored for activators and hunters from the Georgia state parks you activate and work alongside POTA",
+  "version": "0.1.3",
+  "description": "Work State Parks in Georgia; mid April",
   "category": "contest",
   "icon": "fruit-cherries",
   "accentColor": "#C2410C",
@@ -51,7 +51,7 @@
   "translations": {
     "es": {
       "name": "Parques Estatales de Georgia en el Aire",
-      "description": "Georgia State Parks on the Air — el evento de abril, puntuado para activadores y cazadores con los parques estatales de Georgia que activas y trabajas junto con POTA",
+      "description": "Trabaja Parques Estatales en Georgia; mediados de abril",
       "keywords": [
         "concurso",
         "parque",

@@ -2,8 +2,8 @@
   "key": "ham2k-coqp",
   "name": "Colorado QSO Party",
   "shortName": "COQP",
-  "version": "0.2.19",
-  "description": "Work stations in Colorado.",
+  "version": "0.2.20",
+  "description": "Work stations in Colorado; mid September",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -50,7 +50,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Colorado.",
+      "description": "Trabaja estaciones en Colorado; mediados de septiembre",
       "keywords": [
         "concurso",
         "condado",

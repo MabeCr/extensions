@@ -2,8 +2,8 @@
   "key": "ham2k-r1-vhf-tests",
   "name": "IARU R1 VHF Contests",
   "shortName": "IARU R1 VHF",
-  "version": "0.2.3",
-  "description": "Great-circle distance and per-band points across IARU Region 1's VHF/UHF/microwave contest family, submitted as REG1TEST/EDI",
+  "version": "0.2.4",
+  "description": "IARU Region 1's VHF/UHF/microwave contest family",
   "category": "contest",
   "icon": "flag-checkered",
   "accentColor": "#6A1B9A",
@@ -50,7 +50,7 @@
   "translations": {
     "es": {
       "name": "Concursos VHF de IARU R1",
-      "description": "Distancia de gran círculo y puntos por banda en la familia de concursos VHF/UHF/microondas de la Región 1 de IARU, enviado como REG1TEST/EDI",
+      "description": "Familia de concursos VHF/UHF/microondas de la Región 1 de IARU",
       "keywords": [
         "concurso",
         "vhf",

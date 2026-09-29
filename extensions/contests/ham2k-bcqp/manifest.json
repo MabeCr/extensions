@@ -2,8 +2,8 @@
   "key": "ham2k-bcqp",
   "name": "British Columbia QSO Party",
   "shortName": "BCQP",
-  "version": "0.2.19",
-  "description": "Work stations in British Columbia.",
+  "version": "0.2.20",
+  "description": "Work stations in British Columbia; early February",
   "category": "contest",
   "icon": "leaf-maple",
   "accentColor": "#D80621",
@@ -51,7 +51,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Columbia Británica.",
+      "description": "Trabaja estaciones en Columbia Británica; principios de febrero",
       "keywords": [
         "concurso",
         "condado",

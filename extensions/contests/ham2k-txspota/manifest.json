@@ -2,8 +2,8 @@
   "key": "ham2k-txspota",
   "name": "Texas State Parks On The Air",
   "shortName": "TSPOTA",
-  "version": "0.1.2",
-  "description": "Texas State Parks On The Air — the Lake Area ARK's April event, scored from the Texas state parks you activate and work alongside POTA",
+  "version": "0.1.3",
+  "description": "Work State Parks in Texas; mid April; organized by Lake Area ARK",
   "category": "contest",
   "icon": "star-circle",
   "accentColor": "#B91C1C",
@@ -51,7 +51,7 @@
   "translations": {
     "es": {
       "name": "Parques Estatales de Texas en el Aire",
-      "description": "Texas State Parks On The Air — el evento de abril del Lake Area ARK, puntuado con los parques estatales de Texas que activas y trabajas junto con POTA",
+      "description": "Trabaja Parques Estatales en Texas; mediados de abril; organizado por Lake Area ARK",
       "keywords": [
         "concurso",
         "parque",

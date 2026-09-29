@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-deqp",
-  "version": "0.2.19",
+  "version": "0.2.20",
   "private": true,
   "description": "Ham2K Logger extension: the Delaware QSO Party",
   "author": "Sebastian Delmont <sd@ham2k.com>",

@@ -2,8 +2,8 @@
   "key": "ham2k-neqp",
   "name": "New England QSO Party",
   "shortName": "NEQP",
-  "version": "0.2.19",
-  "description": "Work stations in CT, MA, ME, NH, RI and VT.",
+  "version": "0.2.20",
+  "description": "Work stations in CT, MA, ME, NH, RI and VT; early May",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -55,7 +55,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en CT, MA, ME, NH, RI y VT.",
+      "description": "Trabaja estaciones en CT, MA, ME, NH, RI y VT; principios de mayo",
       "keywords": [
         "concurso",
         "condado",

@@ -2,8 +2,8 @@
   "key": "ham2k-wvqp",
   "name": "West Virginia QSO Party",
   "shortName": "WVQP",
-  "version": "0.2.19",
-  "description": "Work stations in West Virginia.",
+  "version": "0.2.20",
+  "description": "Work stations in West Virginia; mid June",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -50,7 +50,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Virginia Occidental.",
+      "description": "Trabaja estaciones en Virginia Occidental; mediados de junio",
       "keywords": [
         "concurso",
         "condado",

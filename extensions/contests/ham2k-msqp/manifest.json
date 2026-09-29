@@ -2,8 +2,8 @@
   "key": "ham2k-msqp",
   "name": "Mississippi QSO Party",
   "shortName": "MSQP",
-  "version": "0.2.19",
-  "description": "Work stations in Mississippi.",
+  "version": "0.2.20",
+  "description": "Work stations in Mississippi; early April",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -50,7 +50,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Misisipi.",
+      "description": "Trabaja estaciones en Misisipi; principios de abril",
       "keywords": [
         "concurso",
         "condado",

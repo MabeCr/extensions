@@ -2,8 +2,8 @@
   "key": "ham2k-iaru-hf",
   "name": "IARU HF World Championship",
   "shortName": "IARU HF",
-  "version": "0.2.3",
-  "description": "Work the world's societies: ITU zones, HQ stations and IARU officials",
+  "version": "0.2.4",
+  "description": "Work the world's societies: ITU zones, HQ stations and IARU officials; mid July",
   "category": "contest",
   "icon": "earth",
   "accentColor": "#1B5E9E",
@@ -38,7 +38,7 @@
   "translations": {
     "es": {
       "name": "Campeonato Mundial de HF de IARU",
-      "description": "Trabaja las sociedades del mundo: zonas ITU, estaciones HQ y oficiales de IARU",
+      "description": "Trabaja las sociedades del mundo: zonas ITU, estaciones HQ y oficiales de IARU; mediados de julio",
       "keywords": [
         "concurso",
         "zona"

@@ -2,8 +2,8 @@
   "key": "ham2k-cwt",
   "name": "CWops CWT",
   "shortName": "CWT",
-  "version": "0.2.3",
-  "description": "The weekly CWops mini-tests: one hour of CW, name and member number, four sessions a week",
+  "version": "0.2.4",
+  "description": "Weekly CWops mini-tests: one hour of CW, four sessions a week",
   "category": "contest",
   "icon": "clock-fast",
   "accentColor": "#4527A0",
@@ -42,7 +42,7 @@
   "translations": {
     "es": {
       "name": "CWT de CWops",
-      "description": "Las mini-pruebas semanales de CWops: una hora de CW, nombre y número de socio, cuatro sesiones por semana",
+      "description": "Mini-pruebas semanales de CWops: una hora de CW, cuatro sesiones por semana",
       "keywords": [
         "concurso",
         "cwt",

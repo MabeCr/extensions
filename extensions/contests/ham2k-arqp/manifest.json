@@ -2,8 +2,8 @@
   "key": "ham2k-arqp",
   "name": "Arkansas QSO Party",
   "shortName": "ARQP",
-  "version": "0.2.19",
-  "description": "Work stations in Arkansas.",
+  "version": "0.2.20",
+  "description": "Work stations in Arkansas; mid May",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -50,7 +50,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Arkansas.",
+      "description": "Trabaja estaciones en Arkansas; mediados de mayo",
       "keywords": [
         "concurso",
         "condado",

@@ -2,8 +2,8 @@
   "key": "ham2k-blha",
   "name": "BLHA: Belgian Lighthouses and Lightships",
   "shortName": "BLHA",
-  "version": "0.2.4",
-  "description": "Belgian lighthouse references, activation logging, and self-spotting",
+  "version": "0.2.5",
+  "description": "Activate lighthouses and lightships in Belgium; spots on cqgma.org",
   "category": "activity",
   "icon": "lighthouse",
   "accentColor": "#2E6F9E",
@@ -46,7 +46,7 @@
   },
   "translations": {
     "es": {
-      "description": "Referencias de faros belgas, registro de activaciones y auto-spotting",
+      "description": "Activa faros y buques faro en Bélgica; spots en cqgma.org",
       "keywords": [
         "faros",
         "bélgica",

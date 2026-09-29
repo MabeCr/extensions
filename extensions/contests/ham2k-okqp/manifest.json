@@ -2,8 +2,8 @@
   "key": "ham2k-okqp",
   "name": "Oklahoma QSO Party",
   "shortName": "OKQP",
-  "version": "0.2.19",
-  "description": "Work stations in Oklahoma.",
+  "version": "0.2.20",
+  "description": "Work stations in Oklahoma; mid March",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -51,7 +51,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Oklahoma.",
+      "description": "Trabaja estaciones en Oklahoma; mediados de marzo",
       "keywords": [
         "concurso",
         "condado",

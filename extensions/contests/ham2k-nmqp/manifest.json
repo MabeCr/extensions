@@ -2,8 +2,8 @@
   "key": "ham2k-nmqp",
   "name": "New Mexico QSO Party",
   "shortName": "NMQP",
-  "version": "0.2.19",
-  "description": "Work stations in New Mexico.",
+  "version": "0.2.20",
+  "description": "Work stations in New Mexico; mid April",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -50,7 +50,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Nuevo México.",
+      "description": "Trabaja estaciones en Nuevo México; mediados de abril",
       "keywords": [
         "concurso",
         "condado",

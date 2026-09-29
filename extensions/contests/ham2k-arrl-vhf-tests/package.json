@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-arrl-vhf-tests",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "description": "Ham2K Logger extension: ARRL VHF Contests",
   "author": "Sebastian Delmont <sd@ham2k.com>",

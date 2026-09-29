@@ -2,8 +2,8 @@
   "key": "ham2k-wca",
   "name": "WCA: World Castles Awards",
   "shortName": "WCA",
-  "version": "0.2.4",
-  "description": "Castle references, activation logging, and self-spotting",
+  "version": "0.2.5",
+  "description": "Activate castles worldwide; spots on cqgma.org",
   "category": "activity",
   "icon": "castle",
   "accentColor": "#7B5E3B",
@@ -40,7 +40,7 @@
   },
   "translations": {
     "es": {
-      "description": "Referencias de castillos, registro de activaciones y auto-spotting",
+      "description": "Activa castillos en todo el mundo; spots en cqgma.org",
       "keywords": [
         "castillos",
         "activación"

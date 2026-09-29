@@ -2,8 +2,8 @@
   "key": "ham2k-njqp",
   "name": "New Jersey QSO Party",
   "shortName": "NJQP",
-  "version": "0.2.19",
-  "description": "Work stations in New Jersey.",
+  "version": "0.2.20",
+  "description": "Work stations in New Jersey; mid September",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -50,7 +50,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Nueva Jersey.",
+      "description": "Trabaja estaciones en Nueva Jersey; mediados de septiembre",
       "keywords": [
         "concurso",
         "condado",

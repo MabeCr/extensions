@@ -2,8 +2,8 @@
   "key": "ham2k-gaqp",
   "name": "Georgia QSO Party",
   "shortName": "GAQP",
-  "version": "0.2.19",
-  "description": "Work stations in Georgia.",
+  "version": "0.2.20",
+  "description": "Work stations in Georgia; mid April",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -51,7 +51,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Georgia.",
+      "description": "Trabaja estaciones en Georgia; mediados de abril",
       "keywords": [
         "concurso",
         "condado",

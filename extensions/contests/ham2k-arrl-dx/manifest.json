@@ -2,8 +2,8 @@
   "key": "ham2k-arrl-dx",
   "name": "ARRL International DX Contest",
   "shortName": "ARRL DX",
-  "version": "0.2.3",
-  "description": "W/VE stations work DX and vice versa: states and provinces against power",
+  "version": "0.2.4",
+  "description": "W/VE stations work DX and vice versa; mid February (CW) and early March (Phone)",
   "category": "contest",
   "icon": "flag-variant",
   "accentColor": "#00205B",
@@ -37,7 +37,7 @@
   "translations": {
     "es": {
       "name": "Concurso ARRL International DX",
-      "description": "Las estaciones W/VE trabajan DX y viceversa: estados y provincias contra potencia",
+      "description": "Las estaciones W/VE trabajan DX y viceversa; mediados de febrero (CW) y principios de marzo (fonía)",
       "keywords": [
         "concurso",
         "potencia"

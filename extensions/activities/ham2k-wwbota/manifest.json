@@ -2,8 +2,8 @@
   "key": "ham2k-wwbota",
   "name": "WWBOTA: Bunkers on the Air",
   "shortName": "WWBOTA",
-  "version": "0.2.5",
-  "description": "Bunker references, activation and chasing, spots and spotting",
+  "version": "0.2.6",
+  "description": "Activate and chase bunkers worldwide; spots on wwbota.org",
   "category": "activity",
   "icon": "nuke",
   "accentColor": "#5A6B72",
@@ -40,7 +40,7 @@
   },
   "translations": {
     "es": {
-      "description": "Referencias de búnkeres, activación y caza, spots y spotting",
+      "description": "Activa y caza búnkeres en todo el mundo; spots en wwbota.org",
       "keywords": [
         "búnkeres",
         "activación"

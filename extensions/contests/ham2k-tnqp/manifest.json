@@ -2,8 +2,8 @@
   "key": "ham2k-tnqp",
   "name": "Tennessee QSO Party",
   "shortName": "TNQP",
-  "version": "0.2.19",
-  "description": "Work stations in Tennessee.",
+  "version": "0.2.20",
+  "description": "Work stations in Tennessee; early September",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -50,7 +50,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Tennessee.",
+      "description": "Trabaja estaciones en Tennessee; principios de septiembre",
       "keywords": [
         "concurso",
         "condado",

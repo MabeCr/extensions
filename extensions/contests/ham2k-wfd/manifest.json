@@ -2,8 +2,8 @@
   "key": "ham2k-wfd",
   "name": "Winter Field Day",
   "shortName": "WFD",
-  "version": "0.2.3",
-  "description": "The January field event — class and section exchange, with a multiplier earned from objectives",
+  "version": "0.2.4",
+  "description": "Winter field event; late January",
   "category": "contest",
   "icon": "snowflake",
   "accentColor": "#0277BD",
@@ -42,7 +42,7 @@
   },
   "translations": {
     "es": {
-      "description": "El evento de campo de enero — intercambio de clase y sección, con multiplicador por objetivos",
+      "description": "Evento de campo de invierno; finales de enero",
       "keywords": [
         "winter field day",
         "wfd",

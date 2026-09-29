@@ -2,8 +2,8 @@
   "key": "ham2k-iaqp",
   "name": "Iowa QSO Party",
   "shortName": "IAQP",
-  "version": "0.2.19",
-  "description": "Work stations in Iowa.",
+  "version": "0.2.20",
+  "description": "Work stations in Iowa; mid September",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -50,7 +50,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Iowa.",
+      "description": "Trabaja estaciones en Iowa; mediados de septiembre",
       "keywords": [
         "concurso",
         "condado",

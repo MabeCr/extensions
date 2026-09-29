@@ -2,8 +2,8 @@
   "key": "ham2k-ne",
   "name": "Nebraska QSO Party",
   "shortName": "NEQP",
-  "version": "0.2.19",
-  "description": "Work stations in Nebraska.",
+  "version": "0.2.20",
+  "description": "Work stations in Nebraska; late April",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -49,7 +49,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Nebraska.",
+      "description": "Trabaja estaciones en Nebraska; finales de abril",
       "keywords": [
         "concurso",
         "condado",

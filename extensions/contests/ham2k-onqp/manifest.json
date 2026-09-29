@@ -2,8 +2,8 @@
   "key": "ham2k-onqp",
   "name": "Ontario QSO Party",
   "shortName": "ONQP",
-  "version": "0.2.19",
-  "description": "Work stations in Ontario.",
+  "version": "0.2.20",
+  "description": "Work stations in Ontario; mid April",
   "category": "contest",
   "icon": "leaf-maple",
   "accentColor": "#D80621",
@@ -51,7 +51,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Ontario.",
+      "description": "Trabaja estaciones en Ontario; mediados de abril",
       "keywords": [
         "concurso",
         "condado",

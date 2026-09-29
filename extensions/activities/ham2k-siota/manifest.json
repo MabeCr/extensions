@@ -2,8 +2,8 @@
   "key": "ham2k-siota",
   "name": "SiOTA: Silos on the Air",
   "shortName": "SiOTA",
-  "version": "0.2.5",
-  "description": "Silo references, activation and chasing",
+  "version": "0.2.6",
+  "description": "Activate and chase Australian grain silos",
   "category": "activity",
   "icon": "silo",
   "accentColor": "#B08C4F",
@@ -45,7 +45,7 @@
   },
   "translations": {
     "es": {
-      "description": "Referencias de silos, activación y caza",
+      "description": "Activa y caza silos de grano australianos",
       "keywords": [
         "silos",
         "australia",

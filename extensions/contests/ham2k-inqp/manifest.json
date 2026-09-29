@@ -2,8 +2,8 @@
   "key": "ham2k-inqp",
   "name": "Indiana QSO Party",
   "shortName": "INQP",
-  "version": "0.2.19",
-  "description": "Work stations in Indiana.",
+  "version": "0.2.20",
+  "description": "Work stations in Indiana; early May",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -50,7 +50,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Indiana.",
+      "description": "Trabaja estaciones en Indiana; principios de mayo",
       "keywords": [
         "concurso",
         "condado",

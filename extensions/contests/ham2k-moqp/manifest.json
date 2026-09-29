@@ -2,8 +2,8 @@
   "key": "ham2k-moqp",
   "name": "Missouri QSO Party",
   "shortName": "MOQP",
-  "version": "0.2.19",
-  "description": "Work stations in Missouri.",
+  "version": "0.2.20",
+  "description": "Work stations in Missouri; mid April",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -51,7 +51,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Misuri.",
+      "description": "Trabaja estaciones en Misuri; mediados de abril",
       "keywords": [
         "concurso",
         "condado",

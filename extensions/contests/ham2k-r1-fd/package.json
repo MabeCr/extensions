@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-r1-fd",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "description": "Ham2K Logger extension: IARU Region 1 Field Day",
   "author": "Sebastian Delmont <sd@ham2k.com>",

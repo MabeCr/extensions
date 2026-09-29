@@ -2,8 +2,8 @@
   "key": "ham2k-cqww",
   "name": "CQ World Wide DX Contest",
   "shortName": "CQ WW",
-  "version": "0.2.3",
-  "description": "Work the world: zone and country multipliers on every band",
+  "version": "0.2.4",
+  "description": "Work the world: zone and country multipliers on every band; late September (RTTY), late October (SSB) and late November (CW)",
   "category": "contest",
   "icon": "earth",
   "accentColor": "#C8102E",
@@ -37,7 +37,7 @@
   "translations": {
     "es": {
       "name": "Concurso CQ World Wide DX",
-      "description": "Trabaja el mundo: multiplicadores de zona y país en cada banda",
+      "description": "Trabaja el mundo: multiplicadores de zona y país en cada banda; finales de septiembre (RTTY), finales de octubre (SSB) y finales de noviembre (CW)",
       "keywords": [
         "concurso",
         "zona"

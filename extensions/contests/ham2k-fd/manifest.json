@@ -2,8 +2,8 @@
   "key": "ham2k-fd",
   "name": "ARRL Field Day",
   "shortName": "FD",
-  "version": "0.2.3",
-  "description": "The ARRL's June operating event — class and section exchange, power multiplier and bonuses",
+  "version": "0.2.4",
+  "description": "ARRL's annual operating event; late June",
   "category": "contest",
   "icon": "weather-sunny",
   "accentColor": "#E65100",
@@ -44,7 +44,7 @@
   },
   "translations": {
     "es": {
-      "description": "El evento de junio de la ARRL — intercambio de clase y sección, multiplicador de potencia y bonificaciones",
+      "description": "Evento anual de operación de la ARRL; finales de junio",
       "keywords": [
         "field day",
         "arrl",

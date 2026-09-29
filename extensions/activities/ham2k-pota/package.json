@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-pota",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": true,
   "description": "Ham2K Logger extension: Parks on the Air",
   "author": "Sebastian Delmont <sd@ham2k.com>",

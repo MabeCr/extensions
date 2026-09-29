@@ -2,8 +2,8 @@
   "key": "ham2k-wispota",
   "name": "Wisconsin Parks on the Air",
   "shortName": "WIPOTA",
-  "version": "0.1.2",
-  "description": "Wisconsin Parks on the Air — the Fox Cities ARC's September contest, scored from the Wisconsin POTA parks you operate in and the ones you work",
+  "version": "0.1.3",
+  "description": "Work POTA parks in Wisconsin; mid September; organized by Fox Cities ARC",
   "category": "contest",
   "icon": "pine-tree",
   "accentColor": "#1B7A2B",
@@ -49,7 +49,7 @@
   "translations": {
     "es": {
       "name": "Parques de Wisconsin en el Aire",
-      "description": "Wisconsin Parks on the Air — el concurso de septiembre del Fox Cities ARC, puntuado con los parques POTA de Wisconsin desde los que operas y los que trabajas",
+      "description": "Trabaja parques POTA en Wisconsin; mediados de septiembre; organizado por Fox Cities ARC",
       "keywords": [
         "concurso",
         "parque",

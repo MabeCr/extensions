@@ -2,8 +2,8 @@
   "key": "ham2k-ndqp",
   "name": "North Dakota QSO Party",
   "shortName": "NDQP",
-  "version": "0.2.19",
-  "description": "Work stations in North Dakota.",
+  "version": "0.2.20",
+  "description": "Work stations in North Dakota; mid April",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -50,7 +50,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Dakota del Norte.",
+      "description": "Trabaja estaciones en Dakota del Norte; mediados de abril",
       "keywords": [
         "concurso",
         "condado",

@@ -2,8 +2,8 @@
   "key": "ham2k-kyqp",
   "name": "Kentucky QSO Party",
   "shortName": "KYQP",
-  "version": "0.2.19",
-  "description": "Work stations in Kentucky.",
+  "version": "0.2.20",
+  "description": "Work stations in Kentucky; early June",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -50,7 +50,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Kentucky.",
+      "description": "Trabaja estaciones en Kentucky; principios de junio",
       "keywords": [
         "concurso",
         "condado",

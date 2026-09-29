@@ -2,8 +2,8 @@
   "key": "ham2k-acqp",
   "name": "Atlantic Canada QSO Party",
   "shortName": "ACQP",
-  "version": "0.2.19",
-  "description": "Work stations in NB, NL, NS and PE.",
+  "version": "0.2.20",
+  "description": "Work stations in NB, NL, NS and PE; early June",
   "category": "contest",
   "icon": "leaf-maple",
   "accentColor": "#D80621",
@@ -52,7 +52,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en NB, NL, NS y PE.",
+      "description": "Trabaja estaciones en NB, NL, NS y PE; principios de junio",
       "keywords": [
         "concurso",
         "condado",

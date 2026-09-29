@@ -2,8 +2,8 @@
   "key": "ham2k-satellites",
   "name": "Satellite Operations",
   "shortName": "Sats",
-  "version": "0.2.1",
-  "description": "Log contacts through amateur satellites, with the bird and its transponder",
+  "version": "0.2.2",
+  "description": "Log contacts through satellites",
   "category": "activity",
   "icon": "satellite-variant",
   "accentColor": "#3F51B5",
@@ -43,7 +43,7 @@
   },
   "translations": {
     "es": {
-      "description": "Registra contactos vía satélites de radioaficionados, con el satélite y su transpondedor",
+      "description": "Registra contactos vía satélite",
       "keywords": [
         "satélite",
         "sat",

@@ -2,8 +2,8 @@
   "key": "ham2k-7qp",
   "name": "7th Call Area QSO Party",
   "shortName": "7QP",
-  "version": "0.2.19",
-  "description": "Work stations in AZ, ID, MT, NV, OR, UT, WA and WY.",
+  "version": "0.2.20",
+  "description": "Work stations in AZ, ID, MT, NV, OR, UT, WA and WY; early May",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -56,7 +56,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en AZ, ID, MT, NV, OR, UT, WA y WY.",
+      "description": "Trabaja estaciones en AZ, ID, MT, NV, OR, UT, WA y WY; principios de mayo",
       "keywords": [
         "concurso",
         "condado",

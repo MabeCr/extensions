@@ -2,8 +2,8 @@
   "key": "ham2k-mdqp",
   "name": "Maryland-DC QSO Party",
   "shortName": "MDQP",
-  "version": "0.2.19",
-  "description": "Work stations in Maryland.",
+  "version": "0.2.20",
+  "description": "Work stations in Maryland; early August",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -50,7 +50,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Maryland.",
+      "description": "Trabaja estaciones en Maryland; principios de agosto",
       "keywords": [
         "concurso",
         "condado",

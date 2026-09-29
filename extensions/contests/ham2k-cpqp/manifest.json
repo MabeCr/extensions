@@ -2,8 +2,8 @@
   "key": "ham2k-cpqp",
   "name": "Canadian Prairies QSO Party",
   "shortName": "CPQP",
-  "version": "0.2.19",
-  "description": "Work stations in AB, MB and SK.",
+  "version": "0.2.20",
+  "description": "Work stations in AB, MB and SK; early May",
   "category": "contest",
   "icon": "leaf-maple",
   "accentColor": "#D80621",
@@ -51,7 +51,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en AB, MB y SK.",
+      "description": "Trabaja estaciones en AB, MB y SK; principios de mayo",
       "keywords": [
         "concurso",
         "distrito",

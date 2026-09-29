@@ -2,8 +2,8 @@
   "key": "ham2k-waqp",
   "name": "Washington Salmon Run",
   "shortName": "WAQP",
-  "version": "0.2.19",
-  "description": "Work stations in Washington.",
+  "version": "0.2.20",
+  "description": "Work stations in Washington; mid September",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -51,7 +51,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Washington.",
+      "description": "Trabaja estaciones en Washington; mediados de septiembre",
       "keywords": [
         "concurso",
         "condado",

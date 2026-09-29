@@ -2,8 +2,8 @@
   "key": "ham2k-cqp",
   "name": "California QSO Party",
   "shortName": "CQP",
-  "version": "0.2.19",
-  "description": "Work stations in California.",
+  "version": "0.2.20",
+  "description": "Work stations in California; early October",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -50,7 +50,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en California.",
+      "description": "Trabaja estaciones en California; principios de octubre",
       "keywords": [
         "concurso",
         "condado",

@@ -2,8 +2,8 @@
   "key": "ham2k-tota",
   "name": "TOTA: Towers on the Air",
   "shortName": "TOTA",
-  "version": "0.2.6",
-  "description": "Lookout tower references, activation and hunting, and spots",
+  "version": "0.2.7",
+  "description": "Activate and chase lookout towers worldwide; spots on rozhledny.eu",
   "category": "activity",
   "icon": "tower-fire",
   "accentColor": "#8C5A3C",
@@ -42,7 +42,7 @@
   },
   "translations": {
     "es": {
-      "description": "Referencias de torres miradoras, activación y caza, y spots",
+      "description": "Activa y caza torres miradoras en todo el mundo; spots en rozhledny.eu",
       "keywords": [
         "torres",
         "miradores",

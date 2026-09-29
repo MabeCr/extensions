@@ -2,8 +2,8 @@
   "key": "ham2k-nhqp",
   "name": "New Hampshire QSO Party",
   "shortName": "NHQP",
-  "version": "0.2.19",
-  "description": "Work stations in New Hampshire.",
+  "version": "0.2.20",
+  "description": "Work stations in New Hampshire; mid September",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -51,7 +51,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Nuevo Hampshire.",
+      "description": "Trabaja estaciones en Nuevo Hampshire; mediados de septiembre",
       "keywords": [
         "concurso",
         "condado",

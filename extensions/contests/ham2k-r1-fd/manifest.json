@@ -2,8 +2,8 @@
   "key": "ham2k-r1-fd",
   "name": "IARU Region 1 Field Day",
   "shortName": "R1 FD",
-  "version": "0.2.3",
-  "description": "Region 1's June CW and September SSB field days — serial exchange, portable points, country multipliers",
+  "version": "0.2.4",
+  "description": "Region 1's field days; early June (CW) and early September (SSB)",
   "category": "contest",
   "icon": "tent",
   "accentColor": "#1565C0",
@@ -52,7 +52,7 @@
   },
   "translations": {
     "es": {
-      "description": "Los field days de la Región 1, CW en junio y SSB en septiembre — intercambio de series, puntos por portables, multiplicadores por país",
+      "description": "Field days de la Región 1; principios de junio (CW) y principios de septiembre (SSB)",
       "keywords": [
         "field day",
         "región 1",

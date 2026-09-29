@@ -2,8 +2,8 @@
   "key": "ham2k-mnqp",
   "name": "Minnesota QSO Party",
   "shortName": "MNQP",
-  "version": "0.2.19",
-  "description": "Work stations in Minnesota.",
+  "version": "0.2.20",
+  "description": "Work stations in Minnesota; early February",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -50,7 +50,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Minnesota.",
+      "description": "Trabaja estaciones en Minnesota; principios de febrero",
       "keywords": [
         "concurso",
         "condado",

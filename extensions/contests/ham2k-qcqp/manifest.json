@@ -2,8 +2,8 @@
   "key": "ham2k-qcqp",
   "name": "Quebec QSO Party",
   "shortName": "QCQP",
-  "version": "0.2.19",
-  "description": "Work stations in Quebec.",
+  "version": "0.2.20",
+  "description": "Work stations in Quebec; mid April",
   "category": "contest",
   "icon": "leaf-maple",
   "accentColor": "#D80621",
@@ -50,7 +50,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Quebec.",
+      "description": "Trabaja estaciones en Quebec; mediados de abril",
       "keywords": [
         "concurso",
         "condado",

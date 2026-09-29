@@ -2,8 +2,8 @@
   "key": "ham2k-sdqp",
   "name": "South Dakota QSO Party",
   "shortName": "SDQP",
-  "version": "0.2.19",
-  "description": "Work stations in South Dakota.",
+  "version": "0.2.20",
+  "description": "Work stations in South Dakota; early October",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -50,7 +50,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Dakota del Sur.",
+      "description": "Trabaja estaciones en Dakota del Sur; principios de octubre",
       "keywords": [
         "concurso",
         "condado",

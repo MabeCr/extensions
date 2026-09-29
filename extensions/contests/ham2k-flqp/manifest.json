@@ -2,8 +2,8 @@
   "key": "ham2k-flqp",
   "name": "Florida QSO Party",
   "shortName": "FLQP",
-  "version": "0.2.19",
-  "description": "Work stations in Florida.",
+  "version": "0.2.20",
+  "description": "Work stations in Florida; late April",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -51,7 +51,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Florida.",
+      "description": "Trabaja estaciones en Florida; finales de abril",
       "keywords": [
         "concurso",
         "condado",

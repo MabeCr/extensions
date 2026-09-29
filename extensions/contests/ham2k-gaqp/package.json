@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-gaqp",
-  "version": "0.2.19",
+  "version": "0.2.20",
   "private": true,
   "description": "Ham2K Logger extension: the Georgia QSO Party",
   "author": "Sebastian Delmont <sd@ham2k.com>",

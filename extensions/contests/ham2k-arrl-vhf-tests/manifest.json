@@ -2,8 +2,8 @@
   "key": "ham2k-arrl-vhf-tests",
   "name": "ARRL VHF Contests",
   "shortName": "ARRL VHF",
-  "version": "0.2.3",
-  "description": "Great-circle distance and per-band points across ARRL's VHF/UHF/microwave contest family",
+  "version": "0.2.4",
+  "description": "ARRL's VHF/UHF/microwave contest family",
   "category": "contest",
   "icon": "radio-tower",
   "accentColor": "#1565C0",
@@ -49,7 +49,7 @@
   "translations": {
     "es": {
       "name": "Concursos VHF de ARRL",
-      "description": "Distancia de gran círculo y puntos por banda en la familia de concursos VHF/UHF/microondas de ARRL",
+      "description": "Familia de concursos VHF/UHF/microondas de ARRL",
       "keywords": [
         "concurso",
         "vhf",

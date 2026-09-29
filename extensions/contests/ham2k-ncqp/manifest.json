@@ -2,8 +2,8 @@
   "key": "ham2k-ncqp",
   "name": "North Carolina QSO Party",
   "shortName": "NCQP",
-  "version": "0.2.19",
-  "description": "Work stations in North Carolina.",
+  "version": "0.2.20",
+  "description": "Work stations in North Carolina; early March",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -50,7 +50,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Carolina del Norte.",
+      "description": "Trabaja estaciones en Carolina del Norte; principios de marzo",
       "keywords": [
         "concurso",
         "condado",

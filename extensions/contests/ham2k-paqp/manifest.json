@@ -2,8 +2,8 @@
   "key": "ham2k-paqp",
   "name": "Pennsylvania QSO Party",
   "shortName": "PAQP",
-  "version": "0.2.19",
-  "description": "Work stations in Pennsylvania.",
+  "version": "0.2.20",
+  "description": "Work stations in Pennsylvania; early October",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -51,7 +51,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Pensilvania.",
+      "description": "Trabaja estaciones en Pensilvania; principios de octubre",
       "keywords": [
         "concurso",
         "condado",

@@ -39,7 +39,7 @@ import { CANADIAN_PROVINCES, US_STATES } from "../packages/lib-qso-party/src/loc
 
 const EXTENSIONS_DIR = resolve(import.meta.dirname, "..", "extensions", "contests")
 
-const VERSION = "0.2.19"
+const VERSION = "0.2.20"
 
 /// The accent an event carries, by the flag of the country whose party it is.
 /// Two colors for the family rather than fifty — what tells two events apart
@@ -242,6 +242,26 @@ function startDaysOf(party) {
   return [...new Set(days)].sort()
 }
 
+const MONTHS_EN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+const MONTHS_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+
+/// Roughly when the party runs — "mid October" — from the day its first period
+/// starts, for the description. Vague on purpose: a year-specific date would
+/// need a new release every season, and this reads right for any year the
+/// sponsor keeps its usual weekend. Null for a party with no periods.
+function whenOf(party) {
+  const first = (party.periods ?? [])[0]
+  if (!first) return null
+  const date = new Date(first.startMillis)
+  const day = date.getUTCDate()
+  const month = date.getUTCMonth()
+  const part = day <= 10 ? 0 : day <= 20 ? 1 : 2
+  return {
+    en: `${["early", "mid", "late"][part]} ${MONTHS_EN[month]}`,
+    es: `${["principios", "mediados", "finales"][part]} de ${MONTHS_ES[month]}`,
+  }
+}
+
 function manifestFor(code, key, party) {
   const isCanadian = party.entity === "VE"
   const states = party.state ? [party.state] : party.states
@@ -273,6 +293,7 @@ function manifestFor(code, key, party) {
   ]
 
   const startDays = startDaysOf(party)
+  const when = whenOf(party)
 
   const regionEs = party.state ? placeNameEs(party.state).toLowerCase() : REGIONS_ES[party.refType]
   if (!regionEs) throw new Error(`no Spanish region keyword for ${party.refType} — add it to REGIONS_ES`)
@@ -284,9 +305,9 @@ function manifestFor(code, key, party) {
     name: party.name,
     shortName: party.short,
     version: VERSION,
-    description: party.state
-      ? `Work stations in ${placeName(party.state)}.`
-      : `Work stations in ${joinList(states, "and")}.`,
+    description: [party.state ? `Work stations in ${placeName(party.state)}` : `Work stations in ${joinList(states, "and")}`, when?.en]
+      .filter((part) => part)
+      .join("; "),
     category: "contest",
     // `leaf-maple` for a Canadian party, `star-box` for the rest — the engine's
     // own fallback, stated here so an event can be given a sponsor's glyph
@@ -324,9 +345,9 @@ function manifestFor(code, key, party) {
     sharedDependencies: SHARED_DEPENDENCIES,
     translations: {
       es: {
-        description: party.state
-          ? `Trabaja estaciones en ${placeNameEs(party.state)}.`
-          : `Trabaja estaciones en ${joinList(states, "y")}.`,
+        description: [party.state ? `Trabaja estaciones en ${placeNameEs(party.state)}` : `Trabaja estaciones en ${joinList(states, "y")}`, when?.es]
+          .filter((part) => part)
+          .join("; "),
         keywords: ["concurso", nounsEs[0], nounsEs[1], regionEs],
       },
     },

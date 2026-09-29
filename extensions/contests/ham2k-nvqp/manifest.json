@@ -2,8 +2,8 @@
   "key": "ham2k-nvqp",
   "name": "Nevada QSO Party",
   "shortName": "NVQP",
-  "version": "0.2.19",
-  "description": "Work stations in Nevada.",
+  "version": "0.2.20",
+  "description": "Work stations in Nevada; early October",
   "category": "contest",
   "icon": "star-box",
   "accentColor": "#1F4FA0",
@@ -50,7 +50,7 @@
   },
   "translations": {
     "es": {
-      "description": "Trabaja estaciones en Nevada.",
+      "description": "Trabaja estaciones en Nevada; principios de octubre",
       "keywords": [
         "concurso",
         "condado",
