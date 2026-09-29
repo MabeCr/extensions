@@ -13,8 +13,7 @@ Three kinds of thing live here. The **QSO parties**: the app carries one `qp`
 extension holding all fifty, and this repository publishes them **one event per
 extension**, so an operator installs the Texas QSO Party and gets the Texas QSO
 Party. **Catalog copies of the app's own built-ins**, so that each can ship
-and update without an app release — see **Porting a built-in**, and note that
-those stay unpublished while the app still ships them. And **two spotting
+and update without an app release — see **Porting a built-in**. And **two spotting
 sources the app never shipped**, under the `ki2d-` callsign prefix a third
 party's extension takes: the QSO Party Hub and APRS Tracker feeds that
 app-polo's `qp` extension carried inside it, and an APRS position beacon.
@@ -92,22 +91,23 @@ packaging them; they require the experimental SVG host APIs.
   and Ohio state-park events, for the same reason: the four per-event
   extensions in `contests/` replace it.
 
-## What is published, and what waits
+## What is published
 
-**A ported built-in stays unpublished until the app can stop offering its own
-copy.** Every one declares the SAME `ref:` types as the copy the app carries —
+**Every ported built-in is published**, and the app never runs one beside its
+own copy. Every one declares the SAME `ref:` types as the copy the app carries —
 `ref:pota`, `ref:sotaActivation`, `ref:cqww` — because those types name what is
 written into an operator's log, and renaming one orphans every operation
 already holding it. The kernel routes a ref type to exactly one handler, so
-with both present the operator gets whichever the app picked: a coin toss over
-their own log. Build them, commit them, leave them unpublished.
+with both present the operator would get whichever the app picked: a coin toss
+over their own log. What prevents that is the app's upgrade to catalog
+extensions (its `docs/extensions/distribution.md`): once taken, the app offers
+none of its built-ins but the core, and until it is taken a downloaded copy
+stays on disk unused while the built-in it supersedes runs.
 
-**The exception is the pre-loaded set**, which the app ships packaged and
-installs on first run: `ham2k-pota`, `ham2k-sota`, `ham2k-wwff` and the five
-lookups. Those ARE published, because the app withdraws its own copy of each
-one in the same breath — under the catalog experiment it offers none of its
-built-ins but the core, so nothing collides. Publishing one means re-packing
-the copy in `app/assets/preloaded-extensions/` to match.
+**The pre-loaded set** — `ham2k-pota`, `ham2k-sota`, `ham2k-wwff` and the five
+lookups — the app also ships packaged, and installs on first run. Publishing
+one means re-packing the copy in the app's `app/assets/preloaded-extensions/`
+to match, so a new install starts on the current release.
 
 The 49 QSO party events are published too. They are new events under their own
 refTypes (`texas-qso-party`), not copies of anything the app ships — `qp`
@@ -314,8 +314,8 @@ so that each can ship and update without an app release; the other 14 are the 12
 core ones, `qp` and `stateparks`, and **What is NOT here** says why none of them
 comes across.
 `extensions/activities/ham2k-pota` is the worked example; every step below is
-one it went through. **None of the 39 is published while the app still ships its
-built-in copy** — see **Nothing ported is published**.
+one it went through. All 39 are published — see **What is published** for why
+that never puts two handlers on one ref type.
 
 1. **Copy.** `src/**` (tests included), `manifest.json`, and the `src/i18n/*.json`
    catalogs, into `extensions/<category>/ham2k-<key>/`. Nothing else: the app's
