@@ -170,6 +170,34 @@ test('the Cabrillo is the sponsor′s file, headers and all', async () => {
   assert.match(lines.find((line) => line.startsWith('QSO:'))!, /N0DEV\s+1\s+ALAM\s+K1ABC\s+7\s+BUTT\s*$/)
 })
 
+test('the Cabrillo is a whole file: framed, signed, and one line per contact with a county at each end', async () => {
+  // A checker refuses a file without its START/END lines or a CALLSIGN before
+  // it reads a single contact, and a QSO party's line needs the county sent
+  // AND the county received — the fullest exchange the writer is handed.
+  const result = await define(NY).export.generateExport({
+    exportType: `${NY.refType}-cabrillo`,
+    operation: { ...operation(NY, 'ALB'), grid: 'FN32' },
+    qsos: [{
+      uuid: 'q1',
+      their: { call: 'W1AW' },
+      band: '40m',
+      mode: 'CW',
+      freq: 7035,
+      startAtMillis: Date.UTC(2026, 9, 17, 14, 5),
+      refs: [{ type: NY.refType, location: 'ERI', ourSerial: '1', theirSerial: '7' }],
+    }],
+  }, ctx)
+
+  const lines = result.content.split('\n').map((line) => line.trim()).filter((line) => line)
+  assert.equal(lines[0], 'START-OF-LOG: 3.0')
+  assert.equal(lines[lines.length - 1], 'END-OF-LOG:')
+  assert.ok(lines.includes('CALLSIGN: N0DEV'))
+  assert.ok(lines.some((line) => line.startsWith('CONTEST: ')))
+  const qsoLines = lines.filter((line) => line.startsWith('QSO: '))
+  assert.equal(qsoLines.length, 1)
+  assert.match(qsoLines[0], /N0DEV.*ALB.*W1AW.*ERI/)
+})
+
 test('an exportType this hook never offered is refused', async () => {
   // A hook that answers for the plain ADIF makes the core's delegation recurse
   // into itself.

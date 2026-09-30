@@ -231,6 +231,18 @@ test("every extension builds, packs and loads", async (t) => {
           assert.ok(!type.exportType.startsWith('ham2k-'), 'settings belong to an activity, not a catalog key')
           assert.ok(!type.exportType.includes(':'), 'individual file keys do not belong in a shared export type')
         }
+        // A Cabrillo is written by the HOST's copy of the writer. A unit test
+        // resolves the package from node_modules and cannot tell a bundle that
+        // reaches the shared module from one that does not — and a bundle that
+        // does not writes an EMPTY file on the host. Derived from what each
+        // bundle registers, so a contest added later is checked without being
+        // named anywhere.
+        if (types.some((type) => type.format === 'cabrillo')) {
+          assert.ok(
+            (findSharedModuleReferences(bundle) as string[]).includes('@ham2k/lib-qson-cabrillo'),
+            `${name} offers a Cabrillo without reaching the host's @ham2k/lib-qson-cabrillo`,
+          )
+        }
       }
 
       // What the manifest PROMISES is what the bundle registers. The panel and
