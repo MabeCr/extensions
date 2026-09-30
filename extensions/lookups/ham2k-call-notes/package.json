@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-call-notes",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Ham2K Logger extension: Callsign Notes",
   "author": "Sebastian Delmont <sd@ham2k.com>",
