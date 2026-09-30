@@ -8,6 +8,7 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
+    "test": "node --import ../../../scripts/sdk-node-resolve.mjs --experimental-strip-types --test 'src/**/*.test.ts'",
     "typecheck": "tsc --noEmit",
     "pack": "npm run build && h2kext-pack build --force-name"
   },
