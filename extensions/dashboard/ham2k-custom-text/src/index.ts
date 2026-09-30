@@ -23,7 +23,7 @@
 import { TemplateError, defineExtension, renderTemplate, templateContext, triggersForTemplate } from "@ham2k/extension-sdk"
 import type { HookContext, PanelContent, PanelDescriptor, PanelHook, PanelRenderArgs } from "@ham2k/extension-sdk"
 
-import manifest from "../manifest.json"
+import manifest from "../manifest.json" with { type: "json" }
 
 /// A sheet of paper with a fold, in the app's own accent — a preview has to
 /// carry its own pixels (no URL), so it stays small enough to sit inside a

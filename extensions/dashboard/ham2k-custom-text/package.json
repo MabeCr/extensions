@@ -8,14 +8,16 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
+    "test": "node --import ../../../scripts/sdk-node-resolve.mjs --experimental-strip-types --test 'src/**/*.test.ts'",
     "typecheck": "tsc --noEmit",
     "pack": "npm run build && h2kext-pack build --force-name"
   },
   "//devDependencies": [
     "The libraries the host carries are DECLARED in manifest.json and rewritten",
     "to the host's instance at build time, so the bundle needs none of them",
-    "installed. This extension ships no unit tests, so nothing else resolves a",
-    "bare specifier here either — only the toolchain that builds the bundle."
+    "installed. The unit tests do: `node --test` runs the source as it is, with",
+    "Node's own resolver, so every bare specifier it reaches has to be on disk.",
+    "These are the ones this extension's own tests reach through the SDK."
   ],
   "devDependencies": {
     "@ham2k/extension-sdk": "^0.10.1",

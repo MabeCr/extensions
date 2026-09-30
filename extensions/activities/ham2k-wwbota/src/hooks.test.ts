@@ -107,3 +107,66 @@ test("a reference typed without its scheme or dash is completed as it is typed",
   // A finished reference is left alone.
   assert.equal(applyRefTransforms("B/G-0001", transforms), "B/G-0001")
 })
+
+test("a hunt with no activation is tallied in the award's own words", async () => {
+  // `refNoun`/`refNounPlural` resolve through this extension's i18n keys, and a
+  // mistyped key falls back to the raw key string rather than throwing — so
+  // only a rendered summary shows it.
+  const result = (await wwbota.runHook("scoring", "scoreQsos", {
+    operation: fixtureOperation({ refs: [] }),
+    qsos: [fixtureQso({ refs: [{ type: "wwbota", ref: "B/G-0001" }] })],
+    ref: null,
+  })) as { operationSummary: { hunting?: { label?: string } } }
+  assert.equal(result.operationSummary.hunting?.label, "WWBOTA: 1 bunker hunted")
+})
+
+// The bunker list, fed rows in the shape the API's CSV has, with names.
+const mapBunkers = (rows: Record<string, string>[]) => {
+  const hook = wwbota.hooks.find((h) => h.category === "dataFile" && h.key === "ham2k-wwbota-all-bunkers")!.hook
+  const mapper = hook.csvToLookupEntry as (row: Record<string, string>) => any
+  return rows.map((row) => mapper(row)).filter((entry) => entry !== null && entry !== undefined)
+}
+
+test("a bunker is scoped by its DXCC entity, falling back to the reference's country when the list omits it", () => {
+  const [withDxcc, withoutDxcc, ...rest] = mapBunkers([
+    { Reference: "B/G-0001", Name: "With DXCC", Type: "Pillbox", Lat: "51.5", Long: "-0.1", Maidenhead: "IO91WM", DXCC: "223" },
+    { Reference: "B/S5-0001", Name: "No DXCC", Type: "Bunker", Lat: "46.0", Long: "14.5", Locator: "JN76AA", DXCC: "" },
+  ])
+  assert.equal(rest.length, 0)
+  // DXCC 223 is England: the code is authoritative when present.
+  assert.equal(withDxcc.subCategory, "G")
+  assert.equal(withDxcc.data.grid, "IO91wm")
+  // No code: the country segment of the reference, or the bunker has no scope.
+  assert.equal(withoutDxcc.subCategory, "S5")
+  // The locator column is `Locator` in some exports rather than `Maidenhead`.
+  assert.equal(withoutDxcc.data.grid, "JN76aa")
+})
+
+// ADIF import. Every program writes the same SIG/MY_SIG pair, so reading it
+// without checking WHOSE it is invents references on foreign records.
+const importOne = async (fields: Record<string, string>) =>
+  ((await wwbota.runHook("adifImport", "refsForRecords", { records: [{ fields }] })) as unknown[])[0]
+
+test("ADIF import reads its own activation and hunt, whatever their case", async () => {
+  const activation = { type: "wwbotaActivation", ref: "B/G-0001", for: "operation" }
+  assert.deepEqual(await importOne({ my_sig: "WWBOTA", my_sig_info: "B/G-0001" }), { refs: [activation] })
+  // Ref types are compared as strings downstream; an unnormalized reference matches nothing.
+  assert.deepEqual(await importOne({ my_sig: "wwbota", my_sig_info: "b/g-0001" }), { refs: [activation] })
+  assert.deepEqual(await importOne({ sig: "WWBOTA", sig_info: "B/G-0001", my_sig: "WWBOTA", my_sig_info: "B/G-0001" }), {
+    refs: [{ type: "wwbota", ref: "B/G-0001" }, activation],
+  })
+})
+
+test("ADIF import declines another program's SIG, even on a bunker-shaped reference", async () => {
+  // A foreign-looking reference would be turned away before the SIG was ever
+  // consulted, so the reference here is WWBOTA's own shape.
+  assert.equal(await importOne({ sig: "POTA", sig_info: "B/G-0001", my_sig: "POTA", my_sig_info: "B/G-0001" }), null)
+})
+
+test("ADIF import keeps a reference that does not match the pattern", async () => {
+  // The pattern flags it when decorated; it does not decide whether the
+  // operator's text survives.
+  assert.deepEqual(await importOne({ my_sig: "WWBOTA", my_sig_info: "not a reference" }), {
+    refs: [{ type: "wwbotaActivation", ref: "NOT A REFERENCE", for: "operation" }],
+  })
+})
