@@ -14,7 +14,7 @@
 import { DXCC_BY_CODE } from "@ham2k/lib-dxcc-data"
 import { bandForFrequency } from "@ham2k/lib-operation-data"
 import { locationToGrid6, distanceOnEarth } from "@ham2k/lib-geo-tools"
-import { activityAdifImport, activityExportHook, activityScorer, applyLatLonFromApiFields, contestScorer, defineExtension, host, huntingExportHook, isTestOperation, LOCATION_ACCURACY } from "@ham2k/extension-sdk"
+import { activityAdifImport, activityExportHook, activityScorer, applyLatLonFromApiFields, contestScorer, defineExtension, host, huntingExportHook, isTestOperation, LOCATION_ACCURACY, nearbyLookupRows } from "@ham2k/extension-sdk"
 import type {
   AnnotatedCallInfo,
   HookContext,
@@ -23,6 +23,7 @@ import type {
   LookupResult,
   Ref,
   RefLink,
+  RefGeojson,
   Spot,
   SpotEligibility,
   PostResult,
@@ -34,7 +35,7 @@ import type {
   LookupRow,
   TitleSuggestion,
 } from "@ham2k/extension-sdk"
-import { REFERENCE_REGEX, normalizeReference, entityPrefixForCall, transformsForPrefix, hunterDefaultPrefix, activationDefaultPrefix } from "./refFormatting.ts"
+import { REFERENCE_REGEX, normalizeReference, entityPrefixForCall, transformsForPrefix, hunterDefaultPrefix, activationDefaultPrefix, parkOutlineUrl } from "./refFormatting.ts"
 import { suggestOperationTitleForPota } from "./titleSuggestion.ts"
 import { tFor } from "./i18n.ts"
 import { looksLikeReference } from "@ham2k/extension-sdk"
@@ -195,6 +196,11 @@ const RefHandler = {
     if (!REFERENCE_REGEX.test(reference)) return null
     return { url: `https://pota.app/#/park/${encodeURIComponent(reference)}` }
   },
+
+  async geojsonUrlForRef({ ref }: { ref: Ref }, _ctx: HookContext): Promise<RefGeojson | null> {
+    const url = parkOutlineUrl(ref.ref ?? "")
+    return url ? { url, sourceName: 'OSM' } : null
+  },
 }
 
 const ActivityHook = {
@@ -252,7 +258,7 @@ const ActivityHook = {
     ]
   },
 
-  async suggest({ location, searchTerm, callsign, scoped }: SuggestArgs, ctx: HookContext): Promise<ActivitySuggestion[]> {
+  async suggest({ location, bounds, searchTerm, callsign, scoped }: SuggestArgs, ctx: HookContext): Promise<ActivitySuggestion[]> {
     // A name/code search spans every POTA park worldwide, so narrow it to
     // the caller's own DXCC entity when we can tell whose callsign this is
     // — nearby (location-based) results are already geographically scoped
@@ -272,11 +278,9 @@ const ActivityHook = {
     // cap. A retired park the operator names EXACTLY is still offered, by the
     // fallback below.
     const callerEntity = searchTerm ? entityPrefixForCall(callsign) : undefined
-    const rows: LookupRow[] = searchTerm
-      ? await host.dbLookupSelectAll('pota', searchTerm, callerEntity, true)
-      : location
-        ? await host.dbLookupSelectByLocation('pota', location.lat, location.lon, NEARBY_DELTA, true)
-        : []
+    const { rows, inViewport }: { rows: LookupRow[]; inViewport: boolean } = searchTerm
+      ? { rows: await host.dbLookupSelectAll('pota', searchTerm, callerEntity, true), inViewport: false }
+      : await nearbyLookupRows(host, 'pota', { location, bounds }, { delta: NEARBY_DELTA, activeOnly: true })
 
     const withDistance = rows.map((row) => ({
       row,
@@ -293,7 +297,7 @@ const ActivityHook = {
       withDistance.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
     }
 
-    const suggestions: ActivitySuggestion[] = withDistance.slice(0, MAX_SUGGESTIONS).map(({ row, distance }) => {
+    const suggestions: ActivitySuggestion[] = withDistance.slice(0, inViewport ? withDistance.length : MAX_SUGGESTIONS).map(({ row, distance }) => {
       const data = (row.data ?? {}) as Record<string, any>
       return {
         type: ACTIVATION_TYPE,
