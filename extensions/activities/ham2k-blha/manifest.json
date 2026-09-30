@@ -2,7 +2,7 @@
   "key": "ham2k-blha",
   "name": "BLHA: Belgian Lighthouses and Lightships",
   "shortName": "BLHA",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Activate lighthouses and lightships in Belgium; spots on cqgma.org",
   "category": "activity",
   "icon": "lighthouse",

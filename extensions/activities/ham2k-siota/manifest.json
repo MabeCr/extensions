@@ -2,7 +2,7 @@
   "key": "ham2k-siota",
   "name": "SiOTA: Silos on the Air",
   "shortName": "SiOTA",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Activate and chase Australian grain silos",
   "category": "activity",
   "icon": "silo",

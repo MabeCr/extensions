@@ -2,7 +2,7 @@
   "key": "ham2k-ela",
   "name": "ELA: English Lighthouse Awards",
   "shortName": "ELA",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Activate lighthouses in England; spots on cqgma.org",
   "category": "activity",
   "icon": "lighthouse",

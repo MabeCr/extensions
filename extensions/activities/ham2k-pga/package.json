@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-pga",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "description": "Ham2K Logger extension: Polish Gmina Award",
   "author": "Sebastian Delmont <sd@ham2k.com>",
@@ -18,7 +18,7 @@
     "and these are the ones it names."
   ],
   "devDependencies": {
-    "@ham2k/extension-sdk": "^0.9.0",
+    "@ham2k/extension-sdk": "^0.10.1",
     "@ham2k/extension-tools": "^0.7.0",
     "esbuild": "^0.25.5"
   },

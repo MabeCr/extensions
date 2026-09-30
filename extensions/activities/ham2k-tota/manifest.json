@@ -2,7 +2,7 @@
   "key": "ham2k-tota",
   "name": "TOTA: Towers on the Air",
   "shortName": "TOTA",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Activate and chase lookout towers worldwide; spots on rozhledny.eu",
   "category": "activity",
   "icon": "tower-fire",

@@ -27,11 +27,11 @@
     "rewrites that import to the host's instance."
   ],
   "peerDependencies": {
-    "@ham2k/extension-sdk": "^0.9.0",
+    "@ham2k/extension-sdk": "^0.10.1",
     "@ham2k/lib-callsigns": "^1.0.0"
   },
   "devDependencies": {
-    "@ham2k/extension-sdk": "^0.9.0",
+    "@ham2k/extension-sdk": "^0.10.1",
     "@ham2k/lib-callsigns": "^1.0.0"
   },
   "engines": {

@@ -35,10 +35,10 @@
     "bundle carries one copy, rewritten to the host's instance at build time."
   ],
   "peerDependencies": {
-    "@ham2k/extension-sdk": "^0.9.1"
+    "@ham2k/extension-sdk": "^0.10.1"
   },
   "devDependencies": {
-    "@ham2k/extension-sdk": "^0.9.1"
+    "@ham2k/extension-sdk": "^0.10.1"
   },
   "engines": {
     "node": ">=24"

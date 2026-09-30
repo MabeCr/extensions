@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-bca",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "private": true,
   "description": "Ham2K Logger extension: Belgium Castles & Fortresses",
   "author": "Sebastian Delmont <sd@ham2k.com>",
@@ -21,7 +21,7 @@
     "and these are the ones it names."
   ],
   "devDependencies": {
-    "@ham2k/extension-sdk": "^0.9.0",
+    "@ham2k/extension-sdk": "^0.10.1",
     "@ham2k/extension-tools": "^0.7.0",
     "@ham2k/lib-callsigns": "^1.0.2",
     "@ham2k/lib-geo-tools": "^1.1.1",
