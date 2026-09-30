@@ -4,7 +4,7 @@
 // SOTA (Summits on the Air) Extension. Registers:
 //   ref:sota / ref:sotaActivation  — validation + summit decoration via api-db2.sota.org.uk API
 //   activity                       — SOTA hunting + activation controls
-//   adifFields                     — SOTA_REF/MY_SOTA_REF contributions for exports
+//   adifFields                     — SOTA_REF/MY_SOTA_REF, plus both grids in SOTA's own exports
 //   adifImport                     — the same fields, plus SIG_INFO, read back
 //   spots                          — SOTAWatch spots source + authenticated spot posting
 //   account                        — SOTA SSO (OAuth2) login for SOTAwatch spotting
@@ -13,7 +13,7 @@
 import { parseCallsign } from "@ham2k/lib-callsigns"
 import { annotateFromCountryFile, useBuiltinCountryFile } from "@ham2k/lib-country-files"
 import { locationToGrid6, distanceOnEarth } from "@ham2k/lib-geo-tools"
-import { activityAdifImport, activityExportHook, activityScorer, applyLatLonFromApiFields, contestScorer, defineExtension, host, huntingExportHook, LOCATION_ACCURACY } from "@ham2k/extension-sdk"
+import { activityAdifImport, activityExportHook, activityScorer, applyLatLonFromApiFields, contestScorer, defineExtension, host, huntingExportHook, LOCATION_ACCURACY, nearbyLookupRows } from "@ham2k/extension-sdk"
 import type {
   AnnotatedCallInfo,
   FetchOptions,
@@ -43,6 +43,7 @@ import { tFor } from "./i18n.ts"
 import { spotModeFor } from "./spotMode.ts"
 import { spotsFromSOTAApi, type SOTAApiSpot } from "./spotMapping.ts"
 import { oauthErrorCode } from "./oauthErrors.ts"
+import { sotaGridFields } from "./grid.ts"
 
 import { looksLikeReference } from "@ham2k/extension-sdk"
 
@@ -288,7 +289,7 @@ const RefHandler = {
 
   async geojsonUrlForRef({ ref }: { ref: Ref }, _ctx: HookContext): Promise<RefGeojson | null> {
     const url = activationZoneUrl(ref.ref ?? '')
-    return url ? { url } : null
+    return url ? { url, sourceName: 'sotl.as' } : null
   },
 }
 
@@ -339,12 +340,10 @@ const ActivityHook = {
     ]
   },
 
-  async suggest({ location, searchTerm, callsign, scoped }: SuggestArgs, ctx: HookContext): Promise<ActivitySuggestion[]> {
-    const rows: LookupRow[] = searchTerm
-      ? await host.dbLookupSelectAll('sota', searchTerm)
-      : location
-        ? await host.dbLookupSelectByLocation('sota', location.lat, location.lon, NEARBY_DELTA)
-        : []
+  async suggest({ location, bounds, searchTerm, callsign, scoped }: SuggestArgs, ctx: HookContext): Promise<ActivitySuggestion[]> {
+    const { rows, inViewport }: { rows: LookupRow[]; inViewport: boolean } = searchTerm
+      ? { rows: await host.dbLookupSelectAll('sota', searchTerm), inViewport: false }
+      : await nearbyLookupRows(host, 'sota', { location, bounds }, { delta: NEARBY_DELTA })
 
     // Entity-restrict name/code search results to the caller's own DXCC
     // entity when known, but never nearby ones — same reasoning as POTA's
@@ -369,7 +368,7 @@ const ActivityHook = {
       withDistance.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
     }
 
-    const suggestions: ActivitySuggestion[] = withDistance.slice(0, MAX_SUGGESTIONS).map(({ row, distance }) => {
+    const suggestions: ActivitySuggestion[] = withDistance.slice(0, inViewport ? withDistance.length : MAX_SUGGESTIONS).map(({ row, distance }) => {
       const data = (row.data ?? {}) as Record<string, any>
       const associationRegion = [data.region, data.association].filter((x) => x).join(', ')
 
@@ -459,7 +458,7 @@ async function lookupCall(
 
 const AdifFieldsHook = {
   async fieldsForOneQSO(
-    { qso, operation }: { qso: Record<string, unknown>; operation: Record<string, unknown> },
+    { qso, operation, mainHandler }: { qso: Record<string, unknown>; operation: Record<string, unknown>; mainHandler?: boolean },
     _ctx: HookContext,
   ): Promise<{ name: string; value: string }[]> {
     const fields: { name: string; value: string }[] = []
@@ -472,6 +471,13 @@ const AdifFieldsHook = {
     if (activationRefs.length > 0) {
       fields.push({ name: 'MY_SOTA_REF', value: activationRefs.map((r) => r.ref).join(',') })
     }
+
+    // Both grids, in SOTA's own files only and whether or not the export
+    // releases private data, because the SOTA Challenge asks for them —
+    // app-polo's SOTA export does the same. The full ADIF export leaves them to
+    // the contact's own fields and their privacy rules. An app that predates
+    // `mainHandler` never sets it, and gets the refs alone.
+    if (mainHandler && fields.length > 0) fields.push(...sotaGridFields(qso, operation))
     return fields
   },
 }
