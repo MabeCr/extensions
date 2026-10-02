@@ -1,0 +1,19 @@
+{
+  "invalidReference": "Invalid reference",
+  "unknownReference": "Unknown HOTA site",
+  "activationControl": "HOTA activation",
+  "huntingControl": "HOTA",
+  "dataFileName": "HOTA: All Sites",
+  "dataFileDescription": "Database of all HOTA references",
+  "site": "site",
+  "sitesPlural": "sites",
+  "accountDescription": "Spotting your HOTA activations and the stations you work",
+  "apiKeyLabel": "Integration API Key",
+  "apiKeyPostface": "On cqhota.app, under My account → Integration API key. Not your password.",
+  "missingCredentials": "Enter your HOTA integration API key",
+  "keyRejected": "HOTA did not accept this integration API key — generate a new one under My account on cqhota.app",
+  "keyAccepted": "✅ Key accepted",
+  "keyAcceptedFor": "✅ Key accepted for **{{callsign}}**",
+  "checkFailed": "Could not check the key with HOTA: **{{status}}**",
+  "postRefused": "HOTA refused the spot for {{refs}}"
+}

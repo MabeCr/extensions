@@ -20,20 +20,28 @@ app-polo's `qp` extension carried inside it, and an APRS position beacon.
 
 ## What is here
 
-98 extensions, grouped by the manifest's own `category`:
+99 extensions, grouped by the manifest's own `category`:
 
 | directory | manifest `category` | n | of which |
 |---|---|--:|---|
-| `extensions/activities/` | `activity` | 18 | 18 ported built-ins |
+| `extensions/activities/` | `activity` | 19 | 18 ported built-ins, 1 new program |
 | `extensions/contests/` | `contest` | 68 | 14 ported built-ins, 49 QSO party events, 5 park events |
 | `extensions/lookups/` | `lookup` | 5 | 5 ported built-ins |
 | `extensions/spots/` | `spots` | 3 | 1 ported built-in, 2 new spotting sources |
 | `extensions/dashboard/` | `dashboard` | 4 | 1 ported built-in, 3 SVG reference panels |
-| **total** | | **98** | **39 ported, 56 new, 3 SVG reference panels** |
+| **total** | | **99** | **39 ported, 57 new, 3 SVG reference panels** |
 
-The 39 are the app's own extensions, ported one for one. The 56 are new: events
-the app has never shipped separately, five state-park events, and two spotting
-sources:
+The 39 are the app's own extensions, ported one for one. The 57 are new: events
+the app has never shipped separately, five state-park events, two spotting
+sources, and one award program:
+
+- **`ham2k-hota`** — [History on the Air](https://cqhota.app), historic sites
+  over 200 years old, written for the catalog from cqhota.app's own
+  [rules](https://cqhota.app/rules) and [API](https://cqhota.app/api-docs).
+  Its ref types, `hota` and `hotaActivation`, are new, and are what a log
+  holding a HOTA operation carries from here on: never rename them. Posting a
+  spot takes the operator's own integration key from cqhota.app, entered as an
+  account; the reference list and the spot feed need none.
 
 - **The state-park events** — `ham2k-txspota`, `ham2k-flspota`,
   `ham2k-gaspota`, `ham2k-ohspota` and `ham2k-wispota` — are one extension

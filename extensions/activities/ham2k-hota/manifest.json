@@ -1,0 +1,60 @@
+{
+  "key": "ham2k-hota",
+  "name": "HOTA: History on the Air (Beta)",
+  "shortName": "HOTA",
+  "version": "0.1.0",
+  "description": "Activate and chase historic sites over 200 years old — castles, churches, ruins, monuments; spots on cqhota.app",
+  "category": "activity",
+  "icon": "fa-landmark",
+  "accentColor": "#A8741E",
+  "api": 1,
+  "keywords": [
+    "history",
+    "historic sites",
+    "castles",
+    "monuments",
+    "heritage",
+    "activation",
+    "hunting",
+    "hota"
+  ],
+  "hooks": [
+    "account",
+    "activity",
+    "adifFields",
+    "adifImport",
+    "dataFile",
+    "export",
+    "ref:hota",
+    "ref:hotaActivation",
+    "scoring",
+    "spots"
+  ],
+  "domains": [
+    "cqhota.app"
+  ],
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  },
+  "translations": {
+    "es": {
+      "name": "HOTA: Historia en el Aire (Beta)",
+      "description": "Activa y caza sitios históricos de más de 200 años — castillos, iglesias, ruinas, monumentos; spots en cqhota.app",
+      "keywords": [
+        "historia",
+        "sitios históricos",
+        "castillos",
+        "monumentos",
+        "patrimonio",
+        "activación"
+      ]
+    }
+  }
+}
