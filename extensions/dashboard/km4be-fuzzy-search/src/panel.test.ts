@@ -89,6 +89,40 @@ test("render respects the minimum and reads the operation's log", async () => {
   assert.match((await render({ minLetters: 1 }, "b")).content, /VE3\*\*B\*\*EP/)
 })
 
+test("the prompt is singular for one letter and plural otherwise", async () => {
+  const prompt = async (minLetters: unknown) =>
+    (
+      (await panel.runHook(
+        "panel",
+        "render",
+        { panelKey: "search", operation: { uuid: "op" }, qsoCount: 5, reason: "", config: { minLetters }, qso: { their: { call: "" } } },
+        { ctx: { getQsos: async () => log } },
+      )) as { content: string }
+    ).content
+  assert.match(await prompt(1), /Type at least 1 letter of a callsign\./)
+  assert.match(await prompt(3), /Type at least 3 letters of a callsign\./)
+  // Zero and negatives are below the floor of 1, so the default (2) applies.
+  assert.match(await prompt(0), /at least 2 letters/)
+  assert.match(await prompt(-4), /at least 2 letters/)
+})
+
+test("Maximum matches never drops below 5", async () => {
+  const shown = async (maxResults: number) =>
+    (
+      (await panel.runHook(
+        "panel",
+        "render",
+        { panelKey: "search", operation: { uuid: "op" }, qsoCount: 5, reason: "", config: { maxResults }, qso: { their: { call: "be" } } },
+        { ctx: { getQsos: async () => many(40) } },
+      )) as { content: string }
+    ).content.split("\n").length
+  // Header, blank, table header and alignment row, then the stations.
+  assert.equal(await shown(5), 4 + 5)
+  // Below the floor the default of 50 applies, which holds all 40 stations.
+  assert.equal(await shown(-3), 4 + 40)
+  assert.equal(await shown(2), 4 + 40)
+})
+
 test("fifty stations fit when asked for, with nothing hidden", async () => {
   const content = (
     (await panel.runHook(

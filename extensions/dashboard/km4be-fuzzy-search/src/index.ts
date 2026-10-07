@@ -27,6 +27,8 @@ import { messageMarkdown, resultsMarkdown } from "./markdown.ts"
 
 const DEFAULT_MIN_LETTERS = 2
 const DEFAULT_MAX_RESULTS = 50
+const MIN_LETTERS_FLOOR = 1
+const MAX_RESULTS_FLOOR = 5
 
 type Qso = Record<string, JSONValue>
 
@@ -84,8 +86,13 @@ export function searchQsos(qsos: Qso[], partial: string, max: number): Match[] {
   return [...byCall.values()].sort((a, b) => b.millis - a.millis || a.call.localeCompare(b.call)).slice(0, max)
 }
 
-const count = (v: JSONValue | undefined, fallback: number): number =>
-  typeof v === "number" && Number.isFinite(v) && v >= 1 ? Math.floor(v) : fallback
+/// A whole number of at least `min`. A blank, non-numeric or too-small setting
+/// (the number field takes negatives) falls back to the default.
+const count = (v: JSONValue | undefined, fallback: number, min: number): number =>
+  typeof v === "number" && Number.isFinite(v) && Math.floor(v) >= min ? Math.floor(v) : fallback
+
+export const typeMoreMessage = (minLetters: number): string =>
+  `Type at least ${minLetters} ${minLetters === 1 ? "letter" : "letters"} of a callsign.`
 
 export const FuzzySearchPanel: PanelHook = {
   async getPanels(_args: Record<string, never>, _ctx: HookContext): Promise<PanelDescriptor[]> {
@@ -104,14 +111,14 @@ export const FuzzySearchPanel: PanelHook = {
             key: "minLetters",
             fieldType: "number",
             label: "Minimum letters",
-            description: `How many letters to type before matching starts. Default ${DEFAULT_MIN_LETTERS}.`,
+            description: `How many letters to type before matching starts. At least ${MIN_LETTERS_FLOOR}; default ${DEFAULT_MIN_LETTERS}.`,
           },
           {
             type: "field",
             key: "maxResults",
             fieldType: "number",
-            label: "Most results",
-            description: `The longest the list gets; it scrolls. Default ${DEFAULT_MAX_RESULTS}.`,
+            label: "Maximum matches",
+            description: `The longest the list gets; it scrolls. At least ${MAX_RESULTS_FLOOR}; default ${DEFAULT_MAX_RESULTS}.`,
           },
         ],
       },
@@ -119,12 +126,12 @@ export const FuzzySearchPanel: PanelHook = {
   },
 
   async render(args: PanelRenderArgs, ctx: HookContext): Promise<PanelContent> {
-    const minLetters = count(args.config?.minLetters, DEFAULT_MIN_LETTERS)
-    const maxResults = count(args.config?.maxResults, DEFAULT_MAX_RESULTS)
+    const minLetters = count(args.config?.minLetters, DEFAULT_MIN_LETTERS, MIN_LETTERS_FLOOR)
+    const maxResults = count(args.config?.maxResults, DEFAULT_MAX_RESULTS, MAX_RESULTS_FLOOR)
     const partial = typedPartial(args.qso)
 
     if (partial.length < minLetters) {
-      return { kind: "markdown", content: messageMarkdown(`Type at least ${minLetters} letters of a callsign.`) }
+      return { kind: "markdown", content: messageMarkdown(typeMoreMessage(minLetters)) }
     }
 
     const uuid = str(args.operation?.uuid)
