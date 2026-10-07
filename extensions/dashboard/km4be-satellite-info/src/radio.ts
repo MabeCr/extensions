@@ -19,12 +19,21 @@ const center = (l: Link): number => (l.lowerMHz + l.upperMHz) / 2
 /// "435.800–435.900", or one frequency when the band is a point.
 export const band = (l: Link): string => (l.lowerMHz === l.upperMHz ? l.lowerMHz.toFixed(3) : `${l.lowerMHz.toFixed(3)}–${l.upperMHz.toFixed(3)}`)
 
-/// The links worth listing, downlinks first (that is what is tuned to first), a few of each.
-function links(satellite: Satellite): { arrow: "↓" | "↑"; link: Link }[] {
-  return [
-    ...satellite.downlinks.slice(0, MAX_LINKS).map((link) => ({ arrow: "↓" as const, link })),
-    ...satellite.uplinks.slice(0, MAX_LINKS).map((link) => ({ arrow: "↑" as const, link })),
-  ].slice(0, MAX_LINKS)
+/// Whether a link's range is a band a transponder could be: above zero, low to high, and
+/// no wider than half again its own bottom. The Ham2K list is kept by hand and has had a
+/// downlink of 145.825–435.88 MHz, whose center is a frequency nothing transmits on; a
+/// figure like that is left out, not tuned to.
+export const plausible = (l: Link): boolean => l.lowerMHz > 0 && l.upperMHz >= l.lowerMHz && l.upperMHz <= l.lowerMHz * 1.5
+
+/// The links worth listing, downlinks first (that is what is tuned to first), a few
+/// in all, and how many were left out as implausible.
+function links(satellite: Satellite): { shown: { arrow: "↓" | "↑"; link: Link }[]; skipped: number } {
+  const all = [
+    ...satellite.downlinks.map((link) => ({ arrow: "↓" as const, link })),
+    ...satellite.uplinks.map((link) => ({ arrow: "↑" as const, link })),
+  ]
+  const sane = all.filter(({ link }) => plausible(link))
+  return { shown: sane.slice(0, MAX_LINKS), skipped: all.length - sane.length }
 }
 
 /// The radio page, one line each, at most `RADIO_LINES`:
@@ -39,10 +48,10 @@ function links(satellite: Satellite): { arrow: "↓" | "↑"; link: Link }[] {
 /// transmitter should be set to for the satellite to hear the band's center.
 export function radioLines(satellite: Satellite, observer: Observer, pass: Pass, now: number): string[] {
   const lines: string[] = []
-  const shown = links(satellite)
+  const { shown, skipped } = links(satellite)
   const satrec = satellite.omm ? satrecFromOmm(satellite.omm) : null
 
-  if (!shown.length) lines.push("No frequencies known for this satellite.")
+  if (!shown.length) lines.push(skipped ? "The list's frequencies for this satellite look wrong." : "No frequencies known for this satellite.")
   else {
     const moments = [pass.inProgress || pass.aos <= now ? now : pass.aos, pass.maxElevationAt, pass.los]
     lines.push(`Doppler-corrected: ${pass.aos <= now ? "now" : "rise"} · peak · set`)
@@ -58,6 +67,8 @@ export function radioLines(satellite: Satellite, observer: Observer, pass: Pass,
       )
     }
   }
+
+  if (shown.length && skipped) lines.push("Some frequencies look wrong and are left out.")
 
   const info = satellite.info
   if (info.ctcssHz) lines.push(`Access tone ${info.ctcssHz} Hz`)

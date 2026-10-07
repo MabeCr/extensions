@@ -14,7 +14,8 @@ import { loadExtension } from "./sdkGapTesting.ts"
 import { passOfOpen, openId } from "./scene.ts"
 import { compassLayers, skySvg, skyTrack, skyXY } from "./sky.ts"
 
-const catalog = buildCatalog(parseList(LIST), parseElements(ELEMENTS))
+// No corrections: these tests are about the maths and the page, not about what we know of each bird.
+const catalog = buildCatalog(parseList(LIST), parseElements(ELEMENTS), {})
 const ao7 = catalog.find((s) => s.name === "AO-7")!
 const noOrbit = catalog.find((s) => s.name === "CAS-4A")!
 const miami = { lat: 25.76, lon: -80.19 }
@@ -231,4 +232,73 @@ test("a pass that has ended is not shown: the pane goes back to the list", async
   const later = await p.render(t0 + 3 * 24 * 3_600_000)
   assert.ok(later.strings.header, "back on the list")
   assert.equal(later.strings.title, undefined)
+})
+
+// --- what we know of each bird ------------------------------------------------
+
+import curated from "./data/satellites.json" with { type: "json" }
+import type { CuratedInfo, Satellite } from "./data.ts"
+import { plausible } from "./radio.ts"
+
+test("the curated file is well formed: known fields, https links, sane numbers", () => {
+  const fields = new Set(["norad", "amsat", "uplinks", "downlinks", "ctcssHz", "beaconMHz", "tips", "links"])
+  for (const [name, raw] of Object.entries(curated as Record<string, CuratedInfo>)) {
+    for (const key of Object.keys(raw)) assert.ok(fields.has(key), `${name} has an unknown field ${key}`)
+    if (raw.ctcssHz !== undefined) assert.ok(raw.ctcssHz > 60 && raw.ctcssHz < 260, `${name}'s tone`)
+    if (raw.beaconMHz !== undefined) assert.ok(raw.beaconMHz > 1 && raw.beaconMHz < 12_000, `${name}'s beacon`)
+    if (raw.tips !== undefined) assert.ok(raw.tips.length <= 60, `${name}'s tip is too long for a line`)
+    for (const l of raw.links ?? []) assert.ok(l.label && /^https:\/\//.test(l.url), `${name}'s link ${l.label}`)
+    for (const l of [...(raw.uplinks ?? []), ...(raw.downlinks ?? [])]) assert.ok(plausible(l), `${name} has an implausible frequency`)
+  }
+})
+
+test("IO-86's list entry has a downlink that spans two bands; our correction replaces it", () => {
+  const listed = [{ name: "IO-86", number: 40931, modulation: "fm", uplinks: [{ mode: "fm", lowerMHz: 145.825, upperMHz: 145.88 }], downlinks: [{ mode: "fm", lowerMHz: 145.825, upperMHz: 435.88 }] }]
+  const [raw] = buildCatalog(parseList(listed), new Map(), {})
+  assert.equal(plausible(raw.downlinks[0]), false)
+  const [fixed] = buildCatalog(parseList(listed), new Map())
+  assert.deepEqual(fixed.uplinks, [{ mode: "fm", lowerMHz: 145.88, upperMHz: 145.88 }])
+  assert.deepEqual(fixed.downlinks, [{ mode: "fm", lowerMHz: 435.88, upperMHz: 435.88 }])
+  assert.equal(fixed.info.ctcssHz, 88.5)
+})
+
+test("a frequency that cannot be a band is left out, and the page says so", () => {
+  const bad: Satellite = { name: "X", modulation: "fm", info: {}, uplinks: [{ mode: "fm", lowerMHz: 145.9, upperMHz: 145.9 }], downlinks: [{ mode: "fm", lowerMHz: 145.825, upperMHz: 435.88 }] }
+  const lines = radioLines(bad, miami, best, t0)
+  assert.ok(!lines.some((l) => l.includes("435.88")), "the bad downlink is not shown")
+  assert.ok(lines.includes("↑ 145.900 fm (send)"))
+  assert.ok(lines.includes("Some frequencies look wrong and are left out."))
+  assert.deepEqual(radioLines({ ...bad, uplinks: [] }, miami, best, t0), ["The list's frequencies for this satellite look wrong."])
+  for (const l of [{ lowerMHz: 0, upperMHz: 1 }, { lowerMHz: 146, upperMHz: 145 }, { lowerMHz: 100, upperMHz: 160 }]) assert.equal(plausible({ mode: "x", ...l }), false)
+  assert.equal(plausible({ mode: "x", lowerMHz: 145.9, upperMHz: 146 }), true)
+})
+
+test("what AMSAT says of SO-50 is on its Radio page: its tone, how to arm it, and where to read more", () => {
+  const so50 = buildCatalog(parseList([{ name: "SO-50", number: 27607, modulation: "fm", uplinks: [{ mode: "fm", lowerMHz: 145.85, upperMHz: 145.85 }], downlinks: [{ mode: "fm", lowerMHz: 436.795, upperMHz: 436.795 }] }]), new Map())[0]
+  const lines = radioLines(so50, miami, best, t0)
+  assert.ok(lines.includes("Access tone 67 Hz"))
+  assert.ok(lines.some((l) => l.includes("74.4 Hz")))
+  assert.ok(linksFor(so50)[0].url.startsWith("https://www.amsat.org/two-way-satellites/so-50"))
+})
+
+test("AO-92 is not drawn on AO-91's orbit, which is what the list's number would have done", () => {
+  // The Ham2K list gives AO-92 the number 43017, which is AO-91's.
+  const listed = parseList([
+    { name: "AO-91", number: 43017, modulation: "fm", uplinks: [], downlinks: [] },
+    { name: "AO-92", number: 43017, modulation: "fm", uplinks: [], downlinks: [] },
+  ])
+  const elements = new Map([[43017, { ...ELEMENTS[0], NORAD_CAT_ID: 43017 } as never]])
+  const [ao91, ao92Uncorrected] = buildCatalog(listed, elements, {})
+  assert.ok(ao91.omm && ao92Uncorrected.omm, "without the correction, both get the same orbit")
+  const [real91, real92] = buildCatalog(listed, elements)
+  assert.ok(real91.omm, "AO-91 keeps its orbit")
+  assert.equal(real92.omm, undefined)
+  assert.equal(real92.norad, undefined)
+})
+
+test("ARISS is the ISS for AMSAT's status, and IO-117 is GreenCube's number", () => {
+  const curatedInfo = curated as Record<string, CuratedInfo>
+  assert.deepEqual(curatedInfo.ARISS.amsat, ["ISS"])
+  assert.equal(curatedInfo["IO-117"].norad, 53109)
+  assert.equal(curatedInfo["FO-29"].norad, 24278)
 })

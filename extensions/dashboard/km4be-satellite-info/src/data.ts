@@ -40,10 +40,14 @@ export interface ListedSatellite {
 
 /// What we add to a bird, from data/satellites.json. Every field is optional.
 export interface CuratedInfo {
-  /// The right NORAD number, where the list's is wrong.
-  norad?: number
+  /// The right NORAD number, where the list's is wrong; null when the list's is wrong and
+  /// the right one is not known, so no orbit is used rather than another satellite's.
+  norad?: number | null
   /// Names AMSAT's status page knows it by, when not the list's own name.
   amsat?: string[]
+  /// Replace the list's frequencies, where they are wrong.
+  uplinks?: Link[]
+  downlinks?: Link[]
   ctcssHz?: number
   beaconMHz?: number
   links?: { label: string; url: string }[]
@@ -99,8 +103,15 @@ export function buildCatalog(
 ): Satellite[] {
   return list.map((s) => {
     const info = corrections[s.name] ?? {}
-    const norad = info.norad ?? s.norad
-    return { ...s, norad, info, omm: norad === undefined ? undefined : elements.get(norad) }
+    const norad = info.norad === null ? undefined : (info.norad ?? s.norad)
+    return {
+      ...s,
+      norad,
+      uplinks: info.uplinks ?? s.uplinks,
+      downlinks: info.downlinks ?? s.downlinks,
+      info,
+      omm: norad === undefined ? undefined : elements.get(norad),
+    }
   })
 }
 
