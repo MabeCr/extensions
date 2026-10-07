@@ -50,3 +50,28 @@ export function duration(pass: Pass): string {
 
 /// "NW → SE", the way round the sky the pass goes.
 export const direction = (pass: Pass): string => `${compass(pass.aosAzimuth)} → ${compass(pass.losAzimuth)}`
+
+const MEMO_MAX_AGE_MS = 5 * 60_000
+let memo: { key: string; at: number; passes: SatellitePass[] } | undefined
+
+/// For tests: forget the passes worked out so far.
+export const forgetPasses = (): void => {
+  memo = undefined
+}
+
+/// The next day's passes, worked out at most every five minutes however often the
+/// panel is drawn or tapped, and with the ones already over dropped. A pass that
+/// began since is still listed, as under way.
+export function upcomingPasses(satellites: Satellite[], place: Observer & { grid: string }, now: number, minEl: number, elementsAt: number): SatellitePass[] {
+  const key = `${place.grid}|${minEl}|${elementsAt}|${satellites.length}`
+  if (!memo || memo.key !== key || now < memo.at || now - memo.at > MEMO_MAX_AGE_MS) {
+    memo = { key, at: now, passes: nextPasses(satellites, place, now, minEl) }
+  }
+  return memo.passes.filter((p) => p.los > now)
+}
+
+/// One pass as a line: `AO-7 · 14:05 · 62° · NW → SE · 11 min`.
+export function passLine(pass: SatellitePass, now: number, utc: boolean): string {
+  const start = pass.aos <= now ? "now" : clock(pass.aos, now, utc)
+  return [pass.satellite.name, start, `${Math.round(pass.maxElevation)}°`, direction(pass), duration(pass)].join(" · ")
+}
