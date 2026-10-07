@@ -108,9 +108,9 @@ test("what else is known of a bird is listed, and AMSAT's status page is always 
 test("a detail names its pass and keeps the Radio page at a fixed length", () => {
   const d = buildDetail(ao7, miami, best, best.aos - 3_600_000, true, "sky")
   assert.match(d.title, /^AO-7 · \d\d:\d\dZ–\d\d:\d\dZ$/)
-  assert.match(d.times[0], /^Rise {2}\d\d:\d\dZ {2}[NESW]+ \d+°$/)
-  assert.match(d.times[1], /^Peak {2}\d\d:\d\dZ {2}\d+° toward [NESW]+$/)
-  assert.match(d.times[2], /^Set {3}\d\d:\d\dZ {2}[NESW]+ \d+°$/)
+  assert.match(d.times[0], /^Rise {2}\d\d:\d\d:\d\dZ {2}[NESW]+ \d+°$/)
+  assert.match(d.times[1], /^Peak {2}\d\d:\d\d:\d\dZ {2}\d+° toward [NESW]+$/)
+  assert.match(d.times[2], /^Set {3}\d\d:\d\d:\d\dZ {2}[NESW]+ \d+°$/)
   assert.equal(d.radio.length, RADIO_LINES)
   assert.ok(d.radio.slice(5).every((l) => l === ""))
 })
@@ -193,13 +193,12 @@ test("tapping a row opens its pass: the Sky page, then Radio, then back to the l
   const opened = await p.event(t0, open.id, "open")
   assert.deepEqual(opened, { values: { utc: 0 } })
   const sky = await p.render(t0)
-  assert.deepEqual(sky.layers.map((l) => l.id), ["sky", "north", "south", "east", "west"])
+  assert.deepEqual(sky.layers.map((l) => l.id), ["sky", "north", "south", "east", "west", "riseAt", "peakAt", "setAt"])
   assert.match(sky.strings.title, /^(AO-7|FO-29) · /)
   assert.equal(sky.strings.tab, "sky")
   assert.ok(sky.strings.time0.startsWith("Rise"))
-  assert.equal(sky.controls.length, 4 + 3 + 2)
-  assert.match(sky.strings.status0, /^AMSAT, last 24 h: (heard|telemetry only) \(\d+ heard, \d+ telemetry, \d+ not heard\)$/)
-  assert.match(sky.strings.status1, /^Latest report: (heard|telemetry only|not heard), (\d\d-\d\d )?\d\d:\d\dZ?$/)
+  assert.equal(sky.controls.length, 4 + 3, "the Sky page keeps only the times under the plot")
+  assert.equal(sky.strings.status0, undefined)
   assert.ok(sky.controls.length <= 64)
 
   assert.deepEqual(await p.event(t0, "tab", "tab", { text: "radio" }), { values: { utc: 0 } })
@@ -207,6 +206,8 @@ test("tapping a row opens its pass: the Sky page, then Radio, then back to the l
   assert.equal(radio.layers.length, 0)
   assert.equal(radio.strings.tab, "radio")
   assert.match(radio.strings.radio0, /^Doppler-corrected/)
+  assert.match(radio.strings.status0, /^AMSAT, last 24 h: (heard|telemetry only) \(\d+ heard, \d+ telemetry, \d+ not heard\)$/)
+  assert.match(radio.strings.status1, /^Latest report: (heard|telemetry only|not heard), (\d\d-\d\d )?\d\d:\d\dZ?$/)
   assert.ok(radio.controls.some((c) => c.id === "links"))
 
   // The UTC switch answers with this view's own lines, all of which are in this scene.

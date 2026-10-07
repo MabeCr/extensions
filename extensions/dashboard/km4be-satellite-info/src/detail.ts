@@ -8,9 +8,9 @@
 import type { Satellite } from "./data.ts"
 import { compass, findPasses, satrecFromOmm } from "./orbit.ts"
 import type { Observer, Pass } from "./orbit.ts"
-import { clock } from "./passes.ts"
+import { clock, countdown } from "./passes.ts"
 import { RADIO_LINES, radioLines } from "./radio.ts"
-import { compassLayers, DEFAULT_SKY_COLORS, skySvg, skyTrack } from "./sky.ts"
+import { compassLayers, DEFAULT_SKY_COLORS, SKY_SIZE, skySvg, skyTrack, skyXY } from "./sky.ts"
 import type { SkyColors } from "./sky.ts"
 
 export type Tab = "sky" | "radio"
@@ -19,14 +19,35 @@ export interface DetailModel {
   title: string
   tab: Tab
   utc: boolean
-  /// Rise, peak and set, a line each.
+  /// Rise, peak and set, a line each, to the second, with the time to or since each if asked for.
   times: string[]
   /// What AMSAT's status reports say of the satellite: the verdict, then the latest report.
   status: string[]
   /// The radio page, padded to `RADIO_LINES`.
   radio: string[]
-  /// The sky plot, drawn with `colors`.
-  sky: { svg: string; compass: ReturnType<typeof compassLayers> }
+  /// The sky plot, with the compass letters and the times of rise, peak and set written on it.
+  sky: { svg: string; compass: ReturnType<typeof compassLayers>; labels: ReturnType<typeof pointLabel>[] }
+}
+
+const LABEL_HEIGHT = 16
+const LABEL_SIZE = 12
+
+/// A short text on the plot beside a point of the sky: to the right of it on the east half,
+/// to the left on the west half, kept inside the plot.
+export function pointLabel(id: string, text: string, azimuth: number, elevation: number, color: string) {
+  const { x, y } = skyXY(azimuth, elevation)
+  const width = Math.ceil(text.length * LABEL_SIZE * 0.62) + 6
+  const east = x >= SKY_SIZE / 2
+  const left = Math.min(Math.max(east ? x + 9 : x - 9 - width, 0), SKY_SIZE - width)
+  const top = Math.min(Math.max(y - LABEL_HEIGHT / 2, 0), SKY_SIZE - LABEL_HEIGHT)
+  return {
+    id,
+    x: left,
+    y: top,
+    width,
+    height: LABEL_HEIGHT,
+    text: { literal: text, size: LABEL_SIZE, color, align: east ? ("start" as const) : ("end" as const), fontWeight: 600 },
+  }
 }
 
 /// What the plot is drawn in: the host's own colors when it reports them, so the plot
@@ -71,9 +92,12 @@ export function buildDetail(
   tab: Tab,
   theme: Theme = DEFAULT_THEME,
   status: string[] = ["", ""],
+  options: { countdown?: boolean } = {},
 ): DetailModel {
   const pass = completePass(satellite, observer, listed, now)
   const at = (t: number) => clock(t, pass.aos, utc)
+  const exact = (t: number) => clock(t, pass.aos, utc, true)
+  const since = (t: number) => (options.countdown ? `  ${countdown(t, now)}` : "")
 
   const track = satellite.omm ? skyTrack(satrecFromOmm(satellite.omm), observer, pass) : []
   const radio = radioLines(satellite, observer, pass, now)
@@ -84,12 +108,21 @@ export function buildDetail(
     tab,
     utc,
     times: [
-      `Rise  ${at(pass.aos)}  ${compass(pass.aosAzimuth)} ${deg(pass.aosAzimuth)}`,
-      `Peak  ${at(pass.maxElevationAt)}  ${deg(pass.maxElevation)} toward ${compass(pass.maxAzimuth)}`,
-      `Set   ${at(pass.los)}  ${compass(pass.losAzimuth)} ${deg(pass.losAzimuth)}`,
+      `Rise  ${exact(pass.aos)}  ${compass(pass.aosAzimuth)} ${deg(pass.aosAzimuth)}${since(pass.aos)}`,
+      `Peak  ${exact(pass.maxElevationAt)}  ${deg(pass.maxElevation)} toward ${compass(pass.maxAzimuth)}${since(pass.maxElevationAt)}`,
+      `Set   ${exact(pass.los)}  ${compass(pass.losAzimuth)} ${deg(pass.losAzimuth)}${since(pass.los)}`,
     ],
     status,
     radio,
-    sky: { svg: skySvg(track, pass, theme.sky, now), compass: compassLayers(theme.text) },
+    sky: {
+      svg: skySvg(track, pass, theme.sky, now),
+      compass: compassLayers(theme.text),
+      // Written on the plot, so the plot says the key times itself and the lines under it can be few.
+      labels: [
+        pointLabel("riseAt", exact(pass.aos), pass.aosAzimuth, 0, theme.sky.rise),
+        pointLabel("peakAt", deg(pass.maxElevation), pass.maxAzimuth, pass.maxElevation, theme.text),
+        pointLabel("setAt", exact(pass.los), pass.losAzimuth, 0, theme.sky.set),
+      ],
+    },
   }
 }

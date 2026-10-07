@@ -71,6 +71,7 @@ export function skySvg(track: SkyPoint[], pass: Pass, colors: SkyColors = DEFAUL
     const { x, y } = skyXY(azimuth, elevation)
     return `<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" stroke="#000" stroke-opacity="0.5" stroke-width="1"/>`
   }
+  const head = arrowHead(track, pass, colors.path)
   const first = track[0]
   const last = track[track.length - 1]
   const dots = [
@@ -87,7 +88,43 @@ export function skySvg(track: SkyPoint[], pass: Pass, colors: SkyColors = DEFAUL
     current = `<circle cx="${x}" cy="${y}" r="11" fill="none" stroke="${colors.peak}" stroke-width="2"/>`
   }
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SKY_SIZE} ${SKY_SIZE}">${grid}${path}${dots}${current}</svg>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SKY_SIZE} ${SKY_SIZE}">${grid}${path}${dots}${head}${current}</svg>`
+}
+
+/// How far from the peak along the path the arrowhead sits, in plot units: clear of the peak's
+/// dot, and not so far it is out by the rim.
+const ARROW_OFFSET = 30
+
+/// An arrowhead on the path a little past the peak, pointing the way the satellite is going, so
+/// the plot says which end is the rise without anyone reading the colors. A pass that peaks at the
+/// very end has no path past the peak, and the head is put before it instead.
+export function arrowHead(track: SkyPoint[], pass: Pass, color: string): string {
+  if (track.length < 3) return ""
+  const pts = track.map((p) => skyXY(p.azimuth, p.elevation))
+  const dist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(b.x - a.x, b.y - a.y)
+  const peak = track.reduce((best, p, i) => (Math.abs(p.at - pass.maxElevationAt) < Math.abs(track[best].at - pass.maxElevationAt) ? i : best), 0)
+
+  const walk = (step: 1 | -1) => {
+    let i = peak
+    let run = 0
+    while (i + step >= 0 && i + step < pts.length && run < ARROW_OFFSET) {
+      run += dist(pts[i], pts[i + step])
+      i += step
+    }
+    return { i, run }
+  }
+  const ahead = walk(1)
+  const at = ahead.run >= ARROW_OFFSET / 2 ? ahead.i : walk(-1).i
+
+  const from = pts[Math.max(0, at - 1)]
+  const to = pts[Math.min(pts.length - 1, at + 1)]
+  const length = dist(from, to)
+  if (!length) return ""
+  const d = { x: (to.x - from.x) / length, y: (to.y - from.y) / length }
+  const n = { x: -d.y, y: d.x }
+  const p = pts[at]
+  const corner = (along: number, across: number) => `${+(p.x + d.x * along + n.x * across).toFixed(1)} ${+(p.y + d.y * along + n.y * across).toFixed(1)}`
+  return `<path d="M${corner(9, 0)}L${corner(-5, 7)}L${corner(-5, -7)}Z" fill="${color}" stroke="#000" stroke-opacity="0.55" stroke-width="1" stroke-linejoin="round"/>`
 }
 
 /// N, E, S and W as text layers just outside the rim: SVG text is not a portable text path.

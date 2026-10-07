@@ -76,16 +76,18 @@ export const downlinkDoppler = (freqMHz: number, rangeRateKmS: number): number =
 export const uplinkDoppler = (freqMHz: number, rangeRateKmS: number): number => freqMHz * (1 + rangeRateKmS / SPEED_OF_LIGHT_KM_S)
 
 const SEARCH_STEP_MS = 30_000
+/// How close the edges and the peak of a pass are found: well inside the second the panel shows.
+const EDGE_TOLERANCE_MS = 200
 
 /// Where the satellite crosses the horizon between `a` and `b`, which must be
-/// on opposite sides of it, to within a second. The answer is the moment on the
-/// visible side: the first second it is up when rising, the last when setting.
+/// on opposite sides of it, to within a fifth of a second. The answer is the moment on the
+/// visible side: the first instant it is up when rising, the last when setting.
 function crossing(satrec: SatRec, observer: Observer, a: number, b: number): number {
   const up = (t: number) => (lookAt(satrec, observer, t)?.elevation ?? -90) > 0
   const aUp = up(a)
   let lo = a
   let hi = b
-  while (Math.abs(hi - lo) > 1000) {
+  while (Math.abs(hi - lo) > EDGE_TOLERANCE_MS) {
     const mid = Math.round((lo + hi) / 2)
     if (up(mid) === aUp) lo = mid
     else hi = mid
@@ -98,7 +100,7 @@ function peak(satrec: SatRec, observer: Observer, start: number, end: number): {
   let lo = start
   let hi = end
   const el = (t: number) => lookAt(satrec, observer, t)?.elevation ?? -90
-  while (hi - lo > 2000) {
+  while (hi - lo > EDGE_TOLERANCE_MS) {
     const a = lo + (hi - lo) / 3
     const b = hi - (hi - lo) / 3
     if (el(a) < el(b)) lo = a

@@ -33,14 +33,26 @@ export function nextPasses(satellites: Satellite[], observer: Observer, now: num
 
 const two = (n: number) => String(n).padStart(2, "0")
 
-/// A clock time, with the date when it is not today. Local time, or UTC with a `Z`.
-export function clock(millis: number, now: number, utc: boolean): string {
-  const d = new Date(millis)
+/// A clock time, with the date when it is not today. Local time, or UTC with a `Z`. With
+/// `seconds`, to the nearest second (`14:05:12`); without, the minute it falls in (`14:05`).
+export function clock(millis: number, now: number, utc: boolean, seconds = false): string {
+  const d = new Date(seconds ? Math.round(millis / 1000) * 1000 : millis)
   const n = new Date(now)
-  const [h, m, day, today, month] = utc
-    ? [d.getUTCHours(), d.getUTCMinutes(), d.getUTCDate(), n.getUTCDate(), d.getUTCMonth() + 1]
-    : [d.getHours(), d.getMinutes(), d.getDate(), n.getDate(), d.getMonth() + 1]
-  return `${day === today ? "" : `${two(month)}-${two(day)} `}${two(h)}:${two(m)}${utc ? "Z" : ""}`
+  const [h, m, s, day, today, month] = utc
+    ? [d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCDate(), n.getUTCDate(), d.getUTCMonth() + 1]
+    : [d.getHours(), d.getMinutes(), d.getSeconds(), d.getDate(), n.getDate(), d.getMonth() + 1]
+  return `${day === today ? "" : `${two(month)}-${two(day)} `}${two(h)}:${two(m)}${seconds ? `:${two(s)}` : ""}${utc ? "Z" : ""}`
+}
+
+/// Time to or since an event: `−4:12` before it, `+2:05` after (`−1:04:12` over an hour), the
+/// way a launch countdown reads. At the moment itself, `+0:00`.
+export function countdown(target: number, now: number): string {
+  const diff = Math.round((target - now) / 1000)
+  const total = Math.abs(diff)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  return `${diff > 0 ? "−" : "+"}${h ? `${h}:${two(m)}` : `${m}`}:${two(s)}`
 }
 
 export function duration(pass: Pass): string {
@@ -70,8 +82,40 @@ export function upcomingPasses(satellites: Satellite[], place: Observer & { grid
   return memo.passes.filter((p) => p.los > now)
 }
 
-/// One pass as a line: `AO-7 · 14:05 · 62° · NW → SE · 11 min`.
-export function passLine(pass: SatellitePass, now: number, utc: boolean): string {
-  const start = pass.aos <= now ? "now" : clock(pass.aos, now, utc)
-  return [pass.satellite.name, start, `${Math.round(pass.maxElevation)}°`, direction(pass), duration(pass)].join(" · ")
+/// One pass as the cells of a table row.
+export interface Cells {
+  name: string
+  start: string
+  max: string
+  path: string
+  length: string
+  /// What AMSAT's reports say, as a mark, or a space.
+  mark: string
+}
+
+/// The titles over the columns, in the order of the cells.
+export const TITLES: Cells = { name: "Sat", start: "Start", max: "Max", path: "Path", length: "Len", mark: "Rpt" }
+
+export function passCells(pass: SatellitePass, now: number, utc: boolean, seconds: boolean, mark: string): Cells {
+  return {
+    name: pass.satellite.name,
+    start: pass.aos <= now ? "now" : clock(pass.aos, now, utc, seconds),
+    max: `${Math.round(pass.maxElevation)}°`,
+    path: `${compass(pass.aosAzimuth)}→${compass(pass.losAzimuth)}`,
+    length: `${Math.round((pass.los - pass.aos) / 60_000)}m`,
+    mark,
+  }
+}
+
+const GAP = "  "
+
+/// A page of passes as lines in columns, with the titles over them. The text is set in a
+/// monospaced face, so padding is what lines the columns up: names, times and paths to the
+/// left, the numbers to the right. Each column is as wide as its widest cell or its title.
+export function table(rows: Cells[]): { columns: string; lines: string[] } {
+  const width = (key: keyof Cells) => Math.max(TITLES[key].length, ...rows.map((r) => r[key].length))
+  const w = { name: width("name"), start: width("start"), max: width("max"), path: width("path"), length: width("length") }
+  const line = (c: Cells) =>
+    [c.name.padEnd(w.name), c.start.padEnd(w.start), c.max.padStart(w.max), c.path.padEnd(w.path), c.length.padStart(w.length), c.mark].join(GAP).trimEnd()
+  return { columns: line(TITLES), lines: rows.map(line) }
 }

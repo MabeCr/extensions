@@ -25,7 +25,7 @@ import type { DetailModel, Tab } from "./detail.ts"
 import { loadFavorites, setFavorite } from "./favorites.ts"
 import { findPlace } from "./location.ts"
 import type { Place } from "./location.ts"
-import { clock, minElevation, passLine, upcomingPasses } from "./passes.ts"
+import { clock, minElevation, passCells, table, upcomingPasses } from "./passes.ts"
 import type { SatellitePass } from "./passes.ts"
 import { linksFor } from "./radio.ts"
 import { GLYPH, LEGEND, NO_GLYPH, statusFor, statusHours, statusLines } from "./status.ts"
@@ -55,7 +55,21 @@ const paneState = (args: PanelRenderArgs): PaneState => {
 
 const nowMillis = (args: PanelRenderArgs): number => args.clock?.realNowMillis ?? Date.now()
 
-const empty = (header: string, state: PaneState): Model => ({ header, hint: "", mode: state.mode, utc: state.utc, page: 0, pageCount: 1, range: "", rows: [] })
+/// Whether the pane counts down to rise, peak and set. Off unless the setting is on.
+const countdownOn = (config: Record<string, unknown> | undefined): boolean => config?.countdown === true
+
+const empty = (header: string, state: PaneState): Model => ({
+  header,
+  hint: "",
+  mode: state.mode,
+  utc: state.utc,
+  page: 0,
+  pageCount: 1,
+  range: "",
+  columns: "",
+  legend: "",
+  rows: [],
+})
 
 interface Ready {
   place: Place
@@ -89,30 +103,30 @@ const glyphFor = (r: Ready, satellite: Satellite): string => {
   return status ? GLYPH[status.kind] : NO_GLYPH
 }
 
-function listModel(r: Ready, state: PaneState, now: number): Model {
+function listModel(r: Ready, state: PaneState, now: number, seconds: boolean): Model {
   // With nobody followed, Favorites would be an empty page; show everything and say how to change that.
   const followed = r.favorites.length > 0
   const showing = state.mode === "all" || !followed ? r.passes : r.passes.filter((p) => r.favorites.includes(p.satellite.name))
   const pageCount = Math.max(1, Math.ceil(showing.length / PAGE_SIZE))
   state.page = Math.min(Math.max(0, state.page), pageCount - 1)
   const first = state.page * PAGE_SIZE
-  const rows = showing.slice(first, first + PAGE_SIZE).map((p) => ({
+  const page = showing.slice(first, first + PAGE_SIZE)
+  // The mark ends the line, where a mark drawn wider than one character in some font cannot push the columns out of line.
+  const { columns, lines } = table(page.map((p) => passCells(p, now, state.utc, seconds, glyphFor(r, p.satellite))))
+  const rows = page.map((p, i) => ({
     name: p.satellite.name,
     favorite: r.favorites.includes(p.satellite.name),
-    // The status glyph leads the line so the satellites' names stay in a column.
-    text: `${glyphFor(r, p.satellite)} ${passLine(p, now, state.utc)}`,
+    text: lines[i],
     los: p.los,
   }))
 
   const tracked = r.satellites.filter((s) => s.omm).length
-  // The marks on the rows are explained whatever else the line says; with no rows there are none to explain.
   let hint = `No passes of ${r.minEl}° or more in the next 24 hours.`
   if (showing.length) {
-    const lead =
+    hint =
       state.mode === "favorites" && !followed
         ? "No favorites yet, so every satellite is shown. Tap a star to follow one."
         : `Orbits from CelesTrak, ${clock(r.elementsAt, now, state.utc)}.`
-    hint = `${lead} ${LEGEND}`
   }
 
   return {
@@ -123,6 +137,9 @@ function listModel(r: Ready, state: PaneState, now: number): Model {
     page: state.page,
     pageCount,
     range: showing.length ? `${first + 1}–${first + rows.length} of ${showing.length}` : "",
+    // Under the list, where it explains the marks without being read before the passes are.
+    columns: showing.length ? columns : "",
+    legend: showing.length ? LEGEND : "",
     rows,
   }
 }
@@ -149,10 +166,11 @@ async function snapshot(args: PanelRenderArgs, ctx: HookContext): Promise<View> 
           tab,
           themeOf(args.environment?.colors),
           statusLines(statusFor(ready.reports, pass.satellite), ready.hours, now, state.utc),
+          { countdown: countdownOn(args.config) },
         ) }
     state.view = "list" // it has ended, or the settings no longer list it
   }
-  return { kind: "list", model: listModel(ready, state, now) }
+  return { kind: "list", model: listModel(ready, state, now, args.config?.listSeconds === true) }
 }
 
 const patchOf = (view: View): PanelSceneEventResult =>
@@ -190,6 +208,14 @@ export const PassesPanel: PanelHook = {
             description: "How far back operators' status reports count. 1 to 168; default 24.",
           },
           { type: "field", key: "utc", fieldType: "checkbox", label: "Start with times in UTC" },
+          { type: "field", key: "listSeconds", fieldType: "checkbox", label: "Show seconds in the pass list" },
+          {
+            type: "field",
+            key: "countdown",
+            fieldType: "checkbox",
+            label: "Count down to rise, peak and set",
+            description: "On a pass's page, shows the time to or since each event, such as −4:12 before it and +2:05 after, and redraws every second while that page is open.",
+          },
         ],
       },
     ]
@@ -197,7 +223,9 @@ export const PassesPanel: PanelHook = {
 
   async render(args: PanelRenderArgs, ctx: HookContext): Promise<PanelContent> {
     const view = await snapshot(args, ctx)
-    return { kind: "scene", scene: view.kind === "list" ? buildScene(view.model) : buildDetailScene(view.model) }
+    // A countdown is only as good as it is fresh, so the pass's Sky page redraws every second while it is on, and nothing does otherwise.
+    const ticking = view.kind === "detail" && view.model.tab === "sky" && countdownOn(args.config)
+    return { kind: "scene", scene: view.kind === "list" ? buildScene(view.model) : buildDetailScene(view.model), triggers: ticking ? ["tick:1"] : [] }
   },
 
   async onEvent(args, ctx): Promise<PanelSceneEventResult> {

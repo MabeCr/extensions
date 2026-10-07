@@ -40,6 +40,10 @@ export interface Model {
   pageCount: number
   /// "1–5 of 23", or "" when there is nothing to page.
   range: string
+  /// The titles over the rows' columns, set to line up with them; "" when there are no rows.
+  columns: string
+  /// What the marks at the end of the rows mean, under the list; "" when there are no rows.
+  legend: string
   rows: Row[]
 }
 
@@ -75,7 +79,7 @@ export const rowKey = (i: number): string => `row${i}`
 
 /// What the scene's text controls and choices hold.
 export function stringsOf(m: Model): Record<string, string> {
-  const strings: Record<string, string> = { mode: m.mode, header: m.header, hint: m.hint, range: m.range }
+  const strings: Record<string, string> = { mode: m.mode, header: m.header, hint: m.hint, range: m.range, columns: m.columns, legend: m.legend }
   slots(m).forEach((row, i) => {
     strings[rowKey(i)] = row.text
   })
@@ -105,6 +109,7 @@ export function buildScene(m: Model): PanelScene {
     { id: "utc", kind: "nativeSwitch", label: "UTC", value: "utc", event: "utc" },
     { id: "header", kind: "nativeText", label: "Location and satellites", value: "header", style: "label" },
     { id: "hint", kind: "nativeText", label: "Note", value: "hint" },
+    { id: "columns", kind: "nativeText", label: "Column titles", value: "columns", style: "mono" },
   ]
 
   const rows = slots(m)
@@ -138,12 +143,15 @@ export function buildScene(m: Model): PanelScene {
     { id: "prev", kind: "nativeButton", label: "Previous page", icon: "chevron-left", variant: "tonal", event: "prev", disabled: m.page <= 0 },
     { id: "range", kind: "nativeText", label: "Showing", value: "range", align: "center" },
     { id: "next", kind: "nativeButton", label: "Next page", icon: "chevron-right", variant: "tonal", event: "next", disabled: m.page >= m.pageCount - 1 },
+    { id: "legend", kind: "nativeText", label: "What the marks mean", value: "legend", style: "label" },
   )
 
   const column: PanelSceneLayoutNode[] = [
     { row: [{ control: "mode", flex: 1 }, { control: "utc" }], spacing: 8, crossAxisAlignment: "center" },
     { control: "header" },
     { control: "hint" },
+    // Indented past the star button and its gap, to stand over the text of the rows.
+    { control: "columns", padding: [60, 0, 60, 0] },
     ...rows.map((row, i): PanelSceneLayoutNode => ({
       row: [{ control: starId(row.name, i), width: 56 }, { control: rowKey(i), flex: 1 }, { control: openId(row.name, row.los, i), width: 56 }],
       spacing: 4,
@@ -151,6 +159,7 @@ export function buildScene(m: Model): PanelScene {
     })),
     { spacer: 1 },
     { row: [{ control: "prev" }, { control: "range", flex: 1 }, { control: "next" }], spacing: 8, crossAxisAlignment: "center" },
+    { control: "legend" },
   ]
 
   return {
@@ -168,7 +177,9 @@ export function buildScene(m: Model): PanelScene {
 
 // --- One pass in detail -----------------------------------------------------
 
-/// Names of the text lines under the plot (Sky tab) and the radio page (Radio tab).
+/// Names of the text lines under the plot (Sky tab), and on the radio page (Radio tab), which also
+/// holds what AMSAT's reports say. The Sky tab keeps only the times: the plot is the point of it, and
+/// it takes whatever room the lines under it leave.
 export const timeKey = (i: number): string => `time${i}`
 export const radioKey = (i: number): string => `radio${i}`
 export const statusKey = (i: number): string => `status${i}`
@@ -177,11 +188,11 @@ export const statusKey = (i: number): string => `status${i}`
 /// tab have different lines, so only the shown tab's are named.
 export function detailStrings(d: DetailModel): Record<string, string> {
   const strings: Record<string, string> = { title: d.title, tab: d.tab }
-  if (d.tab === "sky") {
-    d.times.forEach((line, i) => (strings[timeKey(i)] = line))
+  if (d.tab === "sky") d.times.forEach((line, i) => (strings[timeKey(i)] = line))
+  else {
     d.status.forEach((line, i) => (strings[statusKey(i)] = line))
+    d.radio.forEach((line, i) => (strings[radioKey(i)] = line))
   }
-  else d.radio.forEach((line, i) => (strings[radioKey(i)] = line))
   return strings
 }
 
@@ -211,17 +222,16 @@ export function buildDetailScene(d: DetailModel): PanelScene {
 
   if (d.tab === "sky") {
     d.times.forEach((_, i) => controls.push({ id: timeKey(i), kind: "nativeText", label: ["Rise", "Peak", "Set"][i] ?? "Time", value: timeKey(i), style: "mono" }))
-    d.status.forEach((_, i) => controls.push({ id: statusKey(i), kind: "nativeText", label: i ? "Latest AMSAT report" : "AMSAT status reports", value: statusKey(i) }))
     return {
       version: 1,
       width: 360,
       height: 360,
       values: detailValues(d),
       strings: detailStrings(d),
-      layers: [{ id: "sky", x: 0, y: 0, width: 360, height: 360, svg: d.sky.svg }, ...d.sky.compass],
+      layers: [{ id: "sky", x: 0, y: 0, width: 360, height: 360, svg: d.sky.svg }, ...d.sky.compass, ...d.sky.labels],
       controls,
       layout: {
-        column: [...head, { scene: true, flex: 1 }, ...d.times.map((_, i): PanelSceneLayoutNode => ({ control: timeKey(i) })), ...d.status.map((_, i): PanelSceneLayoutNode => ({ control: statusKey(i) }))],
+        column: [...head, { scene: true, flex: 1 }, ...d.times.map((_, i): PanelSceneLayoutNode => ({ control: timeKey(i) }))],
         padding: 12,
         spacing: 8,
         crossAxisAlignment: "stretch",
@@ -229,6 +239,7 @@ export function buildDetailScene(d: DetailModel): PanelScene {
     }
   }
 
+  d.status.forEach((_, i) => controls.push({ id: statusKey(i), kind: "nativeText", label: i ? "Latest AMSAT report" : "AMSAT status reports", value: statusKey(i) }))
   d.radio.forEach((_, i) => controls.push({ id: radioKey(i), kind: "nativeText", label: `Radio line ${i + 1}`, value: radioKey(i), style: "mono" }))
   controls.push({ id: "links", kind: "nativeButton", label: "Links", icon: "open-in-new", variant: "tonal", event: "links" })
   return {
@@ -240,7 +251,13 @@ export function buildDetailScene(d: DetailModel): PanelScene {
     layers: [],
     controls,
     layout: {
-      column: [...head, ...d.radio.map((_, i): PanelSceneLayoutNode => ({ control: radioKey(i) })), { spacer: 1 }, { control: "links" }],
+      column: [
+        ...head,
+        ...d.status.map((_, i): PanelSceneLayoutNode => ({ control: statusKey(i) })),
+        ...d.radio.map((_, i): PanelSceneLayoutNode => ({ control: radioKey(i) })),
+        { spacer: 1 },
+        { control: "links" },
+      ],
       padding: 12,
       spacing: 4,
       crossAxisAlignment: "stretch",

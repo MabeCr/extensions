@@ -8,7 +8,7 @@ import { ELEMENTS_URL, forgetFailures, LIST_URL, statusUrl } from "./data.ts"
 import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
 import { forgetPasses } from "./passes.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
-import { GLYPH, LEGEND, NO_GLYPH, parseSummary, statusFor, statusHours, statusLines } from "./status.ts"
+import { GLYPH, LEGEND, parseSummary, statusFor, statusHours, statusLines } from "./status.ts"
 
 const rows = parseSummary(SUMMARY)
 const sat = (name: string, modulation: string, amsat?: string[]) => ({ name, modulation, info: amsat ? { amsat } : {} })
@@ -146,25 +146,26 @@ async function panel(summary: () => { status: number; body: string }) {
 
 const rowsOf = (strings: Record<string, string>) => [0, 1, 2, 3, 4].map((i) => strings[`row${i}`]).filter(Boolean)
 
-test("each row leads with what AMSAT's reports say, and the hint explains the marks", async () => {
+test("each row ends with what AMSAT's reports say, and the legend under the list explains the marks", async () => {
   const p = await panel(() => ({ status: 200, body: JSON.stringify(SUMMARY) }))
   const scene = await p.render({ ...cfg, minElevation: 0 }, t0)
   const lines = rowsOf(scene.strings)
   assert.ok(lines.length > 0)
   for (const line of lines) {
-    const name = line.slice(2).split(" · ")[0]
+    const name = line.split(/ +/)[0]
     // AO-7 was heard twice and not heard once; FO-29 reported telemetry only twice and heard once.
-    assert.equal(line[0], name === "AO-7" ? GLYPH.heard : GLYPH.telemetry, `${name}: ${line}`)
-    assert.equal(line[1], " ")
+    assert.equal(line.at(-1), name === "AO-7" ? GLYPH.heard : GLYPH.telemetry, `${name}: ${line}`)
+    assert.match(line, / {2}\S$/, "the mark stands apart from the length")
   }
-  assert.ok(scene.strings.hint.endsWith(LEGEND))
+  assert.equal(scene.strings.legend, LEGEND)
+  assert.ok(!scene.strings.hint.includes("heard"), "the hint no longer carries it")
 })
 
-test("with AMSAT unreachable, rows keep their column without a mark, and it is not asked again every minute", async () => {
+test("with AMSAT unreachable, rows have no mark, and it is not asked again every minute", async () => {
   let down = true
   const p = await panel(() => (down ? { status: 503, body: "" } : { status: 200, body: JSON.stringify(SUMMARY) }))
   const scene = await p.render(cfg, t0)
-  assert.ok(rowsOf(scene.strings).every((line) => line.startsWith(`${NO_GLYPH} `)))
+  assert.ok(rowsOf(scene.strings).every((line) => /\d+m$/.test(line)), "ends at the length")
   const statusFetches = () => p.fetched.filter((u) => u === statusUrl(24)).length
   assert.equal(statusFetches(), 1)
 
@@ -173,5 +174,5 @@ test("with AMSAT unreachable, rows keep their column without a mark, and it is n
   down = false
   const back = await p.render(cfg, t0 + 3 * 60_000)
   assert.equal(statusFetches(), 2, "tried again after the pause")
-  assert.ok(rowsOf(back.strings).every((line) => line[0] === GLYPH.heard || line[0] === GLYPH.telemetry))
+  assert.ok(rowsOf(back.strings).every((line) => line.at(-1) === GLYPH.heard || line.at(-1) === GLYPH.telemetry))
 })

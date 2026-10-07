@@ -113,4 +113,5 @@ export function statusHours(config: Record<string, unknown> | undefined): number
   return typeof v === "number" && Number.isFinite(v) && v >= 1 ? Math.min(MAX_STATUS_HOURS, Math.floor(v)) : DEFAULT_STATUS_HOURS
 }
 
-export const LEGEND = `${GLYPH.heard} heard ${GLYPH.telemetry} telemetry only ${GLYPH.notHeard} not heard (AMSAT reports)`
+/// Under the list, to say what the `Rpt` column's marks are.
+export const LEGEND = `Rpt: ${GLYPH.heard} heard · ${GLYPH.telemetry} telemetry only · ${GLYPH.notHeard} not heard (AMSAT reports)`
