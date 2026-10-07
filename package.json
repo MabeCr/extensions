@@ -22,7 +22,7 @@
     "pack": "npm run pack --workspaces --if-present"
   },
   "devDependencies": {
-    "@ham2k/extension-tools": "^0.7.0",
+    "@ham2k/extension-tools": "^0.8.0",
     "@types/node": "^24.13.3",
     "esbuild": "^0.25.12",
     "typescript": "^5.8.0"

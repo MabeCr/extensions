@@ -1,0 +1,33 @@
+{
+  "key": "km4be-spot-maps",
+  "name": "KM4BE Spot Maps",
+  "shortName": "Spot Map",
+  "version": "0.1.0",
+  "api": 5,
+  "description": "A world map of the stations currently spotted on POTA, colored by band",
+  "category": "dashboard",
+  "icon": "map-marker-radius",
+  "keywords": [
+    "spots",
+    "map",
+    "pota",
+    "dashboard",
+    "panel"
+  ],
+  "hooks": [
+    "panel"
+  ],
+  "domains": [
+    "api.pota.app"
+  ],
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  }
+}
