@@ -7,6 +7,8 @@
 
 import { bandForFrequency } from "@ham2k/lib-operation-data"
 
+import { onScreen, toScene, WORLD } from "./view.ts"
+import type { View } from "./view.ts"
 import { MAP_HEIGHT, MAP_TOP, MAP_WIDTH } from "./world.ts"
 
 /// One element of `https://api.pota.app/spot/activator`, as far as the map reads it.
@@ -100,32 +102,40 @@ export const filterBand = (spots: MapSpot[], band: string): MapSpot[] =>
 
 export const MARKER_RADIUS = 3.2
 
-/// A scene allows 64 controls and the pane's own take five, so only the newest
-/// dots can be clicked; the picker reaches the rest.
-export const MAX_CLICKABLE = 59
+/// A scene allows 64 controls and the pane's own take eight, so only the newest
+/// dots on screen can be clicked; the picker reaches the rest.
+export const MAX_CLICKABLE = 56
+
+/// A spot in scene units under `view`.
+const placed = (s: MapSpot, view: View) => toScene(view, project(s.lat, s.lon))
+
+/// The spots inside the window, newest first. A dot half off the edge counts.
+export const visibleSpots = (spots: MapSpot[], view: View = WORLD): MapSpot[] =>
+  spots.filter((s) => onScreen(placed(s, view), MARKER_RADIUS * 2.2))
 
 /// The click target for a dot: exactly the dot, centered on it.
-export function dotHitArea(spot: MapSpot): { x: number; y: number; width: number; height: number } {
-  const { x, y } = project(spot.lat, spot.lon)
+export function dotHitArea(spot: MapSpot, view: View = WORLD): { x: number; y: number; width: number; height: number } {
+  const { x, y } = placed(spot, view)
   const size = MARKER_RADIUS * 2
   return { x: +(x - MARKER_RADIUS).toFixed(1), y: +(y - MARKER_RADIUS).toFixed(1), width: size, height: size }
 }
 
-/// The markers as a self-contained SVG document the size of the map. Oldest
-/// first, so the freshest spot is on top where parks overlap. The `selected`
-/// call, if it is among them, is ringed and drawn last of all.
-export function markersSvg(spots: MapSpot[], selected = ""): string {
+/// The markers as a self-contained SVG document the size of the scene. Oldest
+/// first, so the freshest spot is on top where parks overlap. Dots keep their
+/// size however far the map is zoomed. The `selected` call, if it is among
+/// them, is ringed and drawn last of all.
+export function markersSvg(spots: MapSpot[], selected = "", view: View = WORLD): string {
   const dot = (s: MapSpot) => {
-    const { x, y } = project(s.lat, s.lon)
+    const { x, y } = placed(s, view)
     return `<circle cx="${x}" cy="${y}" r="${MARKER_RADIUS}" fill="${BAND_COLORS[s.band] ?? BAND_COLORS.other}"/>`
   }
   const ring = (s: MapSpot) => {
-    const { x, y } = project(s.lat, s.lon)
+    const { x, y } = placed(s, view)
     return `<circle cx="${x}" cy="${y}" r="${MARKER_RADIUS * 2.2}" fill="none" stroke="#fff" stroke-width="1.6"/>`
   }
   const chosen = spots.find((s) => s.call === selected)
-  const dots = [...spots].reverse().map(dot).join("")
-  const picked = chosen ? ring(chosen) + dot(chosen) : ""
+  const dots = visibleSpots(spots, view).reverse().map(dot).join("")
+  const picked = chosen && onScreen(placed(chosen, view), MARKER_RADIUS * 2.2) ? ring(chosen) + dot(chosen) : ""
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}"><g stroke="#000" stroke-opacity="0.55" stroke-width="0.8">${dots}</g>${picked}</svg>`
 }
 

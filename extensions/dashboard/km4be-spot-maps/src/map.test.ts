@@ -5,6 +5,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 
 import { loadExtension } from "./sdkGapTesting.ts"
+import { fit, presetOf, presetView, toScene, WORLD, zoomed } from "./view.ts"
 import { MAX_CLICKABLE, detailsLine, dotHitArea, filterBand, markersSvg, parseSpots, project, spotOptions, summary } from "./spots.ts"
 import type { PotaApiSpot } from "./spots.ts"
 
@@ -173,4 +174,63 @@ test("each dot has a click target exactly its size, and clicking it picks the st
   )) as { strings: Record<string, string> }
   assert.equal(patch.strings.spot, call)
   assert.ok(patch.strings.details.startsWith(call))
+})
+
+test("a view is kept inside the map, zooms in steps and names its preset", () => {
+  assert.deepEqual(fit({ cx: 0, cy: 0, zoom: 1 }), WORLD)
+  assert.equal(fit({ cx: 360, cy: 142, zoom: 99 }).zoom, 16)
+  assert.equal(fit({ cx: 360, cy: 142, zoom: 0.2 }).zoom, 1)
+  // Zoomed 4x the window is 180 wide, so its center cannot come closer to an edge than 90.
+  assert.equal(fit({ cx: 5, cy: 142, zoom: 4 }).cx, 90)
+  assert.equal(zoomed(WORLD, 1).zoom, 1.5)
+  assert.equal(zoomed(WORLD, -1).zoom, 1)
+  assert.equal(presetOf(WORLD), "world")
+  assert.equal(presetOf(presetView("europe")!), "europe")
+  assert.equal(presetOf(zoomed(WORLD, 1)), "")
+  // The scene is the window scaled up: its center stays put, a corner of the window goes to the corner.
+  const two = fit({ cx: 360, cy: 142, zoom: 2 })
+  assert.deepEqual(toScene(two, { x: 360, y: 142 }), { x: 360, y: 142 })
+  assert.deepEqual(toScene(two, { x: 180, y: 71 }), { x: 0, y: 0 })
+  assert.deepEqual(toScene(WORLD, { x: 12.5, y: 7 }), { x: 12.5, y: 7 })
+})
+
+test("zoomed in, the base map is cropped, far dots are dropped and near ones keep their size", async () => {
+  const near = spot("NEAR", { latitude: 52, longitude: 15 }) // Europe
+  const far = spot("FAR", { latitude: -25, longitude: 150 }) // Oceania
+  const ext = await loadExtension(() => import("./index.ts"), {
+    hostCalls: { fetch: () => ({ status: 200, body: JSON.stringify([near, far]) }) },
+  })
+  const args = { panelKey: "map", instanceId: "pane-4", operation: {}, qsoCount: 0, reason: "", config: {} }
+  const event = async (controlId: string, action: string, text?: string) =>
+    (await ext.runHook(
+      "panel",
+      "onEvent",
+      { ...args, event: { controlId, action, phase: "commit", sequence: 1, text } },
+      { ctx: { online: true } },
+    )) as { strings: Record<string, string> }
+  const scene = async () =>
+    ((await ext.runHook("panel", "render", args, { ctx: { online: true } })) as { scene: any }).scene
+  const dotIds = (sc: any) => sc.controls.filter((c: { kind: string }) => c.kind === "button").map((c: { id: string }) => c.id)
+
+  await event("refresh", "refresh")
+  assert.deepEqual(dotIds(await scene()).sort(), ["dot:FAR", "dot:NEAR"])
+
+  const patch = await event("view", "view", "europe")
+  assert.equal(patch.strings.view, "europe")
+  const eu = await scene()
+  assert.deepEqual(dotIds(eu), ["dot:NEAR"])
+  assert.match(eu.layers[0].svg, /viewBox="(?!0 0 720 284)/) // cropped, not the whole map
+  assert.equal((eu.layers[1].svg.match(/<circle/g) ?? []).length, 1)
+  // Europe is centered on 52N 15E, so NEAR's dot is at the middle of the scene.
+  const hit = eu.controls.find((c: { id: string }) => c.id === "dot:NEAR")
+  assert.equal(hit.width, 6.4)
+  assert.ok(Math.abs(hit.x + 3.2 - 360) < 1 && Math.abs(hit.y + 3.2 - 142) < 1)
+
+  // Zooming from a preset makes the view custom; the region dropdown shows its placeholder.
+  assert.equal((await event("zoomIn", "zoomIn")).strings.view, "")
+  assert.equal((await event("view", "view", "world")).strings.view, "world")
+  const world = await scene()
+  assert.equal(world.controls.find((c: { id: string }) => c.id === "zoomOut").disabled, true)
+  assert.equal(world.controls.find((c: { id: string }) => c.id === "zoomIn").disabled, false)
+  assert.ok(world.controls.length <= 64)
 })
