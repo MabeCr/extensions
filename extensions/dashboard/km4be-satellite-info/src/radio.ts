@@ -77,6 +77,43 @@ export function radioLines(satellite: Satellite, observer: Observer, pass: Pass,
   return lines.slice(0, RADIO_LINES)
 }
 
+/// A frequency to tune to or send on right now, and how far it is from the nominal one.
+export interface LiveShift {
+  mhz: number
+  /// Positive when above the nominal frequency.
+  kHz: number
+}
+
+/// The Doppler shift of the first downlink and the first uplink at this very moment: where the
+/// satellite is and how fast it is closing or opening, as seen from `observer`. Null when there is
+/// no orbit to work it out from.
+///
+/// It is the satellite's speed along the line to the observer that matters, not its speed, and that
+/// is the rate the distance is changing: the shift is `f × rate / c`, down in frequency as the
+/// satellite recedes and up as it approaches, with the uplink corrected the other way so the
+/// satellite hears the band's center. Worked out from the same orbit as everything else, so it is as
+/// good as the orbit and the device's clock: a day-old orbit and a clock a second out are each about
+/// a hundred hertz at 435 MHz.
+export function liveDoppler(satellite: Satellite, observer: Observer, now: number): { down?: LiveShift; up?: LiveShift } | null {
+  if (!satellite.omm) return null
+  const rate = rangeRate(satrecFromOmm(satellite.omm), observer, now)
+  if (rate === null) return null
+  const { shown } = links(satellite)
+  const shift = (nominal: number, mhz: number): LiveShift => ({ mhz, kHz: (mhz - nominal) * 1000 })
+  const down = shown.find((l) => l.arrow === "↓")
+  const up = shown.find((l) => l.arrow === "↑")
+  return {
+    down: down && shift(center(down.link), downlinkDoppler(center(down.link), rate)),
+    up: up && shift(center(up.link), uplinkDoppler(center(up.link), rate)),
+  }
+}
+
+/// `+12.3 kHz`, with a true minus sign, and never a minus on a shift that rounds to nothing.
+export function shiftText(kHz: number): string {
+  const size = Math.abs(kHz).toFixed(1)
+  return `${kHz < 0 && Number(size) !== 0 ? "−" : "+"}${size} kHz`
+}
+
 export const AMSAT_STATUS_URL = "https://www.amsat.org/status/"
 
 /// Where to read more: what we know of the bird, then AMSAT's status page.

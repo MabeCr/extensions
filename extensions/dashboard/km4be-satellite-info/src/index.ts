@@ -223,9 +223,12 @@ export const PassesPanel: PanelHook = {
 
   async render(args: PanelRenderArgs, ctx: HookContext): Promise<PanelContent> {
     const view = await snapshot(args, ctx)
-    // A countdown is only as good as it is fresh, so the pass's Sky page redraws every second while it is on, and nothing does otherwise.
-    const ticking = view.kind === "detail" && view.model.tab === "sky" && countdownOn(args.config)
-    return { kind: "scene", scene: view.kind === "list" ? buildScene(view.model) : buildDetailScene(view.model), triggers: ticking ? ["tick:1"] : [] }
+    // The pass's Sky page is redrawn often while something on it moves: every second if the countdown is on, since
+    // a countdown that is not fresh is wrong; every two seconds while the satellite is overhead, so it is seen to cross
+    // the sky; and not at all otherwise, when the panel's own minute is enough.
+    const onSky = view.kind === "detail" && view.model.tab === "sky"
+    const tick = onSky && countdownOn(args.config) ? "tick:1" : onSky && view.model.underWay ? "tick:2" : undefined
+    return { kind: "scene", scene: view.kind === "list" ? buildScene(view.model) : buildDetailScene(view.model), triggers: tick ? [tick] : [] }
   },
 
   async onEvent(args, ctx): Promise<PanelSceneEventResult> {

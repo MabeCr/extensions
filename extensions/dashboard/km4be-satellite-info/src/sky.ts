@@ -16,7 +16,20 @@ const CENTER = SKY_SIZE / 2
 const RADIUS = 150
 
 /// The sizes of what is drawn on the plot, which text written on it has to keep clear of.
-export const DOT_RADIUS = { end: 6, peak: 5, now: 11, arrow: 10 }
+export const DOT_RADIUS = { end: 6, peak: 5, now: 19, arrow: 10 }
+
+/// Where two short readouts go, one in each top corner: the square plot leaves the corners outside
+/// the circle empty, so text there covers nothing. Used for the Doppler shift while a pass is under way.
+export const READOUT_BOXES = [
+  { x: 4, y: 4, width: 112, height: 34 },
+  { x: 244, y: 4, width: 112, height: 34 },
+]
+
+/// Where the satellite is in the sky, as an azimuth and an elevation.
+export interface SkyLook {
+  azimuth: number
+  elevation: number
+}
 
 export interface SkyPoint {
   azimuth: number
@@ -58,7 +71,7 @@ export const DEFAULT_SKY_COLORS: SkyColors = { grid: "#8a8a8a", path: "#4aa3ff",
 /// The plot as a self-contained SVG document: rings at 0, 30 and 60 degrees, a
 /// crosshair on the compass points, the path, and dots for rise, peak and set. The
 /// compass letters are text layers (see `compassLayers`), not drawn here.
-export function skySvg(track: SkyPoint[], pass: Pass, colors: SkyColors = DEFAULT_SKY_COLORS, now?: number): string {
+export function skySvg(track: SkyPoint[], pass: Pass, colors: SkyColors = DEFAULT_SKY_COLORS, now?: number, here?: SkyLook): string {
   const ring = (elevation: number) => `<circle cx="${CENTER}" cy="${CENTER}" r="${+(((90 - elevation) / 90) * RADIUS).toFixed(1)}"/>`
   const grid =
     `<g fill="none" stroke="${colors.grid}" stroke-opacity="0.6" stroke-width="1">${[0, 30, 60].map(ring).join("")}` +
@@ -83,11 +96,42 @@ export function skySvg(track: SkyPoint[], pass: Pass, colors: SkyColors = DEFAUL
     dot(pass.maxAzimuth, pass.maxElevation, colors.peak, DOT_RADIUS.peak),
   ].join("")
 
-  // Where it is right now, if the pass is under way: a ring around its place on the path.
-  const here = nowSpot(track, pass, now)
-  const current = here ? `<circle cx="${here.x}" cy="${here.y}" r="${DOT_RADIUS.now}" fill="none" stroke="${colors.peak}" stroke-width="2"/>` : ""
+  // Where it is right now, if the pass is under way: the satellite itself, on the path.
+  const live = liveSpot(track, pass, now, here)
+  const current = live ? satelliteIcon(live, colors) : ""
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SKY_SIZE} ${SKY_SIZE}">${grid}${path}${dots}${head}${current}</svg>`
+}
+
+/// A small satellite: a body with a dish on top and a solar panel each side, in solid colors with a
+/// dark edge so it stands out on the path and the grid. `rotation` is in degrees.
+export function satelliteIcon(at: { x: number; y: number; rotation: number }, colors: SkyColors): string {
+  const edge = `stroke="#000" stroke-opacity="0.7" stroke-width="1" stroke-linejoin="round"`
+  const panel = (x: number) => `<rect x="${x}" y="-3.5" width="11" height="7" rx="1" fill="${colors.path}" ${edge}/>`
+  const cells = `<path d="M-15.3 -3.5V3.5M-11.7 -3.5V3.5M11.7 -3.5V3.5M15.3 -3.5V3.5" stroke="#000" stroke-opacity="0.4" stroke-width="0.8"/>`
+  return (
+    `<g transform="translate(${at.x} ${at.y}) rotate(${+at.rotation.toFixed(1)})">` +
+    `<path d="M-8 0H8" stroke="${colors.peak}" stroke-width="2"/>` +
+    panel(-19) +
+    panel(8) +
+    cells +
+    `<rect x="-4.5" y="-5" width="9" height="10" rx="1.5" fill="${colors.peak}" ${edge}/>` +
+    `<path d="M0 -5V-9" stroke="${colors.peak}" stroke-width="1.2"/><circle cx="0" cy="-10" r="1.8" fill="${colors.peak}" ${edge}/>` +
+    `</g>`
+  )
+}
+
+/// Where the satellite is on the plot right now, and which way it is heading, when the pass is
+/// under way; null otherwise. The place is `here` when it is known exactly, and the nearest point of
+/// the track when not. `rotation` turns the icon so its panels are across the way it is going.
+export function liveSpot(track: SkyPoint[], pass: Pass, now?: number, here?: SkyLook): { x: number; y: number; rotation: number } | null {
+  if (now === undefined || now < pass.aos || now > pass.los || track.length < 2) return null
+  const nearest = track.reduce((best, p, i) => (Math.abs(p.at - now) < Math.abs(track[best].at - now) ? i : best), 0)
+  const from = skyXY(track[Math.max(0, nearest - 1)].azimuth, track[Math.max(0, nearest - 1)].elevation)
+  const to = skyXY(track[Math.min(track.length - 1, nearest + 1)].azimuth, track[Math.min(track.length - 1, nearest + 1)].elevation)
+  const heading = (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI
+  const at = here ? skyXY(here.azimuth, here.elevation) : skyXY(track[nearest].azimuth, track[nearest].elevation)
+  return { ...at, rotation: heading + 90 }
 }
 
 /// Where the satellite is on the plot at `now`, when the pass is under way; null otherwise.

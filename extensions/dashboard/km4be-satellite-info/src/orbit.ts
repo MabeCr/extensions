@@ -78,6 +78,8 @@ export const uplinkDoppler = (freqMHz: number, rangeRateKmS: number): number => 
 const SEARCH_STEP_MS = 30_000
 /// How close the edges and the peak of a pass are found: well inside the second the panel shows.
 const EDGE_TOLERANCE_MS = 200
+/// Shorter than this a pass is not one.
+const MIN_PASS_MS = 10_000
 
 /// Where the satellite crosses the horizon between `a` and `b`, which must be
 /// on opposite sides of it, to within a fifth of a second. The answer is the moment on the
@@ -132,7 +134,9 @@ export function findPasses(satrec: SatRec, observer: Observer, from: number, hou
     }
     el = now
   }
-  return passes.filter((p) => p.maxElevation >= minElevation)
+  // A satellite that clips the horizon for a few seconds is not a pass anyone can use, and with the
+  // minimum at 0 it would be listed as one lasting no time at all.
+  return passes.filter((p) => p.maxElevation >= minElevation && p.los - p.aos >= MIN_PASS_MS)
 }
 
 function makePass(satrec: SatRec, observer: Observer, aos: number, los: number, inProgress: boolean): Pass {

@@ -228,7 +228,7 @@ export function buildDetailScene(d: DetailModel): PanelScene {
       height: 360,
       values: detailValues(d),
       strings: detailStrings(d),
-      layers: [{ id: "sky", x: 0, y: 0, width: 360, height: 360, svg: d.sky.svg }, ...d.sky.compass, ...d.sky.labels],
+      layers: [{ id: "sky", x: 0, y: 0, width: 360, height: 360, svg: d.sky.svg }, ...d.sky.compass, ...d.sky.labels, ...d.sky.readout],
       controls,
       layout: {
         column: [...head, { scene: true, flex: 1 }, ...d.times.map((_, i): PanelSceneLayoutNode => ({ control: timeKey(i) }))],

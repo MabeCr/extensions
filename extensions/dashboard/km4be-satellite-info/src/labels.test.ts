@@ -10,9 +10,10 @@ import { DEFAULT_THEME } from "./detail.ts"
 import { AO7, ELEMENTS, FO29, LIST } from "./fixtures.ts"
 import { labelWidth, LABEL_HEIGHT, MARGIN, placeLabels } from "./labels.ts"
 import type { Box, Disc } from "./labels.ts"
-import { findPasses, satrecFromOmm } from "./orbit.ts"
+import { findPasses, lookAt, satrecFromOmm } from "./orbit.ts"
 import type { Observer, Omm } from "./orbit.ts"
-import { arrowSpot, compassLayers, DOT_RADIUS, nowSpot, skyTrack, skyXY } from "./sky.ts"
+import { arrowSpot, compassLayers, DOT_RADIUS, READOUT_BOXES, skyTrack, skyXY } from "./sky.ts"
+import type { SkyLook } from "./sky.ts"
 
 // --- what a label must keep clear of, worked out here and not by the code under test -------
 
@@ -25,18 +26,20 @@ interface Problem {
 }
 
 /// Every way the labels of one pass touch something: a dot, the ring, the arrowhead, a compass letter, each other, or the edge.
-function problems(pass: Parameters<typeof plotLabels>[1], track: ReturnType<typeof skyTrack>, labels: ReturnType<typeof plotLabels>, now: number | undefined): Problem[] {
+function problems(pass: Parameters<typeof plotLabels>[1], labels: ReturnType<typeof plotLabels>, track: ReturnType<typeof skyTrack>, here: SkyLook | undefined): Problem[] {
   const found: Problem[] = []
   const discs: (Disc & { name: string })[] = [
     { name: "green dot", ...skyXY(pass.aosAzimuth, 0), r: DOT_RADIUS.end },
     { name: "red dot", ...skyXY(pass.losAzimuth, 0), r: DOT_RADIUS.end },
     { name: "white dot", ...skyXY(pass.maxAzimuth, pass.maxElevation), r: DOT_RADIUS.peak },
   ]
-  const here = nowSpot(track, pass, now)
-  if (here) discs.push({ name: "ring", ...here, r: DOT_RADIUS.now })
+  if (here) discs.push({ name: "satellite", ...skyXY(here.azimuth, here.elevation), r: DOT_RADIUS.now })
   const arrow = arrowSpot(track, pass)
   if (arrow) discs.push({ name: "arrow", ...arrow.p, r: DOT_RADIUS.arrow })
   const letters = compassLayers("#000").map((l) => ({ name: `letter ${l.text.literal}`, x: l.x, y: l.y, width: l.width, height: l.height }))
+  // The Doppler readout in the top corners is on the plot only while the satellite is.
+  if (here) READOUT_BOXES.forEach((b, i) => letters.push({ name: `readout ${i}`, ...b }))
+  void track
 
   labels.forEach((label, i) => {
     const box: Box = { x: label.x, y: label.y, width: label.width, height: label.height }
@@ -117,6 +120,7 @@ test("across thousands of passes, no label is ever on a dot, the ring, the arrow
   const bad: string[] = []
   const around = new Set<string>()
   let far = 0
+  let total = 0
 
   for (const omm of orbits()) {
     const satrec = satrecFromOmm({ ...omm, EPOCH: "2026-10-06T21:00:00.000000" })
@@ -125,17 +129,34 @@ test("across thousands of passes, no label is ever on a dot, the ring, the arrow
         const track = skyTrack(satrec, observer, pass)
         // Half the time the pass is under way, with a ring on it.
         for (const now of [pass.aos - 60_000, Math.round((pass.aos + pass.los) / 2)]) {
-          const labels = plotLabels(track, pass, { rise: "12:45:09Z", peak: "81°", set: "12:57:41Z" }, DEFAULT_THEME, now, compassLayers("#000"))
+          const here = now > pass.aos ? (lookAt(satrec, observer, now) ?? undefined) : undefined
+          const labels = plotLabels(
+            track,
+            pass,
+            { rise: "12:45:09Z", peak: "81°", set: "12:57:41Z", ...(here ? { now: "42°" } : {}) },
+            DEFAULT_THEME,
+            now,
+            compassLayers("#000"),
+            here,
+            Boolean(here),
+          )
           passes += 1
-          if (now > pass.aos) withRing += 1
-          const found = problems(pass, track, labels, now)
+          if (here) withRing += 1
+          const found = problems(pass, labels, track, here)
           if (found.length) bad.push(`${omm.INCLINATION}°/${omm.MEAN_MOTION} node ${omm.RA_OF_ASC_NODE} at ${observer.lat},${observer.lon}: ${found.map((f) => `${f.label} on ${f.what}`).join(", ")}`)
           // How natural: the label is still near its dot.
           const dots: Record<string, { x: number; y: number }> = { riseAt: skyXY(pass.aosAzimuth, 0), setAt: skyXY(pass.losAzimuth, 0), peakAt: skyXY(pass.maxAzimuth, pass.maxElevation) }
+          if (here) dots.nowAt = skyXY(here.azimuth, here.elevation)
+          // A label for each dot, and one for the satellite when it is up; the peak's is left out while the satellite covers it.
+          const covered = here ? Math.hypot(skyXY(here.azimuth, here.elevation).x - dots.peakAt.x, skyXY(here.azimuth, here.elevation).y - dots.peakAt.y) < DOT_RADIUS.now + DOT_RADIUS.peak : false
+          assert.equal(labels.length, 3 + (here ? 1 : 0) - (covered ? 1 : 0))
+          assert.equal(labels.some((l) => l.id === "peakAt"), !covered)
+          total += labels.length
           for (const l of labels) {
             const d = dots[l.id]
-            const away = nearest(d.x, d.y, { x: l.x, y: l.y, width: l.width, height: l.height })
-            if (away > 20) far += 1
+            // How far the text is from the edge of what it labels: the dots are 6 across from their centers, the satellite 19.
+            const away = nearest(d.x, d.y, { x: l.x, y: l.y, width: l.width, height: l.height }) - (l.id === "nowAt" ? DOT_RADIUS.now : l.id === "peakAt" ? DOT_RADIUS.peak : DOT_RADIUS.end)
+            if (away > 14) far += 1
             around.add(l.text.align)
           }
         }
@@ -148,7 +169,7 @@ test("across thousands of passes, no label is ever on a dot, the ring, the arrow
   assert.deepEqual(bad.slice(0, 10), [], `${bad.length} of ${passes} passes have a label touching something`)
   assert.ok(around.has("start") && around.has("end"), "labels went both sides")
   // Placed further out only rarely, so they look beside their dots.
-  assert.ok(far / (passes * 3) < 0.05, `${far} of ${passes * 3} labels are more than 20 units from their dot`)
+  assert.ok(far / total < 0.02, `${far} labels are more than 14 units from the edge of their dot`)
 })
 
 test("the label for a pass that starts at the east rim, like SO-50's, is clear of the green dot", () => {
