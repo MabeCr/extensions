@@ -16,7 +16,7 @@ import { defineExtension, host } from "@ham2k/extension-sdk"
 import type { HookContext, PanelContent, PanelDescriptor, PanelHook, PanelRenderArgs, PanelSceneEventResult } from "@ham2k/extension-sdk"
 
 import manifest from "../manifest.json" with { type: "json" }
-import { BANDS, filterBand, markersSvg, parseSpots, summary } from "./spots.ts"
+import { BANDS, clockUtc, detailsLine, filterBand, markersSvg, parseSpots, spotOptions, summary } from "./spots.ts"
 import type { MapSpot, PotaApiSpot } from "./spots.ts"
 import { BORDER_PATH, LAND_PATH, MAP_HEIGHT, MAP_WIDTH } from "./world.ts"
 
@@ -33,28 +33,60 @@ const BASE_SVG =
 
 let cache: { at: number; spots: MapSpot[] } | undefined
 
-async function currentSpots(ctx: HookContext, nowMillis: number): Promise<MapSpot[]> {
-  if (cache && nowMillis - cache.at < CACHE_MILLIS) return cache.spots
+/// `force` is the Refresh button: fetch now, whatever the cache holds.
+async function currentSpots(ctx: HookContext, nowMillis: number, force = false): Promise<{ at: number; spots: MapSpot[] }> {
+  if (cache && !force && nowMillis - cache.at < CACHE_MILLIS) return cache
   // Offline, or the feed is down: keep drawing the last map rather than a blank one.
-  if (!ctx.online) return cache?.spots ?? []
-  try {
-    const response = await host.fetch(SPOTS_URL)
-    if (response.status !== 200) throw new Error(`POTA API returned HTTP ${response.status}`)
-    cache = { at: nowMillis, spots: parseSpots(JSON.parse(response.body) as PotaApiSpot[]) }
-  } catch (error) {
-    host.log(`km4be-spot-maps: ${error instanceof Error ? error.message : String(error)}`)
-    if (!cache) return []
+  if (ctx.online) {
+    try {
+      const response = await host.fetch(SPOTS_URL)
+      if (response.status !== 200) throw new Error(`POTA API returned HTTP ${response.status}`)
+      cache = { at: nowMillis, spots: parseSpots(JSON.parse(response.body) as PotaApiSpot[]) }
+    } catch (error) {
+      host.log(`km4be-spot-maps: ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
-  return cache.spots
+  return cache ?? { at: 0, spots: [] }
 }
 
-/// The band each pane is filtered to. Per placement, and lost on a restart,
-/// which only puts the filter back to All.
-const bandByPane = new Map<string, string>()
+/// What each pane is showing: its band filter and the station picked. Per
+/// placement, and lost on a restart, which only puts both back to none.
+const stateByPane = new Map<string, { band: string; selected: string }>()
 const paneId = (args: PanelRenderArgs) => args.instanceId ?? args.panelKey
-const paneBand = (args: PanelRenderArgs) => bandByPane.get(paneId(args)) ?? "all"
+const paneState = (args: PanelRenderArgs) => {
+  const id = paneId(args)
+  let state = stateByPane.get(id)
+  if (!state) stateByPane.set(id, (state = { band: "all", selected: "" }))
+  return state
+}
 
 const nowMillis = (args: PanelRenderArgs) => args.clock?.realNowMillis ?? Date.now()
+
+/// Everything the scene reads from the feed and the pane's state, so a render
+/// and an event answer from the same place.
+async function view(args: PanelRenderArgs, ctx: HookContext, force = false) {
+  const now = nowMillis(args)
+  const feed = await currentSpots(ctx, now, force)
+  const state = paneState(args)
+  const shown = filterBand(feed.spots, state.band)
+  const options = spotOptions(shown)
+  // The dropdown holds "" or one of its options, so a station that has gone
+  // (QRT, or filtered out) is let go of rather than left dangling.
+  if (!options.some((o) => o.value === state.selected)) state.selected = ""
+  const chosen = shown.find((s) => s.call === state.selected)
+  const updated = feed.at ? ` · updated ${clockUtc(feed.at)}` : ""
+  return {
+    shown,
+    options,
+    state,
+    strings: {
+      band: state.band,
+      spot: state.selected,
+      summary: summary(shown.length, feed.spots.length, state.band) + updated,
+      details: detailsLine(chosen, now),
+    },
+  }
+}
 
 export const SpotMapPanel: PanelHook = {
   async getPanels(_args: Record<string, never>, _ctx: HookContext): Promise<PanelDescriptor[]> {
@@ -70,9 +102,7 @@ export const SpotMapPanel: PanelHook = {
   },
 
   async render(args: PanelRenderArgs, ctx: HookContext): Promise<PanelContent> {
-    const all = await currentSpots(ctx, nowMillis(args))
-    const band = paneBand(args)
-    const shown = filterBand(all, band)
+    const { shown, options, state, strings } = await view(args, ctx)
 
     return {
       kind: "scene",
@@ -81,10 +111,10 @@ export const SpotMapPanel: PanelHook = {
         width: MAP_WIDTH,
         height: MAP_HEIGHT,
         values: {},
-        strings: { band, summary: summary(shown.length, all.length, band) },
+        strings,
         layers: [
           { id: "world", x: 0, y: 0, width: MAP_WIDTH, height: MAP_HEIGHT, svg: BASE_SVG },
-          { id: "spots", x: 0, y: 0, width: MAP_WIDTH, height: MAP_HEIGHT, svg: markersSvg(shown) },
+          { id: "spots", x: 0, y: 0, width: MAP_WIDTH, height: MAP_HEIGHT, svg: markersSvg(shown, state.selected) },
         ],
         controls: [
           {
@@ -95,12 +125,21 @@ export const SpotMapPanel: PanelHook = {
             event: "filter",
             options: [{ label: "All bands", value: "all" }, ...BANDS.map((b) => ({ label: b, value: b }))],
           },
-          { id: "summary", kind: "nativeText", label: "Activators shown", value: "summary", align: "end" },
+          { id: "spot", kind: "nativeDropdown", label: "Station", value: "spot", event: "select", options },
+          { id: "refresh", kind: "nativeButton", label: "Refresh", icon: "refresh", variant: "tonal", event: "refresh" },
+          { id: "summary", kind: "nativeText", label: "Activators shown", value: "summary", align: "start" },
+          { id: "details", kind: "nativeText", label: "Selected station", value: "details", align: "start" },
         ],
         layout: {
           column: [
-            { row: [{ control: "band", width: 140 }, { control: "summary", flex: 1 }], spacing: 8, crossAxisAlignment: "center" },
+            {
+              row: [{ control: "band", width: 130 }, { control: "spot", flex: 1 }, { control: "refresh" }],
+              spacing: 8,
+              crossAxisAlignment: "center",
+            },
+            { control: "summary" },
             { scene: true, flex: 1 },
+            { control: "details" },
           ],
           padding: 8,
           spacing: 8,
@@ -112,12 +151,11 @@ export const SpotMapPanel: PanelHook = {
 
   async onEvent(args, ctx): Promise<PanelSceneEventResult> {
     const { event } = args
-    if (event.action === "filter" && event.text !== undefined) {
-      bandByPane.set(paneId(args), event.text === "" ? "all" : event.text)
-    }
-    const all = await currentSpots(ctx, nowMillis(args))
-    const band = paneBand(args)
-    return { values: {}, strings: { band, summary: summary(filterBand(all, band).length, all.length, band) } }
+    const state = paneState(args)
+    if (event.action === "filter" && event.text !== undefined) state.band = event.text === "" ? "all" : event.text
+    if (event.action === "select" && event.text !== undefined) state.selected = event.text
+    const { strings } = await view(args, ctx, event.action === "refresh")
+    return { values: {}, strings }
   },
 }
 

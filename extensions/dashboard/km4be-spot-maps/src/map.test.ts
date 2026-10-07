@@ -5,7 +5,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 
 import { loadExtension } from "./sdkGapTesting.ts"
-import { filterBand, markersSvg, parseSpots, project, summary } from "./spots.ts"
+import { detailsLine, filterBand, markersSvg, parseSpots, project, spotOptions, summary } from "./spots.ts"
 import type { PotaApiSpot } from "./spots.ts"
 
 const spot = (activator: string, extra: Partial<PotaApiSpot> = {}): PotaApiSpot => ({
@@ -66,7 +66,7 @@ test("render draws the world and the markers, and the dropdown filters them", as
 
   const first = await scene()
   assert.deepEqual(first.layers.map((l: { id: string }) => l.id), ["world", "spots"])
-  assert.equal(first.strings.summary, "2 activators")
+  assert.match(first.strings.summary, /^2 activators · updated \d\d:\d\dZ$/)
   assert.equal((first.layers[1].svg.match(/<circle/g) ?? []).length, 2)
 
   const patch = (await ext.runHook(
@@ -76,6 +76,59 @@ test("render draws the world and the markers, and the dropdown filters them", as
     { ctx: { online: true } },
   )) as { strings: Record<string, string> }
   assert.equal(patch.strings.band, "40m")
-  assert.equal(patch.strings.summary, "1 activator on 40m (of 2)")
+  assert.match(patch.strings.summary, /^1 activator on 40m \(of 2\)/)
   assert.equal(((await scene()).layers[1].svg.match(/<circle/g) ?? []).length, 1)
+})
+
+test("the details line names the station, its tuning, its park and how long ago", () => {
+  const [a] = parseSpots([spot("A1A", { spotTime: "2026-09-01T12:00:00" })])
+  const at = Date.parse("2026-09-01T12:07:00Z")
+  assert.equal(detailsLine(a, at), "A1A · 20m FT8 14074 kHz · US-0001 A Park · 7 min ago")
+  assert.equal(detailsLine(a, Date.parse("2026-09-01T13:30:00Z")), "A1A · 20m FT8 14074 kHz · US-0001 A Park · 1 h 30 min ago")
+  assert.equal(detailsLine(undefined, at), "Pick a station to see where it is.")
+})
+
+test("the picker lists none first, then the newest sixty, and the pick is ringed", () => {
+  const many = parseSpots(Array.from({ length: 70 }, (_, i) => spot(`K${i}X`, { spotTime: `2026-09-01T12:${String(i % 60).padStart(2, "0")}:00` })))
+  const options = spotOptions(many)
+  assert.equal(options.length, 61)
+  assert.deepEqual(options[0], { label: "No station selected", value: "" })
+  const svg = markersSvg(many.slice(0, 3), many[1].call)
+  assert.equal((svg.match(/<circle/g) ?? []).length, 3 + 2) // three dots, plus the pick's ring and its repeat on top
+  assert.equal((markersSvg(many.slice(0, 3)).match(/<circle/g) ?? []).length, 3)
+})
+
+test("picking a station fills the details, the band filter lets go of it, and Refresh fetches again", async () => {
+  let fetches = 0
+  const ext = await loadExtension(() => import("./index.ts"), {
+    hostCalls: {
+      fetch: () => {
+        fetches += 1
+        return { status: 200, body: JSON.stringify([spot("A1A"), spot("B2B", { frequency: "7200" })]) }
+      },
+    },
+  })
+  const args = { panelKey: "map", instanceId: "pane-2", operation: {}, qsoCount: 0, reason: "", config: {} }
+  const event = async (controlId: string, action: string, text?: string) =>
+    ((await ext.runHook(
+      "panel",
+      "onEvent",
+      { ...args, event: { controlId, action, phase: "commit", sequence: 1, text } },
+      { ctx: { online: true } },
+    )) as { strings: Record<string, string> }).strings
+
+  const picked = await event("spot", "select", "B2B")
+  assert.equal(picked.spot, "B2B")
+  assert.match(picked.details, /^B2B · 40m FT8 7200 kHz · US-0001 A Park/)
+
+  // B2B is a 40m station, so filtering to 20m drops the pick instead of leaving it dangling.
+  const filtered = await event("band", "filter", "20m")
+  assert.equal(filtered.spot, "")
+  assert.equal(filtered.details, "Pick a station to see where it is.")
+
+  const before = fetches
+  await event("spot", "select", "A1A") // inside the cache window: no fetch
+  assert.equal(fetches, before)
+  await event("refresh", "refresh")
+  assert.equal(fetches, before + 1)
 })

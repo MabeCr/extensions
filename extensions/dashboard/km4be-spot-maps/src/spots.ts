@@ -25,6 +25,8 @@ export interface PotaApiSpot {
 export interface MapSpot {
   call: string
   band: string
+  /// kHz, as POTA reports it; 0 when it gave none.
+  freq: number
   mode: string
   ref: string
   park: string
@@ -74,6 +76,7 @@ export function parseSpots(raw: PotaApiSpot[]): MapSpot[] {
     byCall.set(call, {
       call,
       band: (freq && bandForFrequency(freq)) || "other",
+      freq: freq || 0,
       mode: s.mode ?? "",
       ref: s.reference ?? "",
       park: s.name ?? "",
@@ -98,17 +101,51 @@ export const filterBand = (spots: MapSpot[], band: string): MapSpot[] =>
 const MARKER_RADIUS = 3.2
 
 /// The markers as a self-contained SVG document the size of the map. Oldest
-/// first, so the freshest spot is on top where parks overlap.
-export function markersSvg(spots: MapSpot[]): string {
-  const dots = [...spots]
-    .reverse()
-    .map((s) => {
-      const { x, y } = project(s.lat, s.lon)
-      return `<circle cx="${x}" cy="${y}" r="${MARKER_RADIUS}" fill="${BAND_COLORS[s.band] ?? BAND_COLORS.other}"/>`
-    })
-    .join("")
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}"><g stroke="#000" stroke-opacity="0.55" stroke-width="0.8">${dots}</g></svg>`
+/// first, so the freshest spot is on top where parks overlap. The `selected`
+/// call, if it is among them, is ringed and drawn last of all.
+export function markersSvg(spots: MapSpot[], selected = ""): string {
+  const dot = (s: MapSpot) => {
+    const { x, y } = project(s.lat, s.lon)
+    return `<circle cx="${x}" cy="${y}" r="${MARKER_RADIUS}" fill="${BAND_COLORS[s.band] ?? BAND_COLORS.other}"/>`
+  }
+  const ring = (s: MapSpot) => {
+    const { x, y } = project(s.lat, s.lon)
+    return `<circle cx="${x}" cy="${y}" r="${MARKER_RADIUS * 2.2}" fill="none" stroke="#fff" stroke-width="1.6"/>`
+  }
+  const chosen = spots.find((s) => s.call === selected)
+  const dots = [...spots].reverse().map(dot).join("")
+  const picked = chosen ? ring(chosen) + dot(chosen) : ""
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}"><g stroke="#000" stroke-opacity="0.55" stroke-width="0.8">${dots}</g>${picked}</svg>`
 }
+
+/// A dropdown holds at most 64 options; the newest spots are the ones listed.
+export const MAX_PICKER_SPOTS = 60
+
+export function spotOptions(spots: MapSpot[]): { label: string; value: string }[] {
+  return [
+    { label: "No station selected", value: "" },
+    ...spots.slice(0, MAX_PICKER_SPOTS).map((s) => ({ label: `${s.call} · ${s.band} · ${s.ref}`, value: s.call })),
+  ]
+}
+
+const ago = (millis: number): string => {
+  const minutes = Math.max(0, Math.round(millis / 60_000))
+  if (minutes < 1) return "just now"
+  if (minutes < 60) return `${minutes} min ago`
+  return `${Math.floor(minutes / 60)} h ${minutes % 60} min ago`
+}
+
+/// The line under the map for the selected station.
+export function detailsLine(spot: MapSpot | undefined, nowMillis: number): string {
+  if (!spot) return "Pick a station to see where it is."
+  const tuned = [spot.band, spot.mode, spot.freq ? `${spot.freq} kHz` : ""].filter(Boolean).join(" ")
+  const where = [spot.ref, spot.park].filter(Boolean).join(" ")
+  const when = spot.millis ? ago(nowMillis - spot.millis) : ""
+  return [spot.call, tuned, where, when].filter(Boolean).join(" · ")
+}
+
+/// `HH:MMZ`, the clock the spots are posted in.
+export const clockUtc = (millis: number): string => new Date(millis).toISOString().slice(11, 16) + "Z"
 
 export function summary(shown: number, total: number, band: string): string {
   const noun = (n: number) => `${n} ${n === 1 ? "activator" : "activators"}`
