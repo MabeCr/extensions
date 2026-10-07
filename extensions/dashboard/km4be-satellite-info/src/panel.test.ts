@@ -4,8 +4,8 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { ELEMENTS_URL, LIST_URL } from "./data.ts"
-import { ELEMENTS, LIST } from "./fixtures.ts"
+import { ELEMENTS_URL, forgetFailures, LIST_URL, statusUrl } from "./data.ts"
+import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
 import { forgetPasses } from "./passes.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 
@@ -31,6 +31,7 @@ interface Scene {
 /// A fresh extension per test, so its panes and favorites start empty.
 async function panel(options: { device?: { latitude: number; longitude: number } | null; offline?: () => boolean } = {}) {
   forgetPasses()
+  forgetFailures()
   const id = ++panes
   const storage = new Map<string, unknown>()
   const fetched: string[] = []
@@ -45,6 +46,7 @@ async function panel(options: { device?: { latitude: number; longitude: number }
         if (options.offline?.()) throw new Error("network down")
         if (url === LIST_URL) return { status: 200, body: JSON.stringify(LIST) }
         if (url === ELEMENTS_URL) return { status: 200, body: JSON.stringify(ELEMENTS) }
+        if (url === statusUrl(24)) return { status: 200, body: JSON.stringify(SUMMARY) }
         return { status: 404, body: "" }
       },
     },
@@ -83,7 +85,7 @@ test("the panel is a scene of native controls, with its settings and a minute's 
   const p = await panel()
   const d = await p.descriptor()
   assert.deepEqual(d.on, ["tick:60"])
-  assert.deepEqual(d.form.map((f) => f.key), ["minElevation", "grid", "utc"])
+  assert.deepEqual(d.form.map((f) => f.key), ["minElevation", "grid", "statusHours", "utc"])
   const { kind, scene } = await p.render(cfg, t0)
   assert.equal(kind, "scene")
   assert.equal(scene.layers.length, 0, "no artwork")
@@ -114,7 +116,7 @@ test("with nobody followed, every satellite is shown and the hint says how to fo
   assert.equal(scene.values.utc, 1, "the setting starts the pane in UTC")
   const rows = rowTexts(scene.strings)
   assert.equal(rows.length, 5)
-  assert.match(rows[0], /^(AO-7|FO-29) · (now|\d\d:\d\dZ) · \d+° · [NESW]+ → [NESW]+ · \d+ min$/)
+  assert.match(rows[0], /^[✔◐✘ ] (AO-7|FO-29) · (now|\d\d:\d\dZ) · \d+° · [NESW]+ → [NESW]+ · \d+ min$/)
   assert.match(scene.strings.range, /^1–5 of \d+$/)
 })
 
@@ -127,18 +129,18 @@ test("a star follows a satellite for good, and Favorites then shows only its pas
 
   const patch = await p.event(cfg, t0, star.id, "star")
   assert.deepEqual(p.storage.get("favorites"), [name])
-  assert.ok(rowTexts(patch.strings).every((r) => r.startsWith(`${name} ·`)))
+  assert.ok(rowTexts(patch.strings).every((r) => r.slice(2).startsWith(`${name} ·`)))
   assert.match(patch.strings.hint, /^Orbits from CelesTrak/)
 
   const after = await p.render(cfg, t0)
   assert.ok(after.scene.controls.filter((c) => c.id.startsWith(`star:${name}:`)).every((c) => c.icon === "star"))
-  assert.ok(rowTexts(after.scene.strings).every((r) => r.startsWith(`${name} ·`)))
+  assert.ok(rowTexts(after.scene.strings).every((r) => r.slice(2).startsWith(`${name} ·`)))
 
   // All shows every satellite again, the followed one's star filled.
   await p.event(cfg, t0, "mode", "mode", { text: "all" })
   const all = await p.render(cfg, t0)
   assert.equal(all.scene.strings.mode, "all")
-  const others = new Set(rowTexts(all.scene.strings).map((r) => r.split(" · ")[0]))
+  const others = new Set(rowTexts(all.scene.strings).map((r) => r.slice(2).split(" · ")[0]))
   assert.ok(others.size === 2, "both satellites appear")
 
   // Unfollowing removes it.
@@ -202,10 +204,10 @@ test("feeds are cached, a failed one falls back to what is stored, and a tap doe
   let offline = false
   const p = await panel({ offline: () => offline })
   await p.render(cfg, t0)
-  assert.equal(p.fetched.length, 2)
+  assert.equal(p.fetched.length, 3, "the list, the orbits and AMSAT's reports")
   await p.render(cfg, t0 + 60_000)
   await p.event(cfg, t0 + 61_000, "mode", "mode", { text: "all" })
-  assert.equal(p.fetched.length, 2, "still inside the cache window")
+  assert.equal(p.fetched.length, 3, "still inside the cache window")
   offline = true
   const later = await p.render(cfg, t0 + 30 * 3_600_000)
   assert.match(later.scene.strings.header, /2 of 4 satellites tracked/, "stale orbits are better than none")

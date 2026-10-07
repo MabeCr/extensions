@@ -4,9 +4,9 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { buildCatalog, ELEMENTS_URL, LIST_URL, parseElements, parseList } from "./data.ts"
+import { buildCatalog, ELEMENTS_URL, forgetFailures, LIST_URL, parseElements, parseList, statusUrl } from "./data.ts"
 import { buildDetail, completePass, themeOf } from "./detail.ts"
-import { ELEMENTS, LIST } from "./fixtures.ts"
+import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
 import { findPasses, satrecFromOmm } from "./orbit.ts"
 import { forgetPasses } from "./passes.ts"
 import { linksFor, radioLines, RADIO_LINES } from "./radio.ts"
@@ -142,6 +142,7 @@ interface SceneOf { controls: Control[]; layers: { id: string }[]; strings: Reco
 
 async function panel(shown: unknown[] = []) {
   forgetPasses()
+  forgetFailures()
   const id = ++panes
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
@@ -155,7 +156,9 @@ async function panel(shown: unknown[] = []) {
           ? { status: 200, body: JSON.stringify(LIST) }
           : url === ELEMENTS_URL
             ? { status: 200, body: JSON.stringify(ELEMENTS) }
-            : { status: 404, body: "" }
+            : url === statusUrl(24)
+              ? { status: 200, body: JSON.stringify(SUMMARY) }
+              : { status: 404, body: "" }
       },
     },
   })
@@ -194,7 +197,9 @@ test("tapping a row opens its pass: the Sky page, then Radio, then back to the l
   assert.match(sky.strings.title, /^(AO-7|FO-29) · /)
   assert.equal(sky.strings.tab, "sky")
   assert.ok(sky.strings.time0.startsWith("Rise"))
-  assert.equal(sky.controls.length, 4 + 3)
+  assert.equal(sky.controls.length, 4 + 3 + 2)
+  assert.match(sky.strings.status0, /^AMSAT, last 24 h: (heard|telemetry only) \(\d+ heard, \d+ telemetry, \d+ not heard\)$/)
+  assert.match(sky.strings.status1, /^Latest report: (heard|telemetry only|not heard), (\d\d-\d\d )?\d\d:\d\dZ?$/)
   assert.ok(sky.controls.length <= 64)
 
   assert.deepEqual(await p.event(t0, "tab", "tab", { text: "radio" }), { values: { utc: 0 } })

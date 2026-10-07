@@ -17,3 +17,21 @@ export const LIST = [
   { name: "", number: 1 },
 ]
 export const ELEMENTS = [AO7, FO29, { NORAD_CAT_ID: "bad" }]
+
+/// AMSAT's status summary in the shape `summary.php?hours=24` served on 2026-10-07 (the rows
+/// for these satellites, trimmed): the latest AO-7 report is a Heard on U/v; the latest FO-29
+/// is Telemetry Only though a Heard came earlier; the ISS FM repeater was last reported Not
+/// Heard while its SSTV was heard a great deal.
+export const SUMMARY = {
+  data: [
+    { name: "AO-7_[U/v]", satellite_display_name: "AO-7 [U/v]", report: "Heard", report_count: 2, latest_reported_time: "2026-10-06T23:30:00Z" },
+    { name: "AO-7_[V/a]", satellite_display_name: "AO-7 [V/a]", report: "Not Heard", report_count: 1, latest_reported_time: "2026-10-06T22:30:00Z" },
+    { name: "FO-29_[V/u]", satellite_display_name: "FO-29 [V/u]", report: "Telemetry Only", report_count: 2, latest_reported_time: "2026-10-06T20:30:00Z" },
+    { name: "FO-29_[V/u]", satellite_display_name: "FO-29 [V/u]", report: "Heard", report_count: 1, latest_reported_time: "2026-10-06T15:30:00Z" },
+    { name: "ISS_[FM]", satellite_display_name: "ISS [FM]", report: "Not Heard", report_count: 1, latest_reported_time: "2026-10-06T23:30:00Z" },
+    { name: "ISS_[FM]", satellite_display_name: "ISS [FM]", report: "Heard", report_count: 45, latest_reported_time: "2026-10-06T10:30:00Z" },
+    { name: "ISS_[SSTV]", satellite_display_name: "ISS [SSTV]", report: "Heard", report_count: 52, latest_reported_time: "2026-10-07T03:30:00Z" },
+    { name: "ISS_[UHF Digi]", satellite_display_name: "ISS [UHF Digi]", report: "Crew Active", report_count: 1, latest_reported_time: "2026-10-07T04:00:00Z" },
+  ],
+  meta: { hours: 24, count: 8 },
+}

@@ -18,7 +18,7 @@ import { defineExtension, host } from "@ham2k/extension-sdk"
 import type { HookContext, PanelContent, PanelDescriptor, PanelHook, PanelRenderArgs, PanelSceneEventResult } from "@ham2k/extension-sdk"
 
 import manifest from "../manifest.json" with { type: "json" }
-import { loadCatalog } from "./data.ts"
+import { loadCatalog, loadStatus } from "./data.ts"
 import type { Satellite } from "./data.ts"
 import { buildDetail, themeOf } from "./detail.ts"
 import type { DetailModel, Tab } from "./detail.ts"
@@ -28,6 +28,8 @@ import type { Place } from "./location.ts"
 import { clock, minElevation, passLine, upcomingPasses } from "./passes.ts"
 import type { SatellitePass } from "./passes.ts"
 import { linksFor } from "./radio.ts"
+import { GLYPH, LEGEND, NO_GLYPH, statusFor, statusHours, statusLines } from "./status.ts"
+import type { StatusRow } from "./status.ts"
 import { PAGE_SIZE, buildDetailScene, buildScene, detailStrings, detailValues, passOfOpen, satelliteOfStar, stringsOf, valuesOf } from "./scene.ts"
 import type { Mode, Model } from "./scene.ts"
 
@@ -62,6 +64,9 @@ interface Ready {
   minEl: number
   favorites: string[]
   passes: SatellitePass[]
+  /// AMSAT's reports for the last `hours`; empty when the feed is unreachable.
+  reports: StatusRow[]
+  hours: number
 }
 
 /// Everything the views are made from, or the sentence saying why there is nothing yet.
@@ -74,8 +79,14 @@ async function gather(args: PanelRenderArgs, ctx: HookContext): Promise<Ready | 
   if (!satellites.length) return "No satellite data yet. Check the connection."
 
   const minEl = minElevation(args.config)
-  const favorites = await loadFavorites()
-  return { place, satellites, elementsAt, minEl, favorites, passes: upcomingPasses(satellites, place, now, minEl, elementsAt) }
+  const hours = statusHours(args.config)
+  const [favorites, reports] = await Promise.all([loadFavorites(), loadStatus(ctx, now, hours)])
+  return { place, satellites, elementsAt, minEl, favorites, passes: upcomingPasses(satellites, place, now, minEl, elementsAt), reports, hours }
+}
+
+const glyphFor = (r: Ready, satellite: Satellite): string => {
+  const status = statusFor(r.reports, satellite)
+  return status ? GLYPH[status.kind] : NO_GLYPH
 }
 
 function listModel(r: Ready, state: PaneState, now: number): Model {
@@ -88,14 +99,21 @@ function listModel(r: Ready, state: PaneState, now: number): Model {
   const rows = showing.slice(first, first + PAGE_SIZE).map((p) => ({
     name: p.satellite.name,
     favorite: r.favorites.includes(p.satellite.name),
-    text: passLine(p, now, state.utc),
+    // The status glyph leads the line so the satellites' names stay in a column.
+    text: `${glyphFor(r, p.satellite)} ${passLine(p, now, state.utc)}`,
     los: p.los,
   }))
 
   const tracked = r.satellites.filter((s) => s.omm).length
-  let hint = `Orbits from CelesTrak, ${clock(r.elementsAt, now, state.utc)}.`
-  if (!showing.length) hint = `No passes of ${r.minEl}° or more in the next 24 hours.`
-  else if (state.mode === "favorites" && !followed) hint = "No favorites yet, so every satellite is shown. Tap a star to follow one."
+  // The marks on the rows are explained whatever else the line says; with no rows there are none to explain.
+  let hint = `No passes of ${r.minEl}° or more in the next 24 hours.`
+  if (showing.length) {
+    const lead =
+      state.mode === "favorites" && !followed
+        ? "No favorites yet, so every satellite is shown. Tap a star to follow one."
+        : `Orbits from CelesTrak, ${clock(r.elementsAt, now, state.utc)}.`
+    hint = `${lead} ${LEGEND}`
+  }
 
   return {
     header: `${r.place.grid} · min ${r.minEl}° · ${tracked} of ${r.satellites.length} satellites tracked`,
@@ -122,7 +140,16 @@ async function snapshot(args: PanelRenderArgs, ctx: HookContext): Promise<View> 
     const { name, los, tab } = state.detail
     // The pass is looked for by its satellite and its end, which hold steady between workings-out.
     const pass = ready.passes.find((p) => p.satellite.name === name && Math.abs(p.los - los) < 120_000)
-    if (pass) return { kind: "detail", model: buildDetail(pass.satellite, ready.place, pass, now, state.utc, tab, themeOf(args.environment?.colors)) }
+    if (pass) return { kind: "detail", model: buildDetail(
+          pass.satellite,
+          ready.place,
+          pass,
+          now,
+          state.utc,
+          tab,
+          themeOf(args.environment?.colors),
+          statusLines(statusFor(ready.reports, pass.satellite), ready.hours, now, state.utc),
+        ) }
     state.view = "list" // it has ended, or the settings no longer list it
   }
   return { kind: "list", model: listModel(ready, state, now) }
@@ -154,6 +181,13 @@ export const PassesPanel: PanelHook = {
             fieldType: "text",
             label: "Grid square",
             description: "Used when the device cannot give its location, for example EL95vs.",
+          },
+          {
+            type: "field",
+            key: "statusHours",
+            fieldType: "number",
+            label: "AMSAT report window (hours)",
+            description: "How far back operators' status reports count. 1 to 168; default 24.",
           },
           { type: "field", key: "utc", fieldType: "checkbox", label: "Start with times in UTC" },
         ],

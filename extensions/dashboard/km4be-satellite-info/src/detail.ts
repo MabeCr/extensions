@@ -21,6 +21,8 @@ export interface DetailModel {
   utc: boolean
   /// Rise, peak and set, a line each.
   times: string[]
+  /// What AMSAT's status reports say of the satellite: the verdict, then the latest report.
+  status: string[]
   /// The radio page, padded to `RADIO_LINES`.
   radio: string[]
   /// The sky plot, drawn with `colors`.
@@ -68,6 +70,7 @@ export function buildDetail(
   utc: boolean,
   tab: Tab,
   theme: Theme = DEFAULT_THEME,
+  status: string[] = ["", ""],
 ): DetailModel {
   const pass = completePass(satellite, observer, listed, now)
   const at = (t: number) => clock(t, pass.aos, utc)
@@ -85,6 +88,7 @@ export function buildDetail(
       `Peak  ${at(pass.maxElevationAt)}  ${deg(pass.maxElevation)} toward ${compass(pass.maxAzimuth)}`,
       `Set   ${at(pass.los)}  ${compass(pass.losAzimuth)} ${deg(pass.losAzimuth)}`,
     ],
+    status,
     radio,
     sky: { svg: skySvg(track, pass, theme.sky, now), compass: compassLayers(theme.text) },
   }

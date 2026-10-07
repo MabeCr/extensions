@@ -171,12 +171,16 @@ export function buildScene(m: Model): PanelScene {
 /// Names of the text lines under the plot (Sky tab) and the radio page (Radio tab).
 export const timeKey = (i: number): string => `time${i}`
 export const radioKey = (i: number): string => `radio${i}`
+export const statusKey = (i: number): string => `status${i}`
 
 /// What the detail scene's text controls and choices hold: the Sky tab and the Radio
 /// tab have different lines, so only the shown tab's are named.
 export function detailStrings(d: DetailModel): Record<string, string> {
   const strings: Record<string, string> = { title: d.title, tab: d.tab }
-  if (d.tab === "sky") d.times.forEach((line, i) => (strings[timeKey(i)] = line))
+  if (d.tab === "sky") {
+    d.times.forEach((line, i) => (strings[timeKey(i)] = line))
+    d.status.forEach((line, i) => (strings[statusKey(i)] = line))
+  }
   else d.radio.forEach((line, i) => (strings[radioKey(i)] = line))
   return strings
 }
@@ -207,6 +211,7 @@ export function buildDetailScene(d: DetailModel): PanelScene {
 
   if (d.tab === "sky") {
     d.times.forEach((_, i) => controls.push({ id: timeKey(i), kind: "nativeText", label: ["Rise", "Peak", "Set"][i] ?? "Time", value: timeKey(i), style: "mono" }))
+    d.status.forEach((_, i) => controls.push({ id: statusKey(i), kind: "nativeText", label: i ? "Latest AMSAT report" : "AMSAT status reports", value: statusKey(i) }))
     return {
       version: 1,
       width: 360,
@@ -216,7 +221,7 @@ export function buildDetailScene(d: DetailModel): PanelScene {
       layers: [{ id: "sky", x: 0, y: 0, width: 360, height: 360, svg: d.sky.svg }, ...d.sky.compass],
       controls,
       layout: {
-        column: [...head, { scene: true, flex: 1 }, ...d.times.map((_, i): PanelSceneLayoutNode => ({ control: timeKey(i) }))],
+        column: [...head, { scene: true, flex: 1 }, ...d.times.map((_, i): PanelSceneLayoutNode => ({ control: timeKey(i) })), ...d.status.map((_, i): PanelSceneLayoutNode => ({ control: statusKey(i) }))],
         padding: 12,
         spacing: 8,
         crossAxisAlignment: "stretch",

@@ -17,11 +17,15 @@ import type { HookContext, JSONValue } from "@ham2k/extension-sdk"
 
 import curated from "./data/satellites.json" with { type: "json" }
 import type { Omm } from "./orbit.ts"
+import { parseSummary } from "./status.ts"
+import type { StatusRow } from "./status.ts"
 
 export const LIST_URL = "https://polo.ham2k.com/data/satellites.json"
 export const ELEMENTS_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=amateur&FORMAT=json"
+export const statusUrl = (hours: number): string => `https://amsat.org/status/api/v1/summary.php?hours=${hours}`
 const LIST_MAX_AGE_MS = 24 * 3_600_000
 const ELEMENTS_MAX_AGE_MS = 6 * 3_600_000
+const STATUS_MAX_AGE_MS = 10 * 60_000
 
 export interface Link {
   mode: string
@@ -120,20 +124,33 @@ interface Cached {
   data: JSONValue
 }
 
+/// When each feed last failed, so a feed that is down is not asked for again on every redraw
+/// (the panel draws every minute) but after `BACKOFF_MS`.
+const failedAt = new Map<string, number>()
+const BACKOFF_MS = 2 * 60_000
+
+/// For tests: forget which feeds have failed.
+export const forgetFailures = (): void => failedAt.clear()
+
 /// The copy under `key` in the device's storage while younger than `maxAge`; otherwise fetched,
-/// stored and returned; and when the fetch fails, whatever copy there is, however old.
-async function cachedJson(key: string, url: string, maxAge: number, now: number, ctx: HookContext): Promise<{ data: unknown; at: number } | null> {
+/// stored and returned; and when the fetch fails, or one failed a moment ago, whatever copy there
+/// is, however old.
+export async function cachedJson(key: string, url: string, maxAge: number, now: number, ctx: HookContext): Promise<{ data: unknown; at: number } | null> {
   const stored = (await host.kvGet(key)) as Cached | null
   const have = stored && typeof stored.at === "number" ? stored : null
   if (have && now - have.at < maxAge) return { data: have.data, at: have.at }
-  if (ctx.online) {
+  const failed = failedAt.get(key)
+  const backingOff = failed !== undefined && now >= failed && now - failed < BACKOFF_MS
+  if (ctx.online && !backingOff) {
     try {
       const response = await host.fetch(url)
       if (response.status !== 200) throw new Error(`HTTP ${response.status}`)
       const data = JSON.parse(response.body) as JSONValue
       await host.kvSet(key, { at: now, data } satisfies Cached)
+      failedAt.delete(key)
       return { data, at: now }
     } catch (error) {
+      failedAt.set(key, now)
       host.log(`km4be-satellite-info: ${url}: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
@@ -155,4 +172,12 @@ export async function loadCatalog(ctx: HookContext, now: number): Promise<Catalo
     satellites: buildCatalog(parseList(list?.data), parseElements(elements?.data)),
     elementsAt: elements?.at ?? 0,
   }
+}
+
+/// AMSAT's report summary for the last `hours`, kept ten minutes, and the last good copy if the
+/// fetch fails; empty when there is none at all. Reports come in a few an hour, so the panel's
+/// minute-by-minute redraws have no business asking for them that often.
+export async function loadStatus(ctx: HookContext, now: number, hours: number): Promise<StatusRow[]> {
+  const summary = await cachedJson(`status-${hours}`, statusUrl(hours), STATUS_MAX_AGE_MS, now, ctx)
+  return parseSummary(summary?.data)
 }
