@@ -16,7 +16,7 @@ import { defineExtension, host } from "@ham2k/extension-sdk"
 import type { HookContext, PanelContent, PanelDescriptor, PanelHook, PanelRenderArgs, PanelSceneEventResult } from "@ham2k/extension-sdk"
 
 import manifest from "../manifest.json" with { type: "json" }
-import { BANDS, clockUtc, detailsLine, filterBand, markersSvg, parseSpots, spotOptions, summary } from "./spots.ts"
+import { BANDS, MAX_CLICKABLE, clockUtc, detailsLine, dotHitArea, filterBand, markersSvg, parseSpots, spotOptions, summary } from "./spots.ts"
 import type { MapSpot, PotaApiSpot } from "./spots.ts"
 import { BORDER_PATH, LAND_PATH, MAP_HEIGHT, MAP_WIDTH } from "./world.ts"
 
@@ -59,6 +59,8 @@ const paneState = (args: PanelRenderArgs) => {
   if (!state) stateByPane.set(id, (state = { band: "all", selected: "" }))
   return state
 }
+
+const DOT_PREFIX = "dot:"
 
 const nowMillis = (args: PanelRenderArgs) => args.clock?.realNowMillis ?? Date.now()
 
@@ -129,6 +131,17 @@ export const SpotMapPanel: PanelHook = {
           { id: "refresh", kind: "nativeButton", label: "Refresh", icon: "refresh", variant: "tonal", event: "refresh" },
           { id: "summary", kind: "nativeText", label: "Activators shown", value: "summary", align: "start" },
           { id: "details", kind: "nativeText", label: "Selected station", value: "details", align: "start" },
+          // A click target the size of each dot, oldest first so the newest sits on top.
+          ...shown
+            .slice(0, MAX_CLICKABLE)
+            .reverse()
+            .map((s) => ({
+              id: DOT_PREFIX + s.call,
+              kind: "button" as const,
+              label: `${s.call} ${s.band} ${s.ref}`.trim(),
+              event: "pick",
+              ...dotHitArea(s),
+            })),
         ],
         layout: {
           column: [
@@ -154,6 +167,7 @@ export const SpotMapPanel: PanelHook = {
     const state = paneState(args)
     if (event.action === "filter" && event.text !== undefined) state.band = event.text === "" ? "all" : event.text
     if (event.action === "select" && event.text !== undefined) state.selected = event.text
+    if (event.action === "pick" && event.controlId.startsWith(DOT_PREFIX)) state.selected = event.controlId.slice(DOT_PREFIX.length)
     const { strings } = await view(args, ctx, event.action === "refresh")
     return { values: {}, strings }
   },

@@ -98,7 +98,18 @@ export function project(lat: number, lon: number): { x: number; y: number } {
 export const filterBand = (spots: MapSpot[], band: string): MapSpot[] =>
   band === "all" ? spots : spots.filter((s) => s.band === band)
 
-const MARKER_RADIUS = 3.2
+export const MARKER_RADIUS = 3.2
+
+/// A scene allows 64 controls and the pane's own take five, so only the newest
+/// dots can be clicked; the picker reaches the rest.
+export const MAX_CLICKABLE = 59
+
+/// The click target for a dot: exactly the dot, centered on it.
+export function dotHitArea(spot: MapSpot): { x: number; y: number; width: number; height: number } {
+  const { x, y } = project(spot.lat, spot.lon)
+  const size = MARKER_RADIUS * 2
+  return { x: +(x - MARKER_RADIUS).toFixed(1), y: +(y - MARKER_RADIUS).toFixed(1), width: size, height: size }
+}
 
 /// The markers as a self-contained SVG document the size of the map. Oldest
 /// first, so the freshest spot is on top where parks overlap. The `selected`

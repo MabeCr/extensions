@@ -5,7 +5,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 
 import { loadExtension } from "./sdkGapTesting.ts"
-import { detailsLine, filterBand, markersSvg, parseSpots, project, spotOptions, summary } from "./spots.ts"
+import { MAX_CLICKABLE, detailsLine, dotHitArea, filterBand, markersSvg, parseSpots, project, spotOptions, summary } from "./spots.ts"
 import type { PotaApiSpot } from "./spots.ts"
 
 const spot = (activator: string, extra: Partial<PotaApiSpot> = {}): PotaApiSpot => ({
@@ -131,4 +131,46 @@ test("picking a station fills the details, the band filter lets go of it, and Re
   assert.equal(fetches, before)
   await event("refresh", "refresh")
   assert.equal(fetches, before + 1)
+})
+
+test("each dot has a click target exactly its size, and clicking it picks the station", async () => {
+  const [a] = parseSpots([spot("A1A", { latitude: 0, longitude: 0 })])
+  // The dot is centered at (360, 168) with radius 3.2.
+  assert.deepEqual(dotHitArea(a), { x: 356.8, y: 164.8, width: 6.4, height: 6.4 })
+
+  const ext = await loadExtension(() => import("./index.ts"), {
+    hostCalls: {
+      fetch: () => ({
+        status: 200,
+        body: JSON.stringify(Array.from({ length: 70 }, (_, i) => spot(`K${i}X`, { spotTime: `2026-09-01T12:${String(i % 60).padStart(2, "0")}:00` }))),
+      }),
+    },
+  })
+  const args = { panelKey: "map", instanceId: "pane-3", operation: {}, qsoCount: 0, reason: "", config: {} }
+  const scene = async () =>
+    ((await ext.runHook("panel", "render", args, { ctx: { online: true } })) as { scene: any }).scene
+
+  // The feed is cached across tests in this process; Refresh drops the earlier tests' spots.
+  await ext.runHook(
+    "panel",
+    "onEvent",
+    { ...args, event: { controlId: "refresh", action: "refresh", phase: "activate", sequence: 0 } },
+    { ctx: { online: true } },
+  )
+  const { controls } = await scene()
+  const dots = controls.filter((c: { kind: string }) => c.kind === "button")
+  assert.equal(dots.length, MAX_CLICKABLE)
+  assert.ok(controls.length <= 64)
+  assert.ok(dots.every((c: { width: number; height: number }) => c.width === 6.4 && c.height === 6.4))
+
+  const target = dots[0].id as string
+  const call = target.slice("dot:".length)
+  const patch = (await ext.runHook(
+    "panel",
+    "onEvent",
+    { ...args, event: { controlId: target, action: "pick", phase: "activate", sequence: 1 } },
+    { ctx: { online: true } },
+  )) as { strings: Record<string, string> }
+  assert.equal(patch.strings.spot, call)
+  assert.ok(patch.strings.details.startsWith(call))
 })
