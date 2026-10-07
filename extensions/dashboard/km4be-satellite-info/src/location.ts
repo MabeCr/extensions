@@ -9,6 +9,7 @@
 import { host } from "@ham2k/extension-sdk"
 import { gridToLocation, locationToGrid6 } from "@ham2k/lib-geo-tools"
 
+import { onForget } from "./memory.ts"
 import type { Observer } from "./orbit.ts"
 
 export interface Place extends Observer {
@@ -35,9 +36,31 @@ export function roundedPlace(lat: number, lon: number): Place | null {
   return grid && observer ? { ...observer, grid, source: "device" } : null
 }
 
-/// The device's position if the host will say, then the grid typed in the
-/// panel's settings, then the operation's own grid.
-export async function findPlace(config: Record<string, unknown> | undefined, operation: Record<string, unknown> | undefined): Promise<Place | null> {
+/// How long a position is good for: a person on foot or in a car does not move far enough in a
+/// minute to change a pass, and asking the host for the device's location is a round trip.
+const PLACE_MAX_AGE_MS = 60_000
+
+let placeMemo: { key: string; at: number; place: Place | null } | undefined
+onForget(() => {
+  placeMemo = undefined
+})
+
+/// The device's position if the host will say, then the grid typed in the panel's settings, then
+/// the operation's own grid; asked again at most once a minute, or when the grids it falls back
+/// on change.
+export async function findPlace(
+  config: Record<string, unknown> | undefined,
+  operation: Record<string, unknown> | undefined,
+  now: number = Date.now(),
+): Promise<Place | null> {
+  const key = `${String(config?.grid)}|${String(operation?.grid)}`
+  if (placeMemo && placeMemo.key === key && now >= placeMemo.at && now - placeMemo.at < PLACE_MAX_AGE_MS) return placeMemo.place
+  const place = await lookForPlace(config, operation)
+  placeMemo = { key, at: now, place }
+  return place
+}
+
+async function lookForPlace(config: Record<string, unknown> | undefined, operation: Record<string, unknown> | undefined): Promise<Place | null> {
   const device = await host.getLocation().catch(() => null)
   if (device && Number.isFinite(device.latitude) && Number.isFinite(device.longitude)) {
     const place = roundedPlace(device.latitude, device.longitude)

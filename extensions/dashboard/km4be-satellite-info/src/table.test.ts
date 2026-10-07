@@ -4,11 +4,11 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { ELEMENTS_URL, forgetFailures, LIST_URL, statusUrl } from "./data.ts"
+import { ELEMENTS_URL, LIST_URL, statusUrl } from "./data.ts"
 import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
 import { table } from "./passes.ts"
 import type { Cells } from "./passes.ts"
-import { forgetPasses } from "./passes.ts"
+import { forgetAll } from "./memory.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 import { arrowHead, skySvg, skyXY } from "./sky.ts"
 import type { SkyPoint } from "./sky.ts"
@@ -114,8 +114,7 @@ const t0 = Date.parse("2026-10-07T00:00:00Z")
 let panes = 0
 
 async function panel(favorites: string[] = []) {
-  forgetPasses()
-  forgetFailures()
+  forgetAll()
   const id = ++panes
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {

@@ -85,7 +85,7 @@ interface Ready {
 
 /// Everything the views are made from, or the sentence saying why there is nothing yet.
 async function gather(args: PanelRenderArgs, ctx: HookContext): Promise<Ready | string> {
-  const place = await findPlace(args.config, args.operation)
+  const place = await findPlace(args.config, args.operation, nowMillis(args))
   if (!place) return "No location. Allow location access, or enter a grid square in this panel's settings."
 
   const now = nowMillis(args)

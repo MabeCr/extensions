@@ -4,9 +4,9 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { ELEMENTS_URL, forgetFailures, LIST_URL, statusUrl } from "./data.ts"
+import { ELEMENTS_URL, LIST_URL, statusUrl } from "./data.ts"
 import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
-import { forgetPasses } from "./passes.ts"
+import { forgetAll } from "./memory.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 
 const ctx = { online: true }
@@ -30,8 +30,7 @@ interface Scene {
 
 /// A fresh extension per test, so its panes and favorites start empty.
 async function panel(options: { device?: { latitude: number; longitude: number } | null; offline?: () => boolean } = {}) {
-  forgetPasses()
-  forgetFailures()
+  forgetAll()
   const id = ++panes
   const storage = new Map<string, unknown>()
   const fetched: string[] = []

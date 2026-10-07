@@ -17,6 +17,7 @@ import type { HookContext, JSONValue } from "@ham2k/extension-sdk"
 
 import curated from "./data/satellites.json" with { type: "json" }
 import type { Omm } from "./orbit.ts"
+import { onForget } from "./memory.ts"
 import { parseSummary } from "./status.ts"
 import type { StatusRow } from "./status.ts"
 
@@ -132,13 +133,27 @@ const BACKOFF_MS = 2 * 60_000
 /// For tests: forget which feeds have failed.
 export const forgetFailures = (): void => failedAt.clear()
 
-/// The copy under `key` in the device's storage while younger than `maxAge`; otherwise fetched,
-/// stored and returned; and when the fetch fails, or one failed a moment ago, whatever copy there
-/// is, however old.
+/// What has been read or fetched, by key: the same copies as the device's storage holds, kept
+/// where they cost nothing to read. Storage is read once, the first time a key is wanted.
+const memory = new Map<string, Cached>()
+onForget(() => {
+  failedAt.clear()
+  memory.clear()
+  catalogMemo = undefined
+  statusMemo = undefined
+})
+
+/// The copy under `key` while younger than `maxAge`; otherwise fetched, stored and returned; and
+/// when the fetch fails, or one failed a moment ago, whatever copy there is, however old. The copy
+/// comes from memory if it has been read before, and from the device's storage if not.
 export async function cachedJson(key: string, url: string, maxAge: number, now: number, ctx: HookContext): Promise<{ data: unknown; at: number } | null> {
-  const stored = (await host.kvGet(key)) as Cached | null
-  const have = stored && typeof stored.at === "number" ? stored : null
-  if (have && now - have.at < maxAge) return { data: have.data, at: have.at }
+  let have = memory.get(key) ?? null
+  if (!have) {
+    const stored = (await host.kvGet(key)) as Cached | null
+    have = stored && typeof stored.at === "number" ? stored : null
+    if (have) memory.set(key, have)
+  }
+  if (have && now >= have.at && now - have.at < maxAge) return { data: have.data, at: have.at }
   const failed = failedAt.get(key)
   const backingOff = failed !== undefined && now >= failed && now - failed < BACKOFF_MS
   if (ctx.online && !backingOff) {
@@ -146,7 +161,9 @@ export async function cachedJson(key: string, url: string, maxAge: number, now: 
       const response = await host.fetch(url)
       if (response.status !== 200) throw new Error(`HTTP ${response.status}`)
       const data = JSON.parse(response.body) as JSONValue
-      await host.kvSet(key, { at: now, data } satisfies Cached)
+      const fresh = { at: now, data } satisfies Cached
+      memory.set(key, fresh)
+      await host.kvSet(key, fresh)
       failedAt.delete(key)
       return { data, at: now }
     } catch (error) {
@@ -163,15 +180,23 @@ export interface Catalog {
   elementsAt: number
 }
 
+/// The catalog as last built, and which copies of the feeds it was built from. Building it is
+/// reading a hundred orbits and a list of satellites, which is only worth doing when a feed has
+/// changed, not at every redraw.
+let catalogMemo: { listAt: number; elementsAt: number; catalog: Catalog } | undefined
+
 export async function loadCatalog(ctx: HookContext, now: number): Promise<Catalog> {
   const [list, elements] = await Promise.all([
     cachedJson("list", LIST_URL, LIST_MAX_AGE_MS, now, ctx),
     cachedJson("elements", ELEMENTS_URL, ELEMENTS_MAX_AGE_MS, now, ctx),
   ])
-  return {
-    satellites: buildCatalog(parseList(list?.data), parseElements(elements?.data)),
-    elementsAt: elements?.at ?? 0,
-  }
+  const listAt = list?.at ?? 0
+  const elementsAt = elements?.at ?? 0
+  if (catalogMemo && catalogMemo.listAt === listAt && catalogMemo.elementsAt === elementsAt) return catalogMemo.catalog
+
+  const catalog = { satellites: buildCatalog(parseList(list?.data), parseElements(elements?.data)), elementsAt }
+  catalogMemo = { listAt, elementsAt, catalog }
+  return catalog
 }
 
 /// AMSAT's report summary for the last `hours`, kept ten minutes, and the last good copy if the
@@ -179,5 +204,11 @@ export async function loadCatalog(ctx: HookContext, now: number): Promise<Catalo
 /// minute-by-minute redraws have no business asking for them that often.
 export async function loadStatus(ctx: HookContext, now: number, hours: number): Promise<StatusRow[]> {
   const summary = await cachedJson(`status-${hours}`, statusUrl(hours), STATUS_MAX_AGE_MS, now, ctx)
-  return parseSummary(summary?.data)
+  const key = `${hours}|${summary?.at ?? 0}`
+  if (statusMemo?.key === key) return statusMemo.rows
+  const rows = parseSummary(summary?.data)
+  statusMemo = { key, rows }
+  return rows
 }
+
+let statusMemo: { key: string; rows: StatusRow[] } | undefined

@@ -4,6 +4,7 @@
 // The next passes across the whole catalog, and how they are written down.
 
 import type { Satellite } from "./data.ts"
+import { onForget } from "./memory.ts"
 import { compass, findPasses, satrecFromOmm } from "./orbit.ts"
 import type { Observer, Pass } from "./orbit.ts"
 
@@ -63,23 +64,36 @@ export function duration(pass: Pass): string {
 /// "NW → SE", the way round the sky the pass goes.
 export const direction = (pass: Pass): string => `${compass(pass.aosAzimuth)} → ${compass(pass.losAzimuth)}`
 
-const MEMO_MAX_AGE_MS = 5 * 60_000
+/// Working out every pass of every satellite is the most work this extension does, so it is done
+/// rarely: for a day and a quarter ahead, kept six hours (as long as the orbits themselves are,
+/// which is when a new set of them forces it again anyway). A day is always still ahead of what
+/// the list shows.
+const MEMO_MAX_AGE_MS = 6 * 3_600_000
+const MEMO_HOURS = LOOK_AHEAD_HOURS + 6
 let memo: { key: string; at: number; passes: SatellitePass[] } | undefined
+let computations = 0
+
+/// For tests: how many times every pass has been worked out.
+export const passesComputed = (): number => computations
 
 /// For tests: forget the passes worked out so far.
 export const forgetPasses = (): void => {
   memo = undefined
+  computations = 0
 }
+onForget(forgetPasses)
 
-/// The next day's passes, worked out at most every five minutes however often the
-/// panel is drawn or tapped, and with the ones already over dropped. A pass that
-/// began since is still listed, as under way.
+/// The next day's passes, worked out at most every six hours however often the panel is drawn or
+/// tapped, and with the ones already over dropped and any more than a day away left for later. A
+/// pass that began since is still listed, as under way.
 export function upcomingPasses(satellites: Satellite[], place: Observer & { grid: string }, now: number, minEl: number, elementsAt: number): SatellitePass[] {
   const key = `${place.grid}|${minEl}|${elementsAt}|${satellites.length}`
   if (!memo || memo.key !== key || now < memo.at || now - memo.at > MEMO_MAX_AGE_MS) {
-    memo = { key, at: now, passes: nextPasses(satellites, place, now, minEl) }
+    computations += 1
+    memo = { key, at: now, passes: nextPasses(satellites, place, now, minEl, MEMO_HOURS) }
   }
-  return memo.passes.filter((p) => p.los > now)
+  const horizon = now + LOOK_AHEAD_HOURS * 3_600_000
+  return memo.passes.filter((p) => p.los > now && p.aos <= horizon)
 }
 
 /// One pass as the cells of a table row.

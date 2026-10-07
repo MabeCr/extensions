@@ -4,9 +4,9 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { ELEMENTS_URL, forgetFailures, LIST_URL, statusUrl } from "./data.ts"
+import { ELEMENTS_URL, LIST_URL, statusUrl } from "./data.ts"
 import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
-import { forgetPasses } from "./passes.ts"
+import { forgetAll } from "./memory.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 import { GLYPH, LEGEND, parseSummary, statusFor, statusHours, statusLines } from "./status.ts"
 
@@ -112,8 +112,7 @@ const t0 = Date.parse("2026-10-07T00:00:00Z")
 const cfg = { grid: "EL95vs" }
 
 async function panel(summary: () => { status: number; body: string }) {
-  forgetPasses()
-  forgetFailures()
+  forgetAll()
   const id = ++panes
   const fetched: string[] = []
   const storage = new Map<string, unknown>()

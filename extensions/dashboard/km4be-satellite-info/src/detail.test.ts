@@ -4,12 +4,12 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { buildCatalog, ELEMENTS_URL, forgetFailures, LIST_URL, parseElements, parseList, statusUrl } from "./data.ts"
+import { buildCatalog, ELEMENTS_URL, LIST_URL, parseElements, parseList, statusUrl } from "./data.ts"
 import { buildDetail, completePass, themeOf } from "./detail.ts"
 import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
 import { findPasses, satrecFromOmm } from "./orbit.ts"
-import { forgetPasses } from "./passes.ts"
 import { linksFor, radioLines, RADIO_LINES } from "./radio.ts"
+import { forgetAll } from "./memory.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 import { passOfOpen, openId } from "./scene.ts"
 import { compassLayers, skySvg, skyTrack, skyXY } from "./sky.ts"
@@ -141,8 +141,7 @@ interface Control { id: string; opacity?: number }
 interface SceneOf { controls: Control[]; layers: { id: string }[]; strings: Record<string, string>; values: Record<string, number> }
 
 async function panel(shown: unknown[] = []) {
-  forgetPasses()
-  forgetFailures()
+  forgetAll()
   const id = ++panes
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {

@@ -4,11 +4,11 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { buildCatalog, ELEMENTS_URL, forgetFailures, LIST_URL, parseElements, parseList, statusUrl } from "./data.ts"
-import { pointLabel } from "./detail.ts"
+import { buildCatalog, ELEMENTS_URL, LIST_URL, parseElements, parseList, statusUrl } from "./data.ts"
 import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
 import { findPasses, lookAt, satrecFromOmm } from "./orbit.ts"
-import { clock, countdown, forgetPasses } from "./passes.ts"
+import { clock, countdown } from "./passes.ts"
+import { forgetAll } from "./memory.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 
 const iso = (s: string) => Date.parse(s)
@@ -53,20 +53,6 @@ test("a pass's edges are found to a fifth of a second, so the seconds shown are 
   }
 })
 
-test("labels on the plot sit beside their point and stay inside it", () => {
-  const east = pointLabel("a", "14:05:12Z", 90, 0, "#fff") // the east horizon: the right edge
-  assert.equal(east.text.align, "start")
-  assert.ok(east.x + east.width <= 360 && east.x >= 0)
-  const west = pointLabel("b", "14:05:12Z", 270, 0, "#fff")
-  assert.equal(west.text.align, "end")
-  assert.ok(west.x >= 0 && west.x + west.width <= 360)
-  const north = pointLabel("c", "14:05:12Z", 0, 0, "#fff") // the top of the rim
-  assert.ok(north.y >= 0 && north.y + north.height <= 360)
-  const overhead = pointLabel("d", "81°", 0, 81, "#fff")
-  assert.ok(overhead.x >= 180 && overhead.x < 220, "just right of the middle")
-  assert.ok(pointLabel("e", "x", 180, 0, "#fff").y + 16 <= 360)
-})
-
 // --- through the panel -------------------------------------------------------
 
 const ctx = { online: true }
@@ -81,8 +67,7 @@ interface Scene {
 }
 
 async function panel(environment?: { width: number; height: number }) {
-  forgetPasses()
-  forgetFailures()
+  forgetAll()
   const id = ++panes
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {

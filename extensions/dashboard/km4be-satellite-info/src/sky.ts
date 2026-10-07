@@ -15,6 +15,9 @@ const CENTER = SKY_SIZE / 2
 /// Radius of the horizon ring, leaving room for the compass letters outside it.
 const RADIUS = 150
 
+/// The sizes of what is drawn on the plot, which text written on it has to keep clear of.
+export const DOT_RADIUS = { end: 6, peak: 5, now: 11, arrow: 10 }
+
 export interface SkyPoint {
   azimuth: number
   elevation: number
@@ -67,7 +70,7 @@ export function skySvg(track: SkyPoint[], pass: Pass, colors: SkyColors = DEFAUL
   })
   const path = line.length > 1 ? `<path d="${line.join("")}" fill="none" stroke="${colors.path}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>` : ""
 
-  const dot = (azimuth: number, elevation: number, fill: string, r = 6) => {
+  const dot = (azimuth: number, elevation: number, fill: string, r = DOT_RADIUS.end) => {
     const { x, y } = skyXY(azimuth, elevation)
     return `<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" stroke="#000" stroke-opacity="0.5" stroke-width="1"/>`
   }
@@ -77,18 +80,21 @@ export function skySvg(track: SkyPoint[], pass: Pass, colors: SkyColors = DEFAUL
   const dots = [
     first ? dot(first.azimuth, first.elevation, colors.rise) : "",
     last ? dot(last.azimuth, last.elevation, colors.set) : "",
-    dot(pass.maxAzimuth, pass.maxElevation, colors.peak, 5),
+    dot(pass.maxAzimuth, pass.maxElevation, colors.peak, DOT_RADIUS.peak),
   ].join("")
 
   // Where it is right now, if the pass is under way: a ring around its place on the path.
-  let current = ""
-  if (now !== undefined && now >= pass.aos && now <= pass.los && track.length) {
-    const near = track.reduce((best, p) => (Math.abs(p.at - now) < Math.abs(best.at - now) ? p : best))
-    const { x, y } = skyXY(near.azimuth, near.elevation)
-    current = `<circle cx="${x}" cy="${y}" r="11" fill="none" stroke="${colors.peak}" stroke-width="2"/>`
-  }
+  const here = nowSpot(track, pass, now)
+  const current = here ? `<circle cx="${here.x}" cy="${here.y}" r="${DOT_RADIUS.now}" fill="none" stroke="${colors.peak}" stroke-width="2"/>` : ""
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SKY_SIZE} ${SKY_SIZE}">${grid}${path}${dots}${head}${current}</svg>`
+}
+
+/// Where the satellite is on the plot at `now`, when the pass is under way; null otherwise.
+export function nowSpot(track: SkyPoint[], pass: Pass, now?: number): { x: number; y: number } | null {
+  if (now === undefined || now < pass.aos || now > pass.los || !track.length) return null
+  const near = track.reduce((best, p) => (Math.abs(p.at - now) < Math.abs(best.at - now) ? p : best))
+  return skyXY(near.azimuth, near.elevation)
 }
 
 /// How far from the peak along the path the arrowhead sits, in plot units: clear of the peak's
@@ -99,7 +105,17 @@ const ARROW_OFFSET = 30
 /// the plot says which end is the rise without anyone reading the colors. A pass that peaks at the
 /// very end has no path past the peak, and the head is put before it instead.
 export function arrowHead(track: SkyPoint[], pass: Pass, color: string): string {
-  if (track.length < 3) return ""
+  const spot = arrowSpot(track, pass)
+  if (!spot) return ""
+  const { p, d } = spot
+  const n = { x: -d.y, y: d.x }
+  const corner = (along: number, across: number) => `${+(p.x + d.x * along + n.x * across).toFixed(1)} ${+(p.y + d.y * along + n.y * across).toFixed(1)}`
+  return `<path d="M${corner(9, 0)}L${corner(-5, 7)}L${corner(-5, -7)}Z" fill="${color}" stroke="#000" stroke-opacity="0.55" stroke-width="1" stroke-linejoin="round"/>`
+}
+
+/// Where the arrowhead goes and which way it points (a unit vector); null when the path is too short for one.
+export function arrowSpot(track: SkyPoint[], pass: Pass): { p: { x: number; y: number }; d: { x: number; y: number } } | null {
+  if (track.length < 3) return null
   const pts = track.map((p) => skyXY(p.azimuth, p.elevation))
   const dist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(b.x - a.x, b.y - a.y)
   const peak = track.reduce((best, p, i) => (Math.abs(p.at - pass.maxElevationAt) < Math.abs(track[best].at - pass.maxElevationAt) ? i : best), 0)
@@ -119,12 +135,8 @@ export function arrowHead(track: SkyPoint[], pass: Pass, color: string): string 
   const from = pts[Math.max(0, at - 1)]
   const to = pts[Math.min(pts.length - 1, at + 1)]
   const length = dist(from, to)
-  if (!length) return ""
-  const d = { x: (to.x - from.x) / length, y: (to.y - from.y) / length }
-  const n = { x: -d.y, y: d.x }
-  const p = pts[at]
-  const corner = (along: number, across: number) => `${+(p.x + d.x * along + n.x * across).toFixed(1)} ${+(p.y + d.y * along + n.y * across).toFixed(1)}`
-  return `<path d="M${corner(9, 0)}L${corner(-5, 7)}L${corner(-5, -7)}Z" fill="${color}" stroke="#000" stroke-opacity="0.55" stroke-width="1" stroke-linejoin="round"/>`
+  if (!length) return null
+  return { p: pts[at], d: { x: (to.x - from.x) / length, y: (to.y - from.y) / length } }
 }
 
 /// N, E, S and W as text layers just outside the rim: SVG text is not a portable text path.

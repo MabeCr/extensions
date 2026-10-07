@@ -10,7 +10,9 @@ import { compass, findPasses, satrecFromOmm } from "./orbit.ts"
 import type { Observer, Pass } from "./orbit.ts"
 import { clock, countdown } from "./passes.ts"
 import { RADIO_LINES, radioLines } from "./radio.ts"
-import { compassLayers, DEFAULT_SKY_COLORS, SKY_SIZE, skySvg, skyTrack, skyXY } from "./sky.ts"
+import { placeLabels } from "./labels.ts"
+import type { Box, Disc } from "./labels.ts"
+import { arrowSpot, compassLayers, DEFAULT_SKY_COLORS, DOT_RADIUS, nowSpot, SKY_SIZE, skySvg, skyTrack, skyXY } from "./sky.ts"
 import type { SkyColors } from "./sky.ts"
 
 export type Tab = "sky" | "radio"
@@ -26,28 +28,47 @@ export interface DetailModel {
   /// The radio page, padded to `RADIO_LINES`.
   radio: string[]
   /// The sky plot, with the compass letters and the times of rise, peak and set written on it.
-  sky: { svg: string; compass: ReturnType<typeof compassLayers>; labels: ReturnType<typeof pointLabel>[] }
+  sky: { svg: string; compass: ReturnType<typeof compassLayers>; labels: ReturnType<typeof placeLabels> }
 }
 
-const LABEL_HEIGHT = 16
-const LABEL_SIZE = 12
+/// The three labels on the plot, each beside its dot and clear of everything else drawn there:
+/// the dots, the ring where the satellite is now, the arrowhead, the compass letters, and each
+/// other. The rise and set go first, being the longer, and so have the most choice of place.
+export function plotLabels(
+  track: ReturnType<typeof skyTrack>,
+  pass: Pass,
+  texts: { rise: string; peak: string; set: string },
+  theme: Theme,
+  now: number | undefined,
+  letters: ReturnType<typeof compassLayers>,
+): ReturnType<typeof placeLabels> {
+  const rise = skyXY(pass.aosAzimuth, 0)
+  const set = skyXY(pass.losAzimuth, 0)
+  const peak = skyXY(pass.maxAzimuth, pass.maxElevation)
 
-/// A short text on the plot beside a point of the sky: to the right of it on the east half,
-/// to the left on the west half, kept inside the plot.
-export function pointLabel(id: string, text: string, azimuth: number, elevation: number, color: string) {
-  const { x, y } = skyXY(azimuth, elevation)
-  const width = Math.ceil(text.length * LABEL_SIZE * 0.62) + 6
-  const east = x >= SKY_SIZE / 2
-  const left = Math.min(Math.max(east ? x + 9 : x - 9 - width, 0), SKY_SIZE - width)
-  const top = Math.min(Math.max(y - LABEL_HEIGHT / 2, 0), SKY_SIZE - LABEL_HEIGHT)
-  return {
-    id,
-    x: left,
-    y: top,
-    width,
-    height: LABEL_HEIGHT,
-    text: { literal: text, size: LABEL_SIZE, color, align: east ? ("start" as const) : ("end" as const), fontWeight: 600 },
-  }
+  const discs: Disc[] = [
+    { ...rise, r: DOT_RADIUS.end },
+    { ...set, r: DOT_RADIUS.end },
+    { ...peak, r: DOT_RADIUS.peak },
+  ]
+  const here = nowSpot(track, pass, now)
+  if (here) discs.push({ ...here, r: DOT_RADIUS.now })
+  const arrow = arrowSpot(track, pass)
+  if (arrow) discs.push({ ...arrow.p, r: DOT_RADIUS.arrow })
+
+  const boxes: Box[] = letters.map((l) => ({ x: l.x, y: l.y, width: l.width, height: l.height }))
+  const placed = placeLabels(
+    [
+      { id: "riseAt", text: texts.rise, ...rise, r: DOT_RADIUS.end, color: theme.sky.rise },
+      { id: "setAt", text: texts.set, ...set, r: DOT_RADIUS.end, color: theme.sky.set },
+      { id: "peakAt", text: texts.peak, ...peak, r: DOT_RADIUS.peak, color: theme.text },
+    ],
+    discs,
+    boxes,
+    SKY_SIZE,
+  )
+  // Placed in order of choice, listed in the order of the pass: rise, peak, set.
+  return ["riseAt", "peakAt", "setAt"].map((id) => placed.find((l) => l.id === id)!)
 }
 
 /// What the plot is drawn in: the host's own colors when it reports them, so the plot
@@ -102,6 +123,7 @@ export function buildDetail(
   const track = satellite.omm ? skyTrack(satrecFromOmm(satellite.omm), observer, pass) : []
   const radio = radioLines(satellite, observer, pass, now)
   while (radio.length < RADIO_LINES) radio.push("")
+  const compassLetters = compassLayers(theme.text)
 
   return {
     title: `${satellite.name} · ${at(pass.aos)}–${at(pass.los)}`,
@@ -116,13 +138,9 @@ export function buildDetail(
     radio,
     sky: {
       svg: skySvg(track, pass, theme.sky, now),
-      compass: compassLayers(theme.text),
+      compass: compassLetters,
       // Written on the plot, so the plot says the key times itself and the lines under it can be few.
-      labels: [
-        pointLabel("riseAt", exact(pass.aos), pass.aosAzimuth, 0, theme.sky.rise),
-        pointLabel("peakAt", deg(pass.maxElevation), pass.maxAzimuth, pass.maxElevation, theme.text),
-        pointLabel("setAt", exact(pass.los), pass.losAzimuth, 0, theme.sky.set),
-      ],
+      labels: plotLabels(track, pass, { rise: exact(pass.aos), peak: deg(pass.maxElevation), set: exact(pass.los) }, theme, now, compassLetters),
     },
   }
 }
