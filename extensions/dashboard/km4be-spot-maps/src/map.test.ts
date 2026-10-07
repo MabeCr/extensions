@@ -6,7 +6,7 @@ import { test } from "node:test"
 
 import { loadExtension } from "./sdkGapTesting.ts"
 import { fit, presetOf, presetView, toScene, WORLD, zoomed } from "./view.ts"
-import { MAX_CLICKABLE, detailsLine, dotHitArea, filterBand, markersSvg, parseSpots, project, spotOptions, summary } from "./spots.ts"
+import { MAX_CLICKABLE, detailsLine, dotHitArea, filterBand, hitSize, pixelsPerUnit, markersSvg, parseSpots, project, spotOptions, summary } from "./spots.ts"
 import type { PotaApiSpot } from "./spots.ts"
 
 const spot = (activator: string, extra: Partial<PotaApiSpot> = {}): PotaApiSpot => ({
@@ -223,8 +223,8 @@ test("zoomed in, the base map is cropped, far dots are dropped and near ones kee
   assert.equal((eu.layers[1].svg.match(/<circle/g) ?? []).length, 1)
   // Europe is centered on 52N 15E, so NEAR's dot is at the middle of the scene.
   const hit = eu.controls.find((c: { id: string }) => c.id === "dot:NEAR")
-  assert.equal(hit.width, 6.4)
-  assert.ok(Math.abs(hit.x + 3.2 - 360) < 1 && Math.abs(hit.y + 3.2 - 142) < 1)
+  assert.equal(hit.width, 6.4) // no environment, so no way to know the screen: the dot itself
+  assert.ok(Math.abs(hit.x + hit.width / 2 - 360) < 1 && Math.abs(hit.y + hit.height / 2 - 142) < 1)
 
   // Zooming from a preset makes the view custom; the region dropdown shows its placeholder.
   assert.equal((await event("zoomIn", "zoomIn")).strings.view, "")
@@ -233,4 +233,89 @@ test("zoomed in, the base map is cropped, far dots are dropped and near ones kee
   assert.equal(world.controls.find((c: { id: string }) => c.id === "zoomOut").disabled, true)
   assert.equal(world.controls.find((c: { id: string }) => c.id === "zoomIn").disabled, false)
   assert.ok(world.controls.length <= 64)
+})
+
+test("click targets grow to a fingertip on a small screen, and stay centered on the dot", async () => {
+  // A phone, 390 x 700: the 720-unit map gets ~374 px, so a unit is about half a pixel.
+  const phone = { width: 390, height: 700 }
+  assert.ok(Math.abs((pixelsPerUnit(phone) ?? 0) - (390 - 16) / 720) < 1e-9)
+  assert.equal(hitSize(phone), 61.6) // 32 px is 61.6 units
+  // A big desktop pane: a unit is over two pixels, so 32 px is a handful of units.
+  assert.equal(hitSize({ width: 1600, height: 900 }), 14.5)
+  // A very small pane is capped, so one target never covers a region of the map.
+  assert.equal(hitSize({ width: 300, height: 600 }), 64)
+  // Unknown or unusable sizes keep the dot's own size.
+  assert.equal(hitSize(undefined), 6.4)
+  assert.equal(hitSize({ width: 0, height: 0 }), 6.4)
+  assert.equal(hitSize({ width: 100, height: 100 }), 6.4)
+
+  const [a] = parseSpots([spot("A1A", { latitude: 0, longitude: 0 })])
+  assert.deepEqual(dotHitArea(a, WORLD, 48), { x: 336, y: 144, width: 48, height: 48 })
+
+  const ext = await loadExtension(() => import("./index.ts"), {
+    hostCalls: { fetch: () => ({ status: 200, body: JSON.stringify([spot("A1A", { latitude: 0, longitude: 0 })]) }) },
+  })
+  const args = { panelKey: "map", instanceId: "pane-5", operation: {}, qsoCount: 0, reason: "", config: {}, environment: { ...phone } }
+  await ext.runHook("panel", "onEvent", { ...args, event: { controlId: "refresh", action: "refresh", phase: "activate", sequence: 0 } }, { ctx: { online: true } })
+  const sc = ((await ext.runHook("panel", "render", args, { ctx: { online: true } })) as { scene: any }).scene
+  const hit = sc.controls.find((c: { id: string }) => c.id === "dot:A1A")
+  assert.equal(hit.width, 61.6)
+  assert.deepEqual([+(hit.x + 30.8).toFixed(1), +(hit.y + 30.8).toFixed(1)], [360, 168])
+})
+
+test("the update interval is a setting: 0 is off, the rest is held to the minimum", async () => {
+  const { refreshSeconds } = await import("./index.ts")
+  assert.equal(refreshSeconds(undefined), 60)
+  assert.equal(refreshSeconds({}), 60)
+  assert.equal(refreshSeconds({ refreshSeconds: 0 }), 0)
+  assert.equal(refreshSeconds({ refreshSeconds: 0.4 }), 0)
+  assert.equal(refreshSeconds({ refreshSeconds: 3 }), 10)
+  assert.equal(refreshSeconds({ refreshSeconds: 45.9 }), 45)
+  assert.equal(refreshSeconds({ refreshSeconds: -5 }), 60)
+  assert.equal(refreshSeconds({ refreshSeconds: "30" as never }), 60)
+})
+
+test("each pane asks the host for its own tick, or none when updates are off", async () => {
+  let fetches = 0
+  const ext = await loadExtension(() => import("./index.ts"), {
+    hostCalls: {
+      fetch: () => {
+        fetches += 1
+        return { status: 200, body: JSON.stringify([spot("A1A")]) }
+      },
+    },
+  })
+  const [descriptor] = (await ext.runHook("panel", "getPanels", {}, { ctx: { online: true } })) as { on?: string[]; form: { key: string }[] }[]
+  assert.equal(descriptor.on, undefined)
+  assert.equal(descriptor.form[0].key, "refreshSeconds")
+
+  const at = (config: Record<string, unknown>, minutes: number, id = "pane-6") =>
+    ext.runHook(
+      "panel",
+      "render",
+      { panelKey: "map", instanceId: id, operation: {}, qsoCount: 0, reason: "", config, clock: { nowMillis: 0, realNowMillis: minutes * 60_000 } },
+      { ctx: { online: true } },
+    ) as Promise<{ triggers: string[]; scene: { strings: Record<string, string> } }>
+
+  // Start from a fetch at minute 1000 so no earlier test's cache is in the way.
+  await ext.runHook(
+    "panel",
+    "onEvent",
+    { panelKey: "map", instanceId: "pane-6", operation: {}, qsoCount: 0, reason: "", config: {}, clock: { nowMillis: 0, realNowMillis: 1000 * 60_000 }, event: { controlId: "refresh", action: "refresh", phase: "activate", sequence: 0 } },
+    { ctx: { online: true } },
+  )
+  const base = fetches
+
+  assert.deepEqual((await at({ refreshSeconds: 90 }, 1000)).triggers, ["tick:90"])
+  assert.deepEqual((await at({}, 1000)).triggers, ["tick:60"])
+  const off = await at({ refreshSeconds: 0 }, 1000)
+  assert.deepEqual(off.triggers, [])
+  assert.match(off.scene.strings.summary, /auto-refresh off$/)
+  assert.equal(fetches, base) // all within the cache
+
+  // Ten minutes on: a pane that updates itself fetches, one that does not keeps what it has.
+  await at({ refreshSeconds: 0 }, 1010)
+  assert.equal(fetches, base)
+  await at({ refreshSeconds: 60 }, 1010)
+  assert.equal(fetches, base + 1)
 })

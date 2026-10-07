@@ -113,11 +113,40 @@ const placed = (s: MapSpot, view: View) => toScene(view, project(s.lat, s.lon))
 export const visibleSpots = (spots: MapSpot[], view: View = WORLD): MapSpot[] =>
   spots.filter((s) => onScreen(placed(s, view), MARKER_RADIUS * 2.2))
 
-/// The click target for a dot: exactly the dot, centered on it.
-export function dotHitArea(spot: MapSpot, view: View = WORLD): { x: number; y: number; width: number; height: number } {
+/// A fingertip: the size, in logical pixels, a click target is made at least.
+export const TOUCH_TARGET_PX = 32
+/// Targets never grow past this many scene units, so one cannot cover a region.
+const MAX_HIT_UNITS = 64
+/// What the pane keeps for its own controls and padding: the artwork gets the rest.
+const CHROME_PX = { width: 16, height: 170 }
+
+/// How many pixels a scene unit is on screen: the 720 x 284 artwork is scaled
+/// to fit what the pane has left for it. Undefined when the pane's size is not
+/// known (a host that does not report it) or leaves the artwork no room.
+export function pixelsPerUnit(pane?: { width: number; height: number }): number | undefined {
+  if (!pane || !(pane.width > 0) || !(pane.height > 0)) return undefined
+  const fitted = Math.min((pane.width - CHROME_PX.width) / MAP_WIDTH, (pane.height - CHROME_PX.height) / MAP_HEIGHT)
+  return fitted > 0 ? fitted : undefined
+}
+
+/// The side of a dot's click target, in scene units. At least the dot, and on
+/// a small screen enough units to come to a fingertip. Just the dot when the
+/// screen is unknown, as before.
+export function hitSize(pane?: { width: number; height: number }): number {
+  const dot = MARKER_RADIUS * 2
+  const scale = pixelsPerUnit(pane)
+  if (!scale) return dot
+  return +Math.min(MAX_HIT_UNITS, Math.max(dot, TOUCH_TARGET_PX / scale)).toFixed(1)
+}
+
+/// The click target for a dot: `size` scene units square, centered on it.
+export function dotHitArea(
+  spot: MapSpot,
+  view: View = WORLD,
+  size: number = MARKER_RADIUS * 2,
+): { x: number; y: number; width: number; height: number } {
   const { x, y } = placed(spot, view)
-  const size = MARKER_RADIUS * 2
-  return { x: +(x - MARKER_RADIUS).toFixed(1), y: +(y - MARKER_RADIUS).toFixed(1), width: size, height: size }
+  return { x: +(x - size / 2).toFixed(1), y: +(y - size / 2).toFixed(1), width: size, height: size }
 }
 
 /// The markers as a self-contained SVG document the size of the scene. Oldest

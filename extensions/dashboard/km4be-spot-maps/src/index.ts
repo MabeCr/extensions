@@ -16,10 +16,10 @@
 // moves by region and zoom steps, each one a round trip to this hook.
 
 import { defineExtension, host } from "@ham2k/extension-sdk"
-import type { HookContext, PanelContent, PanelDescriptor, PanelHook, PanelRenderArgs, PanelSceneEventResult } from "@ham2k/extension-sdk"
+import type { HookContext, JSONValue, PanelContent, PanelDescriptor, PanelHook, PanelRenderArgs, PanelSceneEventResult } from "@ham2k/extension-sdk"
 
 import manifest from "../manifest.json" with { type: "json" }
-import { BANDS, MAX_CLICKABLE, clockUtc, detailsLine, dotHitArea, filterBand, markersSvg, parseSpots, spotOptions, summary, visibleSpots } from "./spots.ts"
+import { BANDS, MAX_CLICKABLE, clockUtc, detailsLine, dotHitArea, filterBand, hitSize, markersSvg, parseSpots, spotOptions, summary, visibleSpots } from "./spots.ts"
 import type { MapSpot, PotaApiSpot } from "./spots.ts"
 import { MAX_ZOOM, MIN_ZOOM, PRESETS, WORLD, presetOf, presetView, windowOf, zoomed } from "./view.ts"
 import type { View } from "./view.ts"
@@ -28,7 +28,19 @@ import { BORDER_PATH, LAND_PATH, MAP_HEIGHT, MAP_WIDTH } from "./world.ts"
 const SPOTS_URL = "https://api.pota.app/spot/activator"
 /// Spots change by the minute, and several triggers can land together.
 const CACHE_MILLIS = 30_000
-const REFRESH_SECONDS = 60
+const DEFAULT_REFRESH_SECONDS = 60
+/// POTA is not asked more often than this; 0 (off) is the only lower setting.
+const MIN_REFRESH_SECONDS = 10
+
+/// The pane's update interval from its settings: 0 turns automatic updates off,
+/// a blank, negative or non-numeric setting is the default, and anything between
+/// is held to the minimum.
+export function refreshSeconds(config: Record<string, JSONValue> | undefined): number {
+  const v = config?.refreshSeconds
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0) return DEFAULT_REFRESH_SECONDS
+  const whole = Math.floor(v)
+  return whole === 0 ? 0 : Math.max(MIN_REFRESH_SECONDS, whole)
+}
 
 /// The world under `view`: the whole map, cropped to the window the view shows
 /// and scaled up by the host to fill the layer. Lines are thinned as the map
@@ -46,9 +58,14 @@ function baseSvg(view: View): string {
 
 let cache: { at: number; spots: MapSpot[] } | undefined
 
-/// `force` is the Refresh button: fetch now, whatever the cache holds.
-async function currentSpots(ctx: HookContext, nowMillis: number, force = false): Promise<{ at: number; spots: MapSpot[] }> {
-  if (cache && !force && nowMillis - cache.at < CACHE_MILLIS) return cache
+/// `force` is the Refresh button: fetch now, whatever the cache holds. With
+/// automatic updates off (`seconds` 0) nothing else fetches once there is
+/// something to draw, so a resize or a return to the tab keeps what is shown.
+/// Otherwise a spot list is reused for half the interval, at most 30 seconds,
+/// so a tick never lands on a list one tick old.
+async function currentSpots(ctx: HookContext, nowMillis: number, seconds: number, force = false): Promise<{ at: number; spots: MapSpot[] }> {
+  const maxAge = seconds === 0 ? Infinity : Math.min(CACHE_MILLIS, seconds * 500)
+  if (cache && !force && nowMillis - cache.at < maxAge) return cache
   // Offline, or the feed is down: keep drawing the last map rather than a blank one.
   if (ctx.online) {
     try {
@@ -82,7 +99,8 @@ const nowMillis = (args: PanelRenderArgs) => args.clock?.realNowMillis ?? Date.n
 /// and an event answer from the same place.
 async function snapshot(args: PanelRenderArgs, ctx: HookContext, force = false) {
   const now = nowMillis(args)
-  const feed = await currentSpots(ctx, now, force)
+  const seconds = refreshSeconds(args.config)
+  const feed = await currentSpots(ctx, now, seconds, force)
   const state = paneState(args)
   const shown = filterBand(feed.spots, state.band)
   const options = spotOptions(shown)
@@ -99,7 +117,7 @@ async function snapshot(args: PanelRenderArgs, ctx: HookContext, force = false) 
       band: state.band,
       spot: state.selected,
       view: presetOf(state.view),
-      summary: summary(shown.length, feed.spots.length, state.band) + updated,
+      summary: summary(shown.length, feed.spots.length, state.band) + updated + (seconds === 0 ? " · auto-refresh off" : ""),
       details: detailsLine(chosen, now),
     },
   }
@@ -113,16 +131,31 @@ export const SpotMapPanel: PanelHook = {
         title: "KM4BE POTA Spot Map",
         description: "A map of the activators currently spotted on POTA, colored by band",
         icon: "map-marker-radius",
-        on: [`tick:${REFRESH_SECONDS}`],
+        // No `on` here: how often to update is the pane's own setting, so each
+        // render names its tick (below). With no tick the pane renders once, when
+        // it appears, and then on a resize, an event or the Refresh button.
+        form: [
+          {
+            type: "field",
+            key: "refreshSeconds",
+            fieldType: "number",
+            label: "Update interval (seconds)",
+            description: `How often the map fetches new spots. 0 turns automatic updates off, and the Refresh button is then the only way to update. Otherwise at least ${MIN_REFRESH_SECONDS}. Default ${DEFAULT_REFRESH_SECONDS}.`,
+          },
+        ],
       },
     ]
   },
 
   async render(args: PanelRenderArgs, ctx: HookContext): Promise<PanelContent> {
     const { shown, options, state, strings } = await snapshot(args, ctx)
+    // A dot is a few pixels on a phone; its click target is made a fingertip wide.
+    const target = hitSize(args.environment)
 
+    const seconds = refreshSeconds(args.config)
     return {
       kind: "scene",
+      triggers: seconds > 0 ? [`tick:${seconds}`] : [],
       scene: {
         version: 1,
         width: MAP_WIDTH,
@@ -157,7 +190,7 @@ export const SpotMapPanel: PanelHook = {
           { id: "refresh", kind: "nativeButton", label: "Refresh", icon: "refresh", variant: "tonal", event: "refresh" },
           { id: "summary", kind: "nativeText", label: "Activators shown", value: "summary", align: "start" },
           { id: "details", kind: "nativeText", label: "Selected station", value: "details", align: "start" },
-          // A click target the size of each dot, oldest first so the newest sits on top.
+          // A click target for each dot, oldest first so the newest sits on top.
           ...visibleSpots(shown, state.view)
             .slice(0, MAX_CLICKABLE)
             .reverse()
@@ -166,7 +199,7 @@ export const SpotMapPanel: PanelHook = {
               kind: "button" as const,
               label: `${s.call} ${s.band} ${s.ref}`.trim(),
               event: "pick",
-              ...dotHitArea(s, state.view),
+              ...dotHitArea(s, state.view, target),
             })),
         ],
         layout: {
