@@ -11,7 +11,8 @@ live here rather than being bundled into HaLo:
   calls to an extension that does not, and names the claim at install.
 
 `km4be-fuzzy-search` is a markdown panel: type part of a callsign and it lists
-the stations in the current operation's log that contain it. It is view only,
+the stations in the current operation's log that contain it, as a table with one row each, with
+the matching letters in bold. It is view only,
 since a panel cannot write to the call field, and it searches one operation,
 since the SDK reads the log per operation. Its keys follow the same
 `<callsign>-<name>` convention, so it needs no `--force-name` and can be

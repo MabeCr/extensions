@@ -5,6 +5,11 @@
 // station in the operation's log whose call contains it: "be" finds KM4BE,
 // W8ABE and VE3BEP.
 //
+// Drawn as markdown (see markdown.ts): one line to a station, the letters that
+// matched in bold. The host scrolls and themes it, and it renders everywhere.
+// An HTML panel would underline them, but the host did not re-render it as the
+// call was typed.
+//
 // VIEW ONLY. A panel cannot write to the call field: `setCallField` is a
 // `CommandAction`, and only a `command` hook can return one — a panel's
 // `onEvent` answers with scene values and strings. So the pane shows what
@@ -18,9 +23,10 @@ import { defineExtension } from "@ham2k/extension-sdk"
 import type { HookContext, JSONValue, PanelContent, PanelDescriptor, PanelHook, PanelRenderArgs } from "@ham2k/extension-sdk"
 
 import manifest from "../manifest.json" with { type: "json" }
+import { messageMarkdown, resultsMarkdown } from "./markdown.ts"
 
 const DEFAULT_MIN_LETTERS = 2
-const DEFAULT_MAX_RESULTS = 15
+const DEFAULT_MAX_RESULTS = 50
 
 type Qso = Record<string, JSONValue>
 
@@ -78,18 +84,6 @@ export function searchQsos(qsos: Qso[], partial: string, max: number): Match[] {
   return [...byCall.values()].sort((a, b) => b.millis - a.millis || a.call.localeCompare(b.call)).slice(0, max)
 }
 
-const cell = (s: string) => s.replace(/\|/g, "\\|").replace(/\n/g, " ") || "—"
-
-function date(millis: number): string {
-  return millis ? new Date(millis).toISOString().slice(0, 10) : "—"
-}
-
-export function renderMatches(matches: Match[], partial: string): string {
-  if (!matches.length) return `_No logged callsign contains **${partial}**._`
-  const rows = matches.map((m) => `| **${m.call}** | ${date(m.millis)} | ${cell(m.name)} | ${cell(m.band)} | ${cell(m.mode)} |`)
-  return ["| Callsign | Date | Name | Band | Mode |", "|---|---|---|---|---|", ...rows].join("\n")
-}
-
 const count = (v: JSONValue | undefined, fallback: number): number =>
   typeof v === "number" && Number.isFinite(v) && v >= 1 ? Math.floor(v) : fallback
 
@@ -98,8 +92,8 @@ export const FuzzySearchPanel: PanelHook = {
     return [
       {
         key: "search",
-        title: "Callsign Search",
-        description: "Logged callsigns containing what you are typing",
+        title: "KM4BE Callsign Search",
+        description: "Previously logged callsigns containing what you are typing",
         icon: "text-search",
         // The draft is what carries the typed call, and the panel is useless
         // without it, so it is declared here rather than per render.
@@ -117,7 +111,7 @@ export const FuzzySearchPanel: PanelHook = {
             key: "maxResults",
             fieldType: "number",
             label: "Most results",
-            description: `The longest the list gets. Default ${DEFAULT_MAX_RESULTS}.`,
+            description: `The longest the list gets; it scrolls. Default ${DEFAULT_MAX_RESULTS}.`,
           },
         ],
       },
@@ -130,12 +124,16 @@ export const FuzzySearchPanel: PanelHook = {
     const partial = typedPartial(args.qso)
 
     if (partial.length < minLetters) {
-      return { kind: "markdown", content: `_Type at least ${minLetters} letters of a callsign._` }
+      return { kind: "markdown", content: messageMarkdown(`Type at least ${minLetters} letters of a callsign.`) }
     }
 
     const uuid = str(args.operation?.uuid)
     const qsos = (uuid && (await ctx.getQsos?.(uuid))) || []
-    return { kind: "markdown", content: renderMatches(searchQsos(qsos, partial, maxResults), partial) }
+    const all = searchQsos(qsos, partial, Infinity)
+
+    if (!all.length) return { kind: "markdown", content: messageMarkdown(`No logged callsign contains ${partial}.`) }
+    const shown = all.slice(0, maxResults)
+    return { kind: "markdown", content: resultsMarkdown(shown, partial, all.length - shown.length) }
   },
 }
 
