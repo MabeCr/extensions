@@ -28,9 +28,9 @@ import type { Place } from "./location.ts"
 import { clock, minElevation, passCells, table, upcomingPasses } from "./passes.ts"
 import type { SatellitePass } from "./passes.ts"
 import { linksFor } from "./radio.ts"
-import { GLYPH, LEGEND, NO_GLYPH, statusFor, statusHours, statusLines } from "./status.ts"
+import { GLYPH, LEGEND, LEGEND_COMPACT, NO_GLYPH, statusFor, statusHours, statusLines } from "./status.ts"
 import type { StatusRow } from "./status.ts"
-import { PAGE_SIZE, buildDetailScene, buildScene, detailStrings, detailValues, passOfOpen, satelliteOfStar, stringsOf, valuesOf } from "./scene.ts"
+import { PAGE_SIZE, buildDetailScene, buildScene, detailStrings, detailValues, isCompact, passOfOpen, satelliteOfStar, stringsOf, valuesOf } from "./scene.ts"
 import type { Mode, Model } from "./scene.ts"
 
 const REFRESH_SECONDS = 60
@@ -58,8 +58,9 @@ const nowMillis = (args: PanelRenderArgs): number => args.clock?.realNowMillis ?
 /// Whether the pane counts down to rise, peak and set. Off unless the setting is on.
 const countdownOn = (config: Record<string, unknown> | undefined): boolean => config?.countdown === true
 
-const empty = (header: string, state: PaneState): Model => ({
+const empty = (header: string, state: PaneState, compact = false): Model => ({
   header,
+  compact,
   hint: "",
   mode: state.mode,
   utc: state.utc,
@@ -103,7 +104,7 @@ const glyphFor = (r: Ready, satellite: Satellite): string => {
   return status ? GLYPH[status.kind] : NO_GLYPH
 }
 
-function listModel(r: Ready, state: PaneState, now: number, seconds: boolean): Model {
+function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, compact: boolean): Model {
   // With nobody followed, Favorites would be an empty page; show everything and say how to change that.
   const followed = r.favorites.length > 0
   const showing = state.mode === "all" || !followed ? r.passes : r.passes.filter((p) => r.favorites.includes(p.satellite.name))
@@ -112,7 +113,12 @@ function listModel(r: Ready, state: PaneState, now: number, seconds: boolean): M
   const first = state.page * PAGE_SIZE
   const page = showing.slice(first, first + PAGE_SIZE)
   // The mark ends the line, where a mark drawn wider than one character in some font cannot push the columns out of line.
-  const { columns, lines } = table(page.map((p) => passCells(p, now, state.utc, seconds, glyphFor(r, p.satellite))))
+  // On a phone each line has to fit, or it wraps and the row is twice as tall: a single space between columns, and days
+  // after today as +1 and not as a date.
+  const { columns, lines } = table(
+    page.map((p) => passCells(p, now, state.utc, seconds, glyphFor(r, p.satellite), compact)),
+    compact ? " " : "  ",
+  )
   const rows = page.map((p, i) => ({
     name: p.satellite.name,
     favorite: r.favorites.includes(p.satellite.name),
@@ -125,7 +131,9 @@ function listModel(r: Ready, state: PaneState, now: number, seconds: boolean): M
   if (showing.length) {
     hint =
       state.mode === "favorites" && !followed
-        ? "No favorites yet, so every satellite is shown. Tap a star to follow one."
+        ? compact
+          ? "No favorites yet: all are shown. Tap a star."
+          : "No favorites yet, so every satellite is shown. Tap a star to follow one."
         : `Orbits from CelesTrak, ${clock(r.elementsAt, now, state.utc)}.`
   }
 
@@ -139,7 +147,8 @@ function listModel(r: Ready, state: PaneState, now: number, seconds: boolean): M
     range: showing.length ? `${first + 1}–${first + rows.length} of ${showing.length}` : "",
     // Under the list, where it explains the marks without being read before the passes are.
     columns: showing.length ? columns : "",
-    legend: showing.length ? LEGEND : "",
+    legend: showing.length ? (compact ? LEGEND_COMPACT : LEGEND) : "",
+    compact,
     rows,
   }
 }
@@ -151,7 +160,7 @@ async function snapshot(args: PanelRenderArgs, ctx: HookContext): Promise<View> 
   const state = paneState(args)
   const now = nowMillis(args)
   const ready = await gather(args, ctx)
-  if (typeof ready === "string") return { kind: "list", model: empty(ready, state) }
+  if (typeof ready === "string") return { kind: "list", model: empty(ready, state, isCompact(args.config, args.environment)) }
 
   if (state.view === "detail" && state.detail) {
     const { name, los, tab } = state.detail
@@ -166,11 +175,11 @@ async function snapshot(args: PanelRenderArgs, ctx: HookContext): Promise<View> 
           tab,
           themeOf(args.environment?.colors),
           statusLines(statusFor(ready.reports, pass.satellite), ready.hours, now, state.utc),
-          { countdown: countdownOn(args.config) },
+          { countdown: countdownOn(args.config), compact: isCompact(args.config, args.environment) },
         ) }
     state.view = "list" // it has ended, or the settings no longer list it
   }
-  return { kind: "list", model: listModel(ready, state, now, args.config?.listSeconds === true) }
+  return { kind: "list", model: listModel(ready, state, now, args.config?.listSeconds === true, isCompact(args.config, args.environment)) }
 }
 
 const patchOf = (view: View): PanelSceneEventResult =>
@@ -208,6 +217,18 @@ export const PassesPanel: PanelHook = {
             description: "How far back operators' status reports count. 1 to 168; default 24.",
           },
           { type: "field", key: "utc", fieldType: "checkbox", label: "Start with times in UTC" },
+          {
+            type: "field",
+            key: "density",
+            fieldType: "select",
+            label: "Spacing",
+            description: "Automatic packs the list more tightly in a small pane, such as a phone, and leaves a larger one as it is.",
+            options: [
+              { label: "Automatic", value: "auto" },
+              { label: "Comfortable", value: "comfortable" },
+              { label: "Compact", value: "compact" },
+            ],
+          },
           { type: "field", key: "listSeconds", fieldType: "checkbox", label: "Show seconds in the pass list" },
           {
             type: "field",

@@ -114,4 +114,7 @@ export function statusHours(config: Record<string, unknown> | undefined): number
 }
 
 /// Under the list, to say what the `Rpt` column's marks are.
+/// The same, short enough to stay on one line of a phone.
+export const LEGEND_COMPACT = `Rpt: ${GLYPH.heard} heard ${GLYPH.telemetry} telemetry ${GLYPH.notHeard} not heard`
+
 export const LEGEND = `Rpt: ${GLYPH.heard} heard · ${GLYPH.telemetry} telemetry only · ${GLYPH.notHeard} not heard (AMSAT reports)`

@@ -19,6 +19,37 @@ export const PAGE_SIZE = 5
 
 export type Mode = "favorites" | "all"
 
+/// The spacing of a scene, in logical pixels. The comfortable one is what the panel has always had
+/// and is what a desktop pane gets. The compact one is for a small pane, where every row of the
+/// list costs a thumb's reach of screen: tighter gaps, the buttons beside a row no taller than the
+/// row, and narrower, so the text between them has the width of a phone.
+export interface Density {
+  /// The scene's padding all round.
+  padding: number
+  /// The gap between the lines of the scene, and the pager's and the headings' own.
+  gap: number
+  /// The gap inside a row, between a button and its text.
+  rowGap: number
+  /// The width of the star and open buttons, which is also the back button's.
+  button: number
+  /// A row's height; undefined leaves it to the buttons.
+  rowHeight?: number
+}
+
+export const COMFORTABLE: Density = { padding: 12, gap: 8, rowGap: 4, button: 56 }
+export const COMPACT: Density = { padding: 8, gap: 3, rowGap: 2, button: 44, rowHeight: 40 }
+
+/// Which spacing a pane gets: what the `density` setting says, and for `auto`, compact when the pane is
+/// narrower than a phone held upright is wide or shorter than a phone on its side, and
+/// comfortable when it is not, or when the host does not say how big it is.
+export function isCompact(config: Record<string, unknown> | undefined, pane: { width: number; height: number } | undefined): boolean {
+  if (config?.density === "compact") return true
+  if (config?.density === "comfortable") return false
+  return !!pane && pane.width > 0 && pane.height > 0 && (pane.width < 480 || pane.height < 520)
+}
+
+const densityOf = (compact: boolean): Density => (compact ? COMPACT : COMFORTABLE)
+
 export interface Row {
   /// The satellite, as the catalog names it.
   name: string
@@ -44,6 +75,8 @@ export interface Model {
   columns: string
   /// What the marks at the end of the rows mean, under the list; "" when there are no rows.
   legend: string
+  /// Whether the scene is laid out tightly, for a small pane.
+  compact: boolean
   rows: Row[]
 }
 
@@ -146,19 +179,21 @@ export function buildScene(m: Model): PanelScene {
     { id: "legend", kind: "nativeText", label: "What the marks mean", value: "legend", style: "label" },
   )
 
+  const d = densityOf(m.compact)
   const column: PanelSceneLayoutNode[] = [
-    { row: [{ control: "mode", flex: 1 }, { control: "utc" }], spacing: 8, crossAxisAlignment: "center" },
+    { row: [{ control: "mode", flex: 1 }, { control: "utc" }], spacing: d.gap, crossAxisAlignment: "center" },
     { control: "header" },
     { control: "hint" },
     // Indented past the star button and its gap, to stand over the text of the rows.
-    { control: "columns", padding: [60, 0, 60, 0] },
+    { control: "columns", padding: [d.button + d.rowGap, 0, d.button + d.rowGap, 0] },
     ...rows.map((row, i): PanelSceneLayoutNode => ({
-      row: [{ control: starId(row.name, i), width: 56 }, { control: rowKey(i), flex: 1 }, { control: openId(row.name, row.los, i), width: 56 }],
-      spacing: 4,
+      row: [{ control: starId(row.name, i), width: d.button }, { control: rowKey(i), flex: 1 }, { control: openId(row.name, row.los, i), width: d.button }],
+      spacing: d.rowGap,
       crossAxisAlignment: "center",
+      ...(d.rowHeight ? { height: d.rowHeight } : {}),
     })),
     { spacer: 1 },
-    { row: [{ control: "prev" }, { control: "range", flex: 1 }, { control: "next" }], spacing: 8, crossAxisAlignment: "center" },
+    { row: [{ control: "prev" }, { control: "range", flex: 1 }, { control: "next" }], spacing: d.gap, crossAxisAlignment: "center", ...(d.rowHeight ? { height: d.rowHeight } : {}) },
     { control: "legend" },
   ]
 
@@ -171,7 +206,7 @@ export function buildScene(m: Model): PanelScene {
     strings: stringsOf(m),
     layers: [],
     controls,
-    layout: { column, padding: 12, spacing: 8, crossAxisAlignment: "stretch" },
+    layout: { column, padding: d.padding, spacing: d.gap, crossAxisAlignment: "stretch" },
   }
 }
 
@@ -215,9 +250,10 @@ export function buildDetailScene(d: DetailModel): PanelScene {
     },
     { id: "utc", kind: "nativeSwitch", label: "UTC", value: "utc", event: "utc" },
   ]
+  const dense = densityOf(d.compact)
   const head: PanelSceneLayoutNode[] = [
-    { row: [{ control: "back", width: 56 }, { control: "title", flex: 1 }], spacing: 4, crossAxisAlignment: "center" },
-    { row: [{ control: "tab", flex: 1 }, { control: "utc" }], spacing: 8, crossAxisAlignment: "center" },
+    { row: [{ control: "back", width: dense.button }, { control: "title", flex: 1 }], spacing: dense.rowGap, crossAxisAlignment: "center" },
+    { row: [{ control: "tab", flex: 1 }, { control: "utc" }], spacing: dense.gap, crossAxisAlignment: "center" },
   ]
 
   if (d.tab === "sky") {
@@ -232,8 +268,8 @@ export function buildDetailScene(d: DetailModel): PanelScene {
       controls,
       layout: {
         column: [...head, { scene: true, flex: 1 }, ...d.times.map((_, i): PanelSceneLayoutNode => ({ control: timeKey(i) }))],
-        padding: 12,
-        spacing: 8,
+        padding: dense.padding,
+        spacing: dense.gap,
         crossAxisAlignment: "stretch",
       },
     }
@@ -258,8 +294,8 @@ export function buildDetailScene(d: DetailModel): PanelScene {
         { spacer: 1 },
         { control: "links" },
       ],
-      padding: 12,
-      spacing: 4,
+      padding: dense.padding,
+      spacing: d.compact ? dense.rowGap : 4,
       crossAxisAlignment: "stretch",
     },
   }

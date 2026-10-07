@@ -84,7 +84,7 @@ test("the panel is a scene of native controls, with its settings and a minute's 
   const p = await panel()
   const d = await p.descriptor()
   assert.deepEqual(d.on, ["tick:60"])
-  assert.deepEqual(d.form.map((f) => f.key), ["minElevation", "grid", "statusHours", "utc", "listSeconds", "countdown"])
+  assert.deepEqual(d.form.map((f) => f.key), ["minElevation", "grid", "statusHours", "utc", "density", "listSeconds", "countdown"])
   const { kind, scene } = await p.render(cfg, t0)
   assert.equal(kind, "scene")
   assert.equal(scene.layers.length, 0, "no artwork")

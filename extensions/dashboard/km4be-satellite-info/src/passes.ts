@@ -35,14 +35,21 @@ export function nextPasses(satellites: Satellite[], observer: Observer, now: num
 const two = (n: number) => String(n).padStart(2, "0")
 
 /// A clock time, with the date when it is not today. Local time, or UTC with a `Z`. With
-/// `seconds`, to the nearest second (`14:05:12`); without, the minute it falls in (`14:05`).
-export function clock(millis: number, now: number, utc: boolean, seconds = false): string {
+/// `seconds`, to the nearest second (`14:05:12`); without, the minute it falls in (`14:05`). With
+/// `short`, a day other than today is a count of days after it (`14:05Z+1`) and not a date
+/// (`10-08 14:05Z`), which is five characters fewer.
+export function clock(millis: number, now: number, utc: boolean, seconds = false, short = false): string {
   const d = new Date(seconds ? Math.round(millis / 1000) * 1000 : millis)
   const n = new Date(now)
   const [h, m, s, day, today, month] = utc
     ? [d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCDate(), n.getUTCDate(), d.getUTCMonth() + 1]
     : [d.getHours(), d.getMinutes(), d.getSeconds(), d.getDate(), n.getDate(), d.getMonth() + 1]
-  return `${day === today ? "" : `${two(month)}-${two(day)} `}${two(h)}:${two(m)}${seconds ? `:${two(s)}` : ""}${utc ? "Z" : ""}`
+  const time = `${two(h)}:${two(m)}${seconds ? `:${two(s)}` : ""}${utc ? "Z" : ""}`
+  if (day === today) return time
+  if (!short) return `${two(month)}-${two(day)} ${time}`
+  const calendar = (x: Date) => (utc ? Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate()) : Date.UTC(x.getFullYear(), x.getMonth(), x.getDate()))
+  const days = Math.round((calendar(d) - calendar(n)) / 86_400_000)
+  return `${time}${days >= 0 ? "+" : "-"}${Math.abs(days)}`
 }
 
 /// Time to or since an event: `−4:12` before it, `+2:05` after (`−1:04:12` over an hour), the
@@ -110,10 +117,10 @@ export interface Cells {
 /// The titles over the columns, in the order of the cells.
 export const TITLES: Cells = { name: "Sat", start: "Start", max: "Max", path: "Path", length: "Len", mark: "Rpt" }
 
-export function passCells(pass: SatellitePass, now: number, utc: boolean, seconds: boolean, mark: string): Cells {
+export function passCells(pass: SatellitePass, now: number, utc: boolean, seconds: boolean, mark: string, compact = false): Cells {
   return {
     name: pass.satellite.name,
-    start: pass.aos <= now ? "now" : clock(pass.aos, now, utc, seconds),
+    start: pass.aos <= now ? "now" : clock(pass.aos, now, utc, seconds, compact),
     max: `${Math.round(pass.maxElevation)}°`,
     path: `${compass(pass.aosAzimuth)}→${compass(pass.losAzimuth)}`,
     length: `${Math.round((pass.los - pass.aos) / 60_000)}m`,
@@ -121,12 +128,12 @@ export function passCells(pass: SatellitePass, now: number, utc: boolean, second
   }
 }
 
-const GAP = "  "
-
 /// A page of passes as lines in columns, with the titles over them. The text is set in a
 /// monospaced face, so padding is what lines the columns up: names, times and paths to the
-/// left, the numbers to the right. Each column is as wide as its widest cell or its title.
-export function table(rows: Cells[]): { columns: string; lines: string[] } {
+/// left, the numbers to the right. Each column is as wide as its widest cell or its title, and
+/// they are `gap` apart: two spaces, or one where a line has to fit a phone.
+export function table(rows: Cells[], gap = "  "): { columns: string; lines: string[] } {
+  const GAP = gap
   const width = (key: keyof Cells) => Math.max(TITLES[key].length, ...rows.map((r) => r[key].length))
   const w = { name: width("name"), start: width("start"), max: width("max"), path: width("path"), length: width("length") }
   const line = (c: Cells) =>

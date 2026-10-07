@@ -31,6 +31,8 @@ export interface DetailModel {
   radio: string[]
   /// Whether the satellite is above the horizon right now, and so on the plot as well as in its path.
   underWay: boolean
+  /// Whether the scene is laid out tightly, for a small pane.
+  compact: boolean
   /// The sky plot, with the compass letters, the times of rise, peak and set, and, while it is
   /// under way, the satellite's elevation and the Doppler shift written on it.
   sky: {
@@ -149,7 +151,7 @@ export function buildDetail(
   tab: Tab,
   theme: Theme = DEFAULT_THEME,
   status: string[] = ["", ""],
-  options: { countdown?: boolean } = {},
+  options: { countdown?: boolean; compact?: boolean } = {},
 ): DetailModel {
   const pass = completePass(satellite, observer, listed, now)
   const at = (t: number) => clock(t, pass.aos, utc)
@@ -179,6 +181,7 @@ export function buildDetail(
     status,
     radio,
     underWay,
+    compact: options.compact === true,
     sky: {
       svg: skySvg(track, pass, theme.sky, now, here ?? undefined),
       compass: compassLetters,
