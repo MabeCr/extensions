@@ -10,7 +10,15 @@ live here rather than being bundled into HaLo:
   Its manifest declares `requiresRadioWrite`: the host refuses the radio
   calls to an extension that does not, and names the claim at install.
 
-All three are published to the extension catalog at
+`km4be-fuzzy-search` is a markdown panel: type part of a callsign and it lists
+the stations in the current operation's log that contain it, as a table with one row each, with
+the matching letters in bold. It is view only,
+since a panel cannot write to the call field, and it searches one operation,
+since the SDK reads the log per operation. Its keys follow the same
+`<callsign>-<name>` convention, so it needs no `--force-name` and can be
+side-loaded for testing.
+
+All three SVG panels are published to the extension catalog at
 [catalog.ham2k.net](https://catalog.ham2k.net). Their keys follow the
 `<callsign>-<name>` convention, so a packed `.h2kext` also installs from a file
 like any other extension; manage them under Features & Extensions. They need

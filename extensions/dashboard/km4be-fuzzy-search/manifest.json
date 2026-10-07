@@ -1,0 +1,31 @@
+{
+  "key": "km4be-fuzzy-search",
+  "name": "KM4BE Fuzzy Callsign Search",
+  "shortName": "Search",
+  "version": "0.1.0",
+  "api": 1,
+  "description": "Type part of a callsign and see the stations already in your log that contain it",
+  "category": "dashboard",
+  "icon": "text-search",
+  "keywords": [
+    "callsign",
+    "search",
+    "fuzzy",
+    "partial",
+    "dashboard",
+    "panel"
+  ],
+  "hooks": [
+    "panel"
+  ],
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  }
+}

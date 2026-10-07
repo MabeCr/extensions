@@ -20,7 +20,7 @@ app-polo's `qp` extension carried inside it, and an APRS position beacon.
 
 ## What is here
 
-99 extensions, grouped by the manifest's own `category`:
+100 extensions, grouped by the manifest's own `category`:
 
 | directory | manifest `category` | n | of which |
 |---|---|--:|---|
@@ -28,12 +28,12 @@ app-polo's `qp` extension carried inside it, and an APRS position beacon.
 | `extensions/contests/` | `contest` | 68 | 14 ported built-ins, 49 QSO party events, 5 park events |
 | `extensions/lookups/` | `lookup` | 5 | 5 ported built-ins |
 | `extensions/spots/` | `spots` | 3 | 1 ported built-in, 2 new spotting sources |
-| `extensions/dashboard/` | `dashboard` | 4 | 1 ported built-in, 3 SVG reference panels |
-| **total** | | **99** | **39 ported, 57 new, 3 SVG reference panels** |
+| `extensions/dashboard/` | `dashboard` | 5 | 1 ported built-in, 3 SVG reference panels, 1 new panel |
+| **total** | | **100** | **39 ported, 58 new, 3 SVG reference panels** |
 
-The 39 are the app's own extensions, ported one for one. The 57 are new: events
+The 39 are the app's own extensions, ported one for one. The 58 are new: events
 the app has never shipped separately, five state-park events, two spotting
-sources, and one award program:
+sources, one award program, and one dashboard panel:
 
 - **`ham2k-hota`** — [History on the Air](https://cqhota.app), historic sites
   over 200 years old, written for the catalog from cqhota.app's own
