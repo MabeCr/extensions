@@ -16,7 +16,8 @@ import { frameAt } from "./behavior.ts"
 import { countContacts, observe, pet } from "./progress.ts"
 import { buildScene } from "./scene.ts"
 import type { Weather } from "./props.ts"
-import { words } from "./words.ts"
+import { SPECIES_LABEL, SPECIES } from "./sprites.ts"
+import { speciesFor, words } from "./words.ts"
 
 const nowMillis = (args: PanelRenderArgs): number => args.clock?.realNowMillis ?? Date.now()
 
@@ -46,6 +47,16 @@ export const PotagotchiPanel: PanelHook = {
         icon: "paw",
         // Every second, so it can move; and at once when a contact is logged, so it can react.
         on: ["operation", "qsoLogged", "tick:1"],
+        form: [
+          {
+            type: "field",
+            key: "friend",
+            fieldType: "select",
+            label: "Friend",
+            description: "Which friend to have. Left to chance, each operation gets its own, and keeps it.",
+            options: [{ label: "Surprise me", value: "random" }, ...SPECIES.map((s) => ({ label: SPECIES_LABEL[s], value: s }))],
+          },
+        ],
       },
     ]
   },
@@ -55,8 +66,9 @@ export const PotagotchiPanel: PanelHook = {
     const uuid = uuidOf(args)
     const count = await countContacts(ctx, uuid, args.qsoCount)
     const reaction = await observe(uuid, count, now)
-    const frame = frameAt(count, reaction, now)
-    return { kind: "scene", scene: buildScene(frame, count, weatherOf(args), words(uuid, count, parksOf(args.operation))) }
+    const species = speciesFor(uuid, args.config?.friend)
+    const frame = frameAt(count, reaction, now, species)
+    return { kind: "scene", scene: buildScene(frame, count, weatherOf(args), words(uuid, count, parksOf(args.operation), species)) }
   },
 
   async onEvent(args, _ctx): Promise<PanelSceneEventResult> {

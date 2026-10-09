@@ -11,8 +11,8 @@
 
 import { GROUND_Y, SCENE_WIDTH } from "./props.ts"
 import type { Food } from "./props.ts"
-import type { Face, Stage } from "./sprites.ts"
-import { SPRITE_SIZE } from "./sprites.ts"
+import type { Face, Species, Stage } from "./sprites.ts"
+import { kindOf } from "./sprites.ts"
 
 export type ReactionKind = "treat" | "evolve" | "fireworks" | "backflip" | "dance" | "confetti" | "pet"
 
@@ -44,9 +44,6 @@ export function scaleOf(stage: Stage, count: number): number {
   return stage === 0 ? 3.6 + 0.2 * Math.min(count, 9) : 6.4 + 0.01 * Math.min(Math.max(count - ACTIVATION, 0), 80)
 }
 
-/// How far down its sprite the mouth is, as a fraction.
-const MOUTH = { 0: 11.5 / 15, 1: 10.5 / 19 } as const
-
 export type Fx =
   | { kind: "heart"; x: number; y: number }
   | { kind: "sparkle"; x: number; y: number }
@@ -55,6 +52,8 @@ export type Fx =
   | { kind: "confetti"; step: number }
 
 export interface Frame {
+  /// Which friend it is.
+  species: Species
   /// The stage drawn, which is the creature's own except while it flashes from one to the other.
   stage: Stage
   scale: number
@@ -77,28 +76,29 @@ export interface Frame {
 }
 
 /// The sprite's size on the scene, and its top left when it stands in the middle at rest.
-export function box(stage: Stage, scale: number): { width: number; height: number; x: number; y: number } {
-  const width = SPRITE_SIZE[stage].width * scale
-  const height = SPRITE_SIZE[stage].height * scale
+export function box(stage: Stage, scale: number, species: Species = "sprout"): { width: number; height: number; x: number; y: number } {
+  const width = kindOf(species, stage).width * scale
+  const height = kindOf(species, stage).height * scale
   return { width, height, x: SCENE_WIDTH / 2 - width / 2, y: GROUND_Y - height }
 }
 
 /// Where its mouth is, at rest.
-export function mouth(stage: Stage, scale: number): { x: number; y: number } {
-  const b = box(stage, scale)
-  return { x: SCENE_WIDTH / 2, y: b.y + b.height * MOUTH[stage] }
+export function mouth(stage: Stage, scale: number, species: Species = "sprout"): { x: number; y: number } {
+  const b = box(stage, scale, species)
+  const at = kindOf(species, stage).mouth
+  return { x: b.x + b.width * at.x, y: b.y + b.height * at.y }
 }
 
-function base(count: number): Frame {
+function base(count: number, species: Species): Frame {
   const stage = stageOf(count)
-  return { stage, scale: scaleOf(stage, count), face: "open", cheer: false, flip: false, upsideDown: false, flash: null, dx: 0, dy: 0, food: null, fx: [], dark: false }
+  return { species, stage, scale: scaleOf(stage, count), face: "open", cheer: false, flip: false, upsideDown: false, flash: null, dx: 0, dy: 0, food: null, fx: [], dark: false }
 }
 
 /// What it does when nothing is happening, which is more as it has had more contacts: it blinks and looks around
 /// from the start, hops from the third contact, walks about from the sixth (the critter always does), and the critter
 /// waves now and then. From twenty it is sometimes caught gazing at the sky.
-export function idle(count: number, now: number): Frame {
-  const f = base(count)
+export function idle(count: number, now: number, species: Species = "sprout"): Frame {
+  const f = base(count, species)
   const t = Math.floor(now / 1000)
   if (t % 7 === 6) f.face = "blink"
   else if (count >= 1 && (t % 11 === 3 || t % 11 === 4)) f.face = "left"
@@ -112,7 +112,7 @@ export function idle(count: number, now: number): Frame {
     const range = f.stage === 1 ? 44 : 18
     f.dx = Math.round(range * Math.sin(t / 5))
     // The critter's tail is on its right, so it faces right with that side to the left: turned over, going right.
-    f.flip = Math.cos(t / 5) > 0
+    f.flip = kindOf(species, f.stage).turns && Math.cos(t / 5) > 0
   }
   if (f.stage === 1 && t % 13 === 0) {
     f.cheer = true
@@ -123,13 +123,13 @@ export function idle(count: number, now: number): Frame {
 
 /// The hearts of a happy moment, `n` of them, rising from over the creature's head.
 function hearts(f: Frame, n: number, step: number): Fx[] {
-  const b = box(f.stage, f.scale)
+  const b = box(f.stage, f.scale, f.species)
   return Array.from({ length: n }, (_, i) => ({ kind: "heart" as const, x: SCENE_WIDTH / 2 + (i - (n - 1) / 2) * 26, y: b.y - 10 - step * 7 - (i % 2) * 12 }))
 }
 
 /// A few sparkles about the creature, which move with the step.
 function sparkles(f: Frame, step: number): Fx[] {
-  const b = box(f.stage, f.scale)
+  const b = box(f.stage, f.scale, f.species)
   const cx = SCENE_WIDTH / 2
   const spots = [
     [cx - b.width * 0.62, b.y + b.height * 0.25],
@@ -142,10 +142,10 @@ function sparkles(f: Frame, step: number): Fx[] {
 }
 
 /// The creature during a reaction, `step` seconds after it began, or null when it is over.
-export function reacting(count: number, reaction: Reaction, now: number): Frame | null {
+export function reacting(count: number, reaction: Reaction, now: number, species: Species = "sprout"): Frame | null {
   const step = Math.floor((now - reaction.at) / 1000)
   if (step < 0 || step >= STEPS[reaction.kind]) return null
-  const f = base(count)
+  const f = base(count, species)
 
   switch (reaction.kind) {
     case "treat": {
@@ -244,10 +244,10 @@ export function reacting(count: number, reaction: Reaction, now: number): Frame 
       const right = step % 2 === 1
       f.face = "happy"
       f.cheer = !right
-      f.flip = right
+      f.flip = right && kindOf(species, f.stage).turns
       f.dx = right ? 30 : -30
       f.dy = right ? -8 : 0
-      const b = box(f.stage, f.scale)
+      const b = box(f.stage, f.scale, f.species)
       f.fx = [
         { kind: "note", x: SCENE_WIDTH / 2 + (right ? -b.width * 0.7 : b.width * 0.7), y: b.y + 10 - (step % 3) * 10 },
         { kind: "note", x: SCENE_WIDTH / 2 + (right ? b.width * 0.8 : -b.width * 0.8), y: b.y - 6 - ((step + 1) % 3) * 10 },
@@ -266,7 +266,7 @@ export function reacting(count: number, reaction: Reaction, now: number): Frame 
 }
 
 /// The frame to draw now.
-export function frameAt(count: number, reaction: Reaction | undefined, now: number): Frame {
-  return (reaction && reacting(count, reaction, now)) || idle(count, now)
+export function frameAt(count: number, reaction: Reaction | undefined, now: number, species: Species = "sprout"): Frame {
+  return (reaction && reacting(count, reaction, now, species)) || idle(count, now, species)
 }
 

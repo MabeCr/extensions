@@ -8,13 +8,17 @@
 // critter has its paws up to cheer. They are drawn in code, from ellipses and dots, and
 // a face is stamped onto a body, so every frame is the same creature.
 
+import { dinosaur, DINO, hatchling, HATCHLING } from "./dino.ts"
+import { FACES } from "./faces.ts"
+import type { Face } from "./faces.ts"
 import { Canvas, rects } from "./pixels.ts"
 import type { Palette } from "./pixels.ts"
+import { handheld, HANDHELD, rig, RIG } from "./radio.ts"
 
 export type Stage = 0 | 1
-export type Face = "open" | "blink" | "happy" | "left" | "right" | "up" | "eat" | "chomp" | "oh"
+export type { Face }
 
-export const FACES: Face[] = ["open", "blink", "happy", "left", "right", "up", "eat", "chomp", "oh"]
+export { FACES }
 
 /// What the sprite is drawn in. `E` is the eye, `C` a cheek, `M` the mouth, `T` its tongue.
 const SPROUT: Palette = {
@@ -51,7 +55,6 @@ const CRITTER: Palette = {
   D: "#d9792a",
 }
 
-export const PALETTES: Record<Stage, Palette> = { 0: SPROUT, 1: CRITTER }
 
 /// The body of the sprout with no face: 14 wide, 15 tall.
 function sproutBody(): Canvas {
@@ -171,24 +174,63 @@ function critter(face: Face, cheer = false): Canvas {
   return c
 }
 
-/// A frame of the creature: which stage, which face, and whether the paws are up (the critter's).
-export function sprite(stage: Stage, face: Face, cheer = false): Canvas {
-  return stage === 0 ? sprout(face) : critter(face, cheer)
+/// The three friends it can be, each a small form and, from ten contacts, a larger.
+export type Species = "sprout" | "dino" | "radio"
+export const SPECIES: Species[] = ["sprout", "dino", "radio"]
+
+/// What each is called in the settings.
+export const SPECIES_LABEL: Record<Species, string> = { sprout: "Sprout, then fox", dino: "Dinosaur", radio: "Radio" }
+
+interface Kind {
+  palette: Palette
+  width: number
+  height: number
+  /// Where its mouth is, as fractions of its width and height, for food to fall to.
+  mouth: { x: number; y: number }
+  /// Whether turning it over (to face the other way) makes sense: the radio's dial would end up on the wrong side.
+  turns: boolean
+  draw: (face: Face, cheer: boolean) => Canvas
+}
+
+const KINDS: Record<Species, Record<Stage, Kind>> = {
+  sprout: {
+    0: { palette: SPROUT, width: 14, height: 15, mouth: { x: 0.5, y: 11.5 / 15 }, turns: true, draw: (f) => sprout(f) },
+    1: { palette: CRITTER, width: 20, height: 19, mouth: { x: 0.5, y: 10.5 / 19 }, turns: true, draw: (f, cheer) => critter(f, cheer) },
+  },
+  dino: {
+    0: { palette: HATCHLING, width: 15, height: 16, mouth: { x: 0.5, y: 11 / 16 }, turns: true, draw: (f, cheer) => hatchling(f, cheer) },
+    1: { palette: DINO, width: 24, height: 20, mouth: { x: 3.5 / 24, y: 9 / 20 }, turns: true, draw: (f, cheer) => dinosaur(f, cheer) },
+  },
+  radio: {
+    0: { palette: HANDHELD, width: 13, height: 18, mouth: { x: 0.5, y: 11 / 18 }, turns: false, draw: (f, cheer) => handheld(f, cheer) },
+    1: { palette: RIG, width: 23, height: 20, mouth: { x: 8.5 / 23, y: 13 / 20 }, turns: false, draw: (f, cheer) => rig(f, cheer) },
+  },
+}
+
+export const kindOf = (species: Species, stage: Stage): Kind => KINDS[species][stage]
+
+/// A frame of the creature: which friend, which stage, which face, and whether the paws are up.
+export function sprite(species: Species, stage: Stage, face: Face, cheer = false): Canvas {
+  return KINDS[species][stage].draw(face, cheer)
 }
 
 /// The sprite as SVG rects at `scale` with its top left at (`x`, `y`). `flip` turns it to face the other way,
 /// `color` flashes it in one color, as at an evolution.
-export function drawSprite(stage: Stage, face: Face, scale: number, x: number, y: number, options: { cheer?: boolean; flip?: boolean; color?: string; upsideDown?: boolean } = {}): string {
-  let canvas = sprite(stage, face, options.cheer)
-  if (options.flip) canvas = canvas.mirrored()
-  const palette = options.color ? Object.fromEntries(Object.keys(PALETTES[stage]).map((k) => [k, options.color!])) : PALETTES[stage]
+export function drawSprite(
+  species: Species,
+  stage: Stage,
+  face: Face,
+  scale: number,
+  x: number,
+  y: number,
+  options: { cheer?: boolean; flip?: boolean; color?: string; upsideDown?: boolean } = {},
+): string {
+  const kind = KINDS[species][stage]
+  let canvas = sprite(species, stage, face, options.cheer)
+  if (options.flip && kind.turns) canvas = canvas.mirrored()
+  const palette = options.color ? Object.fromEntries(Object.keys(kind.palette).map((k) => [k, options.color!])) : kind.palette
   const body = rects(canvas, palette, scale, x, y)
   if (!options.upsideDown) return body
   // Turned over about its own middle.
   return `<g transform="rotate(180 ${+(x + (canvas.width * scale) / 2).toFixed(2)} ${+(y + (canvas.height * scale) / 2).toFixed(2)})">${body}</g>`
-}
-
-export const SPRITE_SIZE: Record<Stage, { width: number; height: number }> = {
-  0: { width: 14, height: 15 },
-  1: { width: 20, height: 19 },
 }

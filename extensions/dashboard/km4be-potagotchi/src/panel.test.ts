@@ -8,7 +8,7 @@ import { STEPS } from "./behavior.ts"
 import { contactsIn, countContacts, forgetCounts, forgetProgress, observe, reactionTo } from "./progress.ts"
 import { FOODS } from "./props.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
-import { nameFor } from "./words.ts"
+import { nameFor, speciesFor } from "./words.ts"
 
 const T0 = Date.parse("2026-10-07T18:00:00Z")
 let operations = 0
@@ -47,7 +47,8 @@ async function panel(options: { storage?: Map<string, unknown>; refs?: Record<st
     operation: { uuid, refs: options.refs ?? [{ type: "potaActivation", ref: "K-1234", name: "Some Park" }] },
     qsoCount: log.length,
     reason: "",
-    config: {},
+    // A sprout unless a test says otherwise, so that its colors can be looked for.
+    config: { friend: "sprout", ...(extra.config as object | undefined) },
     clock: { nowMillis: at, realNowMillis: at },
     ...extra,
   })

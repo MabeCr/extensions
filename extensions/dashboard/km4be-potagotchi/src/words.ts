@@ -5,14 +5,33 @@
 
 import { ACTIVATION } from "./behavior.ts"
 import type { Words } from "./scene.ts"
+import { SPECIES } from "./sprites.ts"
+import type { Species } from "./sprites.ts"
 
-export const NAMES = ["Pip", "Moss", "Biscuit", "Fern", "Juniper", "Clover", "Maple", "Nugget", "Sprout", "Pebble", "Willow", "Bramble", "Acorn", "Thistle", "Mallow", "Tumble"]
+/// Names for each friend: a sprout and fox of the woods, a dinosaur, and a radio with a ham's names for things.
+export const NAMES: Record<Species, string[]> = {
+  sprout: ["Pip", "Moss", "Biscuit", "Fern", "Juniper", "Clover", "Maple", "Nugget", "Sprout", "Pebble", "Willow", "Bramble", "Acorn", "Thistle", "Mallow", "Tumble"],
+  dino: ["Rex", "Spike", "Rocky", "Chomp", "Fossil", "Juno", "Ptero", "Dottie", "Stomp", "Tiny", "Gronk", "Fern", "Mesa", "Roary", "Trike", "Bones"],
+  radio: ["Watt", "Hertz", "Ohm", "Morse", "Dot", "Dash", "Volt", "Echo", "Static", "Kilo", "Squelch", "Tango", "Ferrite", "Dipole", "Beam", "Baud"],
+}
+
+export function hashOf(text: string): number {
+  let hash = 0
+  for (const ch of text) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
+  return hash
+}
 
 /// A name for the creature that is the same every time for the same operation, and different for different ones.
-export function nameFor(uuid: string): string {
-  let hash = 0
-  for (const ch of uuid) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
-  return NAMES[hash % NAMES.length]
+export function nameFor(uuid: string, species: Species = "sprout"): string {
+  const names = NAMES[species]
+  return names[hashOf(uuid) % names.length]
+}
+
+/// Which friend an operation gets: the one chosen in the settings, or, when it is left to chance, one for the operation that is the
+/// same every time, so a friend does not turn into another when the app is opened again.
+export function speciesFor(uuid: string, chosen: unknown): Species {
+  if (typeof chosen === "string" && (SPECIES as string[]).includes(chosen)) return chosen as Species
+  return SPECIES[Math.floor(hashOf(`friend:${uuid}`) / 7) % SPECIES.length]
 }
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many)
@@ -25,8 +44,8 @@ function mood(count: number): string {
   return "almost there"
 }
 
-export function words(uuid: string, count: number, parks: string[]): Words {
-  const name = nameFor(uuid)
+export function words(uuid: string, count: number, parks: string[], species: Species = "sprout"): Words {
+  const name = nameFor(uuid, species)
   const park = parks.length ? parks.join(" + ") : "no park set"
   const header = `${name} · ${park}`
 

@@ -45,10 +45,10 @@ export interface Words {
 
 /// The scene for a frame, `count` contacts in, with the words under it.
 export function buildScene(frame: Frame, count: number, weather: Weather, words: Words): PanelScene {
-  const b = box(frame.stage, frame.scale)
+  const b = box(frame.stage, frame.scale, frame.species)
   const { behind, front } = drawFx(frame.fx)
-  const creature = drawSprite(frame.stage, frame.face, frame.scale, b.x, b.y, { cheer: frame.cheer, flip: frame.flip, upsideDown: frame.upsideDown, color: frame.flash ?? undefined })
-  const where = mouth(frame.stage, frame.scale)
+  const creature = drawSprite(frame.species, frame.stage, frame.face, frame.scale, b.x, b.y, { cheer: frame.cheer, flip: frame.flip, upsideDown: frame.upsideDown, color: frame.flash ?? undefined })
+  const where = mouth(frame.stage, frame.scale, frame.species)
   const food = frame.food ? drawFood(frame.food.item, 3, where.x, where.y) : `<rect width="1" height="1" fill="#000000" fill-opacity="0"/>`
 
   return {

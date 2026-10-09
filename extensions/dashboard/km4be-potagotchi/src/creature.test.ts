@@ -8,9 +8,9 @@ import { ACTIVATION, box, celebrationFor, frameAt, idle, mouth, reacting, scaleO
 import type { Reaction, ReactionKind } from "./behavior.ts"
 import { Canvas, fromRows, rects } from "./pixels.ts"
 import { FOODS, drawFood, drawMeter, drawBurst, drawConfetti, drawBackground, SCENE_HEIGHT, SCENE_WIDTH, GROUND_Y } from "./props.ts"
-import { drawSprite, FACES, PALETTES, SPRITE_SIZE, sprite } from "./sprites.ts"
-import type { Stage } from "./sprites.ts"
-import { nameFor, NAMES, words } from "./words.ts"
+import { drawSprite, FACES, kindOf, SPECIES, SPECIES_LABEL, sprite } from "./sprites.ts"
+import type { Species, Stage } from "./sprites.ts"
+import { nameFor, NAMES, speciesFor, words } from "./words.ts"
 
 const at = (seconds: number) => seconds * 1000
 const reaction = (kind: ReactionKind, extra: Partial<Reaction> = {}): Reaction => ({ kind, at: 0, ...extra })
@@ -36,30 +36,55 @@ test("the pixel toolkit draws, outlines, turns over and writes out runs", () => 
   assert.match(rects(row, { A: "#111111", B: "#222222" }, 2, 10, 20), /x="10" y="20" width="6" height="2" fill="#111111"/)
 })
 
-test("every pixel of every frame of the creature has a color, so nothing is drawn invisible", () => {
-  for (const stage of [0, 1] as Stage[]) {
-    for (const face of FACES) {
-      for (const cheer of [false, true]) {
-        const canvas = sprite(stage, face, cheer)
-        assert.equal(canvas.width, SPRITE_SIZE[stage].width)
-        assert.equal(canvas.height, SPRITE_SIZE[stage].height)
-        const keys = new Set(canvas.cells.flat().filter((k) => k !== "."))
-        for (const key of keys) assert.ok(PALETTES[stage][key], `stage ${stage} ${face}: '${key}' has no color`)
-        assert.ok(keys.size >= 5, "more than a blob")
+test("every pixel of every frame of every friend has a color, so nothing is drawn invisible", () => {
+  for (const species of SPECIES) {
+    for (const stage of [0, 1] as Stage[]) {
+      const kind = kindOf(species, stage)
+      for (const face of FACES) {
+        for (const cheer of [false, true]) {
+          const canvas = sprite(species, stage, face, cheer)
+          assert.equal(canvas.width, kind.width, `${species} ${stage}`)
+          assert.equal(canvas.height, kind.height, `${species} ${stage}`)
+          const keys = new Set(canvas.cells.flat().filter((k) => k !== "."))
+          for (const key of keys) assert.ok(kind.palette[key], `${species} stage ${stage} ${face}: '${key}' has no color`)
+          assert.ok(keys.size >= 5, "more than a blob")
+        }
       }
     }
   }
 })
 
-test("each face is different from the others, and the critter's paws go up to cheer", () => {
-  for (const stage of [0, 1] as Stage[]) {
-    const drawings = FACES.map((f) => drawSprite(stage, f, 4, 0, 0))
-    assert.equal(new Set(drawings).size, FACES.length, `stage ${stage}`)
+test("there are three friends, each with a form for before an activation and one for after", () => {
+  assert.deepEqual([...SPECIES], ["sprout", "dino", "radio"])
+  for (const species of SPECIES) assert.ok(SPECIES_LABEL[species].length > 3)
+  for (const species of SPECIES) {
+    const small = kindOf(species, 0)
+    const large = kindOf(species, 1)
+    assert.ok(large.width * large.height > small.width * small.height * 1.2, `${species}: the second form is bigger`)
+    assert.ok(large.mouth.y > 0 && large.mouth.y < 1 && large.mouth.x > 0 && large.mouth.x < 1)
   }
-  assert.notEqual(drawSprite(1, "happy", 4, 0, 0, { cheer: true }), drawSprite(1, "happy", 4, 0, 0))
-  assert.notEqual(drawSprite(1, "open", 4, 0, 0, { flip: true }), drawSprite(1, "open", 4, 0, 0))
-  assert.match(drawSprite(0, "open", 4, 10, 10, { upsideDown: true }), /^<g transform="rotate\(180 /)
-  assert.ok(!drawSprite(0, "open", 4, 0, 0, { color: "#ffffff" }).match(/fill="(?!#ffffff)/), "a flash is one color")
+  // The dinosaur is in profile, facing left, so its mouth is at the left; the others look at you.
+  assert.ok(kindOf("dino", 1).mouth.x < 0.25)
+  assert.equal(kindOf("sprout", 1).mouth.x, 0.5)
+  // A radio does not turn to face the other way: its dial would be on the wrong side.
+  assert.deepEqual(SPECIES.map((s) => kindOf(s, 1).turns), [true, true, false])
+})
+
+test("each face is different from the others, for every friend, and the paws go up to cheer", () => {
+  for (const species of SPECIES) {
+    for (const stage of [0, 1] as Stage[]) {
+      const drawings = FACES.map((f) => drawSprite(species, stage, f, 4, 0, 0))
+      assert.equal(new Set(drawings).size, FACES.length, `${species} stage ${stage}`)
+      // The sprout is the one form with no paws to put up.
+      const cheers = drawSprite(species, stage, "happy", 4, 0, 0, { cheer: true }) !== drawSprite(species, stage, "happy", 4, 0, 0)
+      assert.equal(cheers, !(species === "sprout" && stage === 0), `${species} ${stage} cheers`)
+    }
+  }
+  // Turned to face the other way, but not a radio.
+  for (const species of ["sprout", "dino"] as Species[]) assert.notEqual(drawSprite(species, 1, "open", 4, 0, 0, { flip: true }), drawSprite(species, 1, "open", 4, 0, 0))
+  assert.equal(drawSprite("radio", 1, "open", 4, 0, 0, { flip: true }), drawSprite("radio", 1, "open", 4, 0, 0))
+  assert.match(drawSprite("sprout", 0, "open", 4, 10, 10, { upsideDown: true }), /^<g transform="rotate\(180 /)
+  for (const species of SPECIES) assert.ok(!drawSprite(species, 0, "open", 4, 0, 0, { color: "#ffffff" }).match(/fill="(?!#ffffff)/), "a flash is one color")
 })
 
 test("the foods, the meter, the effects and the park are drawn", () => {
@@ -207,11 +232,24 @@ test("a pat gives a few hearts, more each second", () => {
 
 // --- what it is called ---------------------------------------------------------------------------------------------
 
-test("each operation has a name for its creature, the same every time", () => {
-  assert.equal(nameFor("abc-123"), nameFor("abc-123"))
-  assert.ok(NAMES.includes(nameFor("abc-123")))
-  assert.ok(new Set(Array.from({ length: 40 }, (_, i) => nameFor(`operation-${i}`))).size > 6, "not all one name")
-  assert.ok(NAMES.includes(nameFor("")))
+test("each operation has a name for its friend, the same every time, from the friend's own names", () => {
+  for (const species of SPECIES) {
+    assert.equal(nameFor("abc-123", species), nameFor("abc-123", species))
+    assert.ok(NAMES[species].includes(nameFor("abc-123", species)))
+    assert.ok(NAMES[species].includes(nameFor("", species)))
+    assert.ok(new Set(Array.from({ length: 40 }, (_, i) => nameFor(`operation-${i}`, species))).size > 6, "not all one name")
+    assert.equal(new Set(NAMES[species]).size, NAMES[species].length, "no name twice")
+  }
+  assert.ok(NAMES.radio.includes("Watt") && NAMES.dino.includes("Rex"))
+  assert.equal(nameFor("abc-123"), nameFor("abc-123", "sprout"), "a sprout by default")
+})
+
+test("which friend an operation gets: the one chosen, or one for the operation that stays the same", () => {
+  for (const species of SPECIES) assert.equal(speciesFor("any", species), species, "chosen")
+  // Left to chance, or given something it does not know, it is the same every time for an operation, and not all one friend.
+  for (const chosen of [undefined, "random", "", "unicorn", 7, null]) assert.equal(speciesFor("op-1", chosen), speciesFor("op-1", undefined))
+  const drawn = new Set(Array.from({ length: 60 }, (_, i) => speciesFor(`operation-${i}`, "random")))
+  assert.deepEqual([...drawn].sort(), ["dino", "radio", "sprout"])
 })
 
 test("what is written says how far it has to go, and then when it next celebrates", () => {
