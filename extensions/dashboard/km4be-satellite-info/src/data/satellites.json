@@ -1,0 +1,74 @@
+{
+  "AO-123": {
+    "ctcssHz": 67,
+    "links": [{ "label": "IARU page for AO-123", "url": "https://iaru.amsat-uk.org/formal_detail.php?serialnum=830" }]
+  },
+  "AO-7": {
+    "inversion": "Mode A non-inverting, Mode B inverting",
+    "beaconMHz": 29.502,
+    "tips": "Sunlight only; Mode A and B alternate on a timer.",
+    "links": [{ "label": "AMSAT page for AO-7", "url": "https://www.amsat.org/two-way-satellites/ao-7/" }]
+  },
+  "AO-73": {
+    "inversion": "inverting",
+    "beaconMHz": 145.935,
+    "tips": "Beacon is 1k2 BPSK telemetry.",
+    "links": [{ "label": "AMSAT page for AO-73", "url": "https://www.amsat.org/two-way-satellites/ao-73-funcube-1/" }]
+  },
+  "AO-91": {
+    "tips": "Do not use it in eclipse: the battery is weak.",
+    "links": [{ "label": "AMSAT page for AO-91", "url": "https://www.amsat.org/two-way-satellites/ao-91/" }]
+  },
+  "AO-92": { "norad": null },
+  "ARISS": {
+    "amsat": ["ISS"],
+    "ctcssHz": 67,
+    "links": [{ "label": "ISS station status", "url": "https://www.ariss.org/current-status-of-iss-stations.html" }]
+  },
+  "CAS-3H": {
+    "tips": "No set schedule; a 437.200 beacon runs when it is off.",
+    "links": [{ "label": "AMSAT page for CAS-3H", "url": "https://www.amsat.org/two-way-satellites/lilacsat-2-cas-3h/" }]
+  },
+  "FO-29": {
+    "norad": 24278,
+    "inversion": "inverting",
+    "beaconMHz": 435.795,
+    "links": [{ "label": "AMSAT page for FO-29", "url": "https://www.amsat.org/two-way-satellites/fo-29-jas-2/" }]
+  },
+  "IO-117": { "norad": 53109 },
+  "IO-86": {
+    "uplinks": [{ "mode": "fm", "lowerMHz": 145.88, "upperMHz": 145.88 }],
+    "downlinks": [{ "mode": "fm", "lowerMHz": 435.88, "upperMHz": 435.88 }],
+    "ctcssHz": 88.5,
+    "tips": "Over the equator only, and by schedule.",
+    "links": [{ "label": "IO-86 schedule", "url": "https://community.libre.space/t/lapan-a2-io-86-schedule-2026/14216" }]
+  },
+  "JO-97": {
+    "inversion": "inverting",
+    "links": [{ "label": "AMSAT page for JO-97", "url": "https://www.amsat.org/two-way-satellites/jo-97/" }]
+  },
+  "PO-101": {
+    "ctcssHz": 141.3,
+    "tips": "The FM transponder runs by schedule.",
+    "links": [{ "label": "AMSAT page for PO-101", "url": "https://www.amsat.org/diwata-2-designated-philippines-oscar-101-po-101/" }]
+  },
+  "QO-100": {
+    "inversion": "non-inverting",
+    "links": [{ "label": "AMSAT-DL page for QO-100", "url": "https://amsat-dl.org/category/eshail-2-p4-a/" }]
+  },
+  "RS-44": {
+    "inversion": "inverting",
+    "beaconMHz": 435.605,
+    "links": [{ "label": "AMSAT page for RS-44", "url": "https://www.amsat.org/two-way-satellites/rs-44/" }]
+  },
+  "SO-50": {
+    "ctcssHz": 67,
+    "tips": "Arm first: a 2 s carrier at 74.4 Hz starts a 10 min timer.",
+    "links": [{ "label": "AMSAT page for SO-50", "url": "https://www.amsat.org/two-way-satellites/so-50-satellite-information/" }]
+  },
+  "TO-108": {
+    "inversion": "inverting",
+    "beaconMHz": 145.91,
+    "links": [{ "label": "AMSAT page for TO-108", "url": "https://www.amsat.org/two-way-satellites/to-108/" }]
+  }
+}
