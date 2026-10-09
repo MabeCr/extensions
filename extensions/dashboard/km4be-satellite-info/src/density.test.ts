@@ -58,15 +58,15 @@ test("a start on another day is a count of days after today when short, and a da
   assert.equal(clock(Date.parse("2026-11-01T02:05:00Z"), Date.parse("2026-10-31T20:00:00Z"), true, false, true), "02:05Z+1")
 })
 
-test("one space between columns instead of two takes five characters off a line", () => {
+test("one space between columns instead of two takes six characters off a line", () => {
   const rows: Cells[] = [
-    { name: "AO-7", start: "00:05Z", max: "46°", path: "S→NNW", length: "22m", mark: "✔" },
-    { name: "BeliefSat-0", start: "02:05Z+1", max: "9°", path: "NNE→SSW", length: "105m", mark: "◐" },
+    { name: "AO-7", type: "SSB", start: "00:05Z", max: "46°", path: "S→NNW", length: "22m", mark: "✔" },
+    { name: "BeliefSat-0", type: "Dig", start: "02:05Z+1", max: "9°", path: "NNE→SSW", length: "105m", mark: "◐" },
   ]
   const wide = table(rows)
   const tight = table(rows, " ")
-  assert.equal(wide.lines[1].length - tight.lines[1].length, 5)
-  assert.equal(wide.columns.length - tight.columns.length, 5)
+  assert.equal(wide.lines[1].length - tight.lines[1].length, 6)
+  assert.equal(wide.columns.length - tight.columns.length, 6)
   // Still lined up.
   tight.lines.forEach((line, i) => {
     assert.equal(line.indexOf(rows[i].start), tight.columns.indexOf("Start"))
@@ -122,7 +122,7 @@ const cfg = { grid: "EL95vs", utc: true, minElevation: 0 }
 type LayoutNode = { row?: { control?: string; width?: number }[]; control?: string; spacing?: number; height?: number; padding?: number | number[]; spacer?: number }
 const rowNodes = (nodes: LayoutNode[]) => nodes.filter((n) => n.row?.some((c) => c.control?.startsWith("star:")))
 /// How many spaces separate the first two columns: what is left of the title row's start after the name column.
-const nameGap = (columns: string, names: string[]) => columns.indexOf("Start") - Math.max("Sat".length, ...names.map((n) => n.length))
+const nameGap = (columns: string, names: string[]) => columns.indexOf("Type") - Math.max("Sat".length, ...names.map((n) => n.length))
 
 test("a desktop pane's list is laid out as it always was", async () => {
   const p = await panel({ width: 1000, height: 700 })

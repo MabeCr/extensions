@@ -71,12 +71,13 @@ test("the plot takes the app's colors when it reports them", () => {
 
 test("frequencies are corrected for Doppler the right way round for each direction", () => {
   const lines = radioLines(ao7, miami, best, best.aos - 3_600_000)
-  assert.match(lines[0], /^Doppler-corrected: rise · peak · set$/)
+  assert.equal(lines[0], "Linear (SSB/CW)")
+  assert.match(lines[1], /^Doppler-corrected: rise · peak · set$/)
   // AO-7: a 29.4–29.5 MHz downlink (center 29.45), a 145.85–145.95 uplink (center 145.9).
-  assert.equal(lines[1], "↓ 29.400–29.500 linear")
-  assert.equal(lines[3], "↑ 145.850–145.950 linear (send)")
-  const down = lines[2].trim().split(" · ").map(Number)
-  const up = lines[4].trim().split(" · ").map(Number)
+  assert.equal(lines[2], "↓ 29.400–29.500 linear")
+  assert.equal(lines[4], "↑ 145.850–145.950 linear (send)")
+  const down = lines[3].trim().split(" · ").map(Number)
+  const up = lines[5].trim().split(" · ").map(Number)
   assert.equal(down.length, 3)
   // Approaching at the rise: heard high. Receding at the set: heard low. About the center at the peak.
   assert.ok(down[0] > 29.45 && down[2] < 29.45)
@@ -90,11 +91,11 @@ test("frequencies are corrected for Doppler the right way round for each directi
 
 test("a pass already under way is labeled 'now', a satellite without data says so, and without orbit it still lists its frequencies", () => {
   const mid = Math.round((best.aos + best.los) / 2)
-  assert.match(radioLines(ao7, miami, { ...best, inProgress: true }, mid)[0], /now · peak · set/)
-  assert.deepEqual(radioLines({ ...noOrbit, uplinks: [], downlinks: [] }, miami, best, t0), ["No frequencies known for this satellite."])
+  assert.match(radioLines(ao7, miami, { ...best, inProgress: true }, mid)[1], /now · peak · set/)
+  assert.deepEqual(radioLines({ ...noOrbit, uplinks: [], downlinks: [] }, miami, best, t0), ["Linear (SSB/CW)", "No frequencies known for this satellite."])
   const withLink = radioLines({ ...noOrbit, downlinks: [{ mode: "fm", lowerMHz: 437.5, upperMHz: 437.5 }] }, miami, best, t0)
-  assert.equal(withLink[1], "↓ 437.500 fm")
-  assert.match(withLink[2], /no orbit data/)
+  assert.ok(withLink.includes("↓ 437.500 fm"))
+  assert.match(withLink[withLink.indexOf("↓ 437.500 fm") + 1], /no orbit data/)
 })
 
 test("what else is known of a bird is listed, and AMSAT's status page is always one link", () => {
@@ -112,7 +113,7 @@ test("a detail names its pass and keeps the Radio page at a fixed length", () =>
   assert.match(d.times[1], /^Peak {2}\d\d:\d\d:\d\dZ {2}\d+° toward [NESW]+$/)
   assert.match(d.times[2], /^Set {3}\d\d:\d\d:\d\dZ {2}[NESW]+ \d+°$/)
   assert.equal(d.radio.length, RADIO_LINES)
-  assert.ok(d.radio.slice(5).every((l) => l === ""))
+  assert.ok(d.radio.slice(6).every((l) => l === ""))
 })
 
 test("a pass already under way is traced back to where it really rose", () => {
@@ -204,7 +205,8 @@ test("tapping a row opens its pass: the Sky page, then Radio, then back to the l
   const radio = await p.render(t0)
   assert.equal(radio.layers.length, 0)
   assert.equal(radio.strings.tab, "radio")
-  assert.match(radio.strings.radio0, /^Doppler-corrected/)
+  assert.match(radio.strings.radio0, /^Linear \(SSB\/CW\)/)
+  assert.match(radio.strings.radio1, /^Doppler-corrected/)
   assert.match(radio.strings.status0, /^AMSAT, last 24 h: (heard|telemetry only) \(\d+ heard, \d+ telemetry, \d+ not heard\)$/)
   assert.match(radio.strings.status1, /^Latest report: (heard|telemetry only|not heard), (\d\d-\d\d )?\d\d:\d\dZ?$/)
   assert.ok(radio.controls.some((c) => c.id === "links"))
@@ -246,7 +248,7 @@ import type { CuratedInfo, Satellite } from "./data.ts"
 import { plausible } from "./radio.ts"
 
 test("the curated file is well formed: known fields, https links, sane numbers", () => {
-  const fields = new Set(["norad", "amsat", "uplinks", "downlinks", "ctcssHz", "beaconMHz", "tips", "links"])
+  const fields = new Set(["norad", "amsat", "uplinks", "downlinks", "inversion", "ctcssHz", "beaconMHz", "tips", "links"])
   for (const [name, raw] of Object.entries(curated as Record<string, CuratedInfo>)) {
     for (const key of Object.keys(raw)) assert.ok(fields.has(key), `${name} has an unknown field ${key}`)
     if (raw.ctcssHz !== undefined) assert.ok(raw.ctcssHz > 60 && raw.ctcssHz < 260, `${name}'s tone`)
@@ -273,7 +275,7 @@ test("a frequency that cannot be a band is left out, and the page says so", () =
   assert.ok(!lines.some((l) => l.includes("435.88")), "the bad downlink is not shown")
   assert.ok(lines.includes("↑ 145.900 fm (send)"))
   assert.ok(lines.includes("Some frequencies look wrong and are left out."))
-  assert.deepEqual(radioLines({ ...bad, uplinks: [] }, miami, best, t0), ["The list's frequencies for this satellite look wrong."])
+  assert.deepEqual(radioLines({ ...bad, uplinks: [] }, miami, best, t0), ["FM repeater", "The list's frequencies for this satellite look wrong."])
   for (const l of [{ lowerMHz: 0, upperMHz: 1 }, { lowerMHz: 146, upperMHz: 145 }, { lowerMHz: 100, upperMHz: 160 }]) assert.equal(plausible({ mode: "x", ...l }), false)
   assert.equal(plausible({ mode: "x", lowerMHz: 145.9, upperMHz: 146 }), true)
 })

@@ -5,7 +5,8 @@
 
 import type { Satellite } from "./data.ts"
 import { onForget } from "./memory.ts"
-import { compass, findPasses, satrecFromOmm } from "./orbit.ts"
+import { transponderShort } from "./radio.ts"
+import { compass, compass8, findPasses, satrecFromOmm } from "./orbit.ts"
 import type { Observer, Pass } from "./orbit.ts"
 
 export interface SatellitePass extends Pass {
@@ -106,6 +107,8 @@ export function upcomingPasses(satellites: Satellite[], place: Observer & { grid
 /// One pass as the cells of a table row.
 export interface Cells {
   name: string
+  /// The kind of transponder: `FM`, `SSB`, `Dig`.
+  type: string
   start: string
   max: string
   path: string
@@ -115,14 +118,16 @@ export interface Cells {
 }
 
 /// The titles over the columns, in the order of the cells.
-export const TITLES: Cells = { name: "Sat", start: "Start", max: "Max", path: "Path", length: "Len", mark: "Rpt" }
+export const TITLES: Cells = { name: "Sat", type: "Type", start: "Start", max: "Max", path: "Path", length: "Len", mark: "Rpt" }
 
 export function passCells(pass: SatellitePass, now: number, utc: boolean, seconds: boolean, mark: string, compact = false): Cells {
   return {
     name: pass.satellite.name,
+    type: transponderShort(pass.satellite.modulation),
     start: pass.aos <= now ? "now" : clock(pass.aos, now, utc, seconds, compact),
     max: `${Math.round(pass.maxElevation)}°`,
-    path: `${compass(pass.aosAzimuth)}→${compass(pass.losAzimuth)}`,
+    // Eight points of the compass where a line has to fit a phone: `NE→SW`, not `NNE→SSW`.
+    path: compact ? `${compass8(pass.aosAzimuth)}→${compass8(pass.losAzimuth)}` : `${compass(pass.aosAzimuth)}→${compass(pass.losAzimuth)}`,
     length: `${Math.round((pass.los - pass.aos) / 60_000)}m`,
     mark,
   }
@@ -135,8 +140,8 @@ export function passCells(pass: SatellitePass, now: number, utc: boolean, second
 export function table(rows: Cells[], gap = "  "): { columns: string; lines: string[] } {
   const GAP = gap
   const width = (key: keyof Cells) => Math.max(TITLES[key].length, ...rows.map((r) => r[key].length))
-  const w = { name: width("name"), start: width("start"), max: width("max"), path: width("path"), length: width("length") }
+  const w = { name: width("name"), type: width("type"), start: width("start"), max: width("max"), path: width("path"), length: width("length") }
   const line = (c: Cells) =>
-    [c.name.padEnd(w.name), c.start.padEnd(w.start), c.max.padStart(w.max), c.path.padEnd(w.path), c.length.padStart(w.length), c.mark].join(GAP).trimEnd()
+    [c.name.padEnd(w.name), c.type.padEnd(w.type), c.start.padEnd(w.start), c.max.padStart(w.max), c.path.padEnd(w.path), c.length.padStart(w.length), c.mark].join(GAP).trimEnd()
   return { columns: line(TITLES), lines: rows.map(line) }
 }

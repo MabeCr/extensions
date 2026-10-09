@@ -16,30 +16,32 @@ import { LEGEND } from "./status.ts"
 
 // --- the table ---------------------------------------------------------------
 
-const cells = (name: string, start: string, max: string, path: string, length: string, mark = ""): Cells => ({ name, start, max, path, length, mark })
+const cells = (name: string, type: string, start: string, max: string, path: string, length: string, mark = ""): Cells => ({ name, type, start, max, path, length, mark })
 
 test("the passes line up in columns under their titles", () => {
   const { columns, lines } = table([
-    cells("AO-7", "00:05Z", "46°", "S→NNW", "22m", "✔"),
-    cells("BeliefSat-0", "10-08 14:05Z", "9°", "NNE→SSW", "105m", "◐"),
-    cells("SO-50", "now", "81°", "E→W", "8m"),
+    cells("AO-7", "SSB", "00:05Z", "46°", "S→NNW", "22m", "✔"),
+    cells("BeliefSat-0", "Dig", "10-08 14:05Z", "9°", "NNE→SSW", "105m", "◐"),
+    cells("SO-50", "FM", "now", "81°", "E→W", "8m"),
   ])
-  assert.equal(columns, "Sat          Start         Max  Path      Len  Rpt")
+  assert.equal(columns, "Sat          Type  Start         Max  Path      Len  Rpt")
   assert.deepEqual(lines, [
-    "AO-7         00:05Z        46°  S→NNW     22m  ✔",
-    "BeliefSat-0  10-08 14:05Z   9°  NNE→SSW  105m  ◐",
-    "SO-50        now           81°  E→W        8m",
+    "AO-7         SSB   00:05Z        46°  S→NNW     22m  ✔",
+    "BeliefSat-0  Dig   10-08 14:05Z   9°  NNE→SSW  105m  ◐",
+    "SO-50        FM    now           81°  E→W        8m",
   ])
 })
 
 test("every column starts at the same place in every row, numbers end at the same place, and a row with no mark has no trailing space", () => {
-  const rows = [cells("AO-7", "00:05Z", "46°", "S→NNW", "22m", "✔"), cells("FO-29", "now", "5°", "NE→SE", "12m", "◐"), cells("RS-44", "13:40Z", "100°", "W→E", "9m")]
+  const rows = [cells("AO-7", "SSB", "00:05Z", "46°", "S→NNW", "22m", "✔"), cells("FO-29", "FM", "now", "5°", "NE→SE", "12m", "◐"), cells("RS-44", "SSB", "13:40Z", "100°", "W→E", "9m")]
   const { columns, lines } = table(rows)
+  const typeAt = columns.indexOf("Type")
   const startAt = columns.indexOf("Start")
   const pathAt = columns.indexOf("Path")
   const maxEnd = columns.indexOf("Max") + 3
   const lenEnd = columns.indexOf("Len") + 3
   lines.forEach((line, i) => {
+    assert.equal(line.indexOf(rows[i].type, 4), typeAt, line)
     assert.equal(line.indexOf(rows[i].start), startAt, line)
     assert.equal(line.indexOf(rows[i].path), pathAt, line)
     assert.equal(line.indexOf(rows[i].max) + rows[i].max.length, maxEnd, line)
@@ -50,10 +52,10 @@ test("every column starts at the same place in every row, numbers end at the sam
 })
 
 test("a page with nothing wide in it keeps its titles, and no rows is just the titles", () => {
-  const narrow = table([cells("AO-7", "now", "9°", "N→S", "5m")])
-  assert.equal(narrow.columns, "Sat   Start  Max  Path  Len  Rpt")
-  assert.equal(narrow.lines[0], "AO-7  now     9°  N→S    5m")
-  assert.equal(table([]).columns, "Sat  Start  Max  Path  Len  Rpt")
+  const narrow = table([cells("AO-7", "SSB", "now", "9°", "N→S", "5m")])
+  assert.equal(narrow.columns, "Sat   Type  Start  Max  Path  Len  Rpt")
+  assert.equal(narrow.lines[0], "AO-7  SSB   now     9°  N→S    5m")
+  assert.equal(table([]).columns, "Sat  Type  Start  Max  Path  Len  Rpt")
   assert.deepEqual(table([]).lines, [])
 })
 
@@ -146,7 +148,7 @@ test("the list has titles over its columns, which line up with every row, and it
   const render = await panel()
   const { scene } = await render({ grid: "EL95vs", utc: true, minElevation: 0, listSeconds: true })
   const { columns, legend, hint } = scene.strings
-  assert.match(columns, /^Sat +Start +Max +Path +Len +Rpt$/)
+  assert.match(columns, /^Sat +Type +Start +Max +Path +Len +Rpt$/)
   assert.equal(legend, LEGEND)
   assert.ok(!hint.includes("heard"), "the hint is not the legend")
 

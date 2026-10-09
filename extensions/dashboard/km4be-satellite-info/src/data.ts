@@ -53,6 +53,9 @@ export interface CuratedInfo {
   /// Replace the list's frequencies, where they are wrong.
   uplinks?: Link[]
   downlinks?: Link[]
+  /// How a linear transponder turns sidebands over: `inverting`, `non-inverting`, or a note where it
+  /// differs by mode. Only for the satellites an authority states it of.
+  inversion?: string
   ctcssHz?: number
   beaconMHz?: number
   links?: { label: string; url: string }[]

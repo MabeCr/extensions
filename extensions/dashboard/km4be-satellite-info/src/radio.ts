@@ -8,9 +8,28 @@ import type { Link, Satellite } from "./data.ts"
 import { downlinkDoppler, rangeRate, satrecFromOmm, uplinkDoppler } from "./orbit.ts"
 import type { Observer, Pass } from "./orbit.ts"
 
-/// Lines the radio page has room for: a header, two lines for each of up to three
-/// links, and three more for what else is known of the bird.
-export const RADIO_LINES = 10
+/// Lines the radio page has room for: the kind of transponder, a header, two lines for each of up
+/// to three links, and three more for what else is known of the bird.
+export const RADIO_LINES = 11
+
+/// What kind of transponder the list says a satellite has, by its `modulation`: a short name for
+/// a column, and a longer for a line. The list says `fm`, `linear` or `digital`; a linear transponder
+/// carries SSB and CW, which is how it is worked.
+export const TRANSPONDERS: Record<string, { short: string; long: string }> = {
+  fm: { short: "FM", long: "FM repeater" },
+  linear: { short: "SSB", long: "Linear (SSB/CW)" },
+  digital: { short: "Dig", long: "Digital" },
+}
+
+/// The short name for a column, or `?` for a kind the list has not said.
+export const transponderShort = (modulation: string): string => TRANSPONDERS[modulation]?.short ?? "?"
+
+/// `Linear (SSB/CW), inverting`, `FM repeater`, `Digital`; null when the list does not say what it is.
+export function transponderLine(satellite: Pick<Satellite, "modulation" | "info">): string | null {
+  const kind = TRANSPONDERS[satellite.modulation]
+  if (!kind) return null
+  return satellite.info.inversion && satellite.modulation === "linear" ? `${kind.long}, ${satellite.info.inversion}` : kind.long
+}
 const MAX_LINKS = 3
 
 const mhz = (f: number): string => f.toFixed(4)
@@ -50,6 +69,10 @@ export function radioLines(satellite: Satellite, observer: Observer, pass: Pass,
   const lines: string[] = []
   const { shown, skipped } = links(satellite)
   const satrec = satellite.omm ? satrecFromOmm(satellite.omm) : null
+
+  // What it is first, since the frequencies and the Doppler under it are for that kind of signal.
+  const kind = transponderLine(satellite)
+  if (kind) lines.push(kind)
 
   if (!shown.length) lines.push(skipped ? "The list's frequencies for this satellite look wrong." : "No frequencies known for this satellite.")
   else {

@@ -2,7 +2,7 @@
   "key": "km4be-satellite-info",
   "name": "KM4BE Satellite Info",
   "shortName": "Satellites",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "api": 5,
   "description": "Amateur radio satellite passes, frequencies and status in one place",
   "category": "dashboard",

@@ -115,7 +115,7 @@ test("with nobody followed, every satellite is shown and the hint says how to fo
   assert.equal(scene.values.utc, 1, "the setting starts the pane in UTC")
   const rows = rowTexts(scene.strings)
   assert.equal(rows.length, 5)
-  assert.match(rows[0], /^(AO-7|FO-29) +(now|\d\d:\d\dZ) +\d+° +[NESW]+→[NESW]+ +\d+m( +[✔◐✘])?$/)
+  assert.match(rows[0], /^(AO-7|FO-29) +SSB +(now|\d\d:\d\dZ) +\d+° +[NESW]+→[NESW]+ +\d+m( +[✔◐✘])?$/)
   assert.match(scene.strings.range, /^1–5 of \d+$/)
 })
 

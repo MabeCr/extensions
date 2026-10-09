@@ -157,5 +157,10 @@ function makePass(satrec: SatRec, observer: Observer, aos: number, los: number, 
 
 const COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"] as const
 
+const COMPASS_8 = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const
+
+/// 0 to 360 degrees as one of eight points, like `NW`: coarser than `compass`, and shorter.
+export const compass8 = (degrees: number): string => COMPASS_8[Math.round((((degrees % 360) + 360) % 360) / 45) % 8]
+
 /// 0 to 360 degrees as a point of the compass, like `NNW`.
 export const compass = (degrees: number): string => COMPASS[Math.round((((degrees % 360) + 360) % 360) / 22.5) % 16]
