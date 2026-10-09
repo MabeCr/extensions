@@ -1,0 +1,30 @@
+{
+  "key": "km4be-potagotchi",
+  "name": "KM4BE Potagotchi",
+  "shortName": "Potagotchi",
+  "version": "0.1.0",
+  "api": 5,
+  "description": "A little friend for your POTA activations: it grows with every contact and celebrates every ten",
+  "category": "dashboard",
+  "icon": "paw",
+  "keywords": [
+    "pota",
+    "activation",
+    "fun",
+    "dashboard",
+    "panel"
+  ],
+  "hooks": [
+    "panel"
+  ],
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  }
+}
