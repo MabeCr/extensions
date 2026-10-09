@@ -1,0 +1,33 @@
+{
+  "key": "km4be-nearby-repeaters",
+  "name": "KM4BE Nearby Repeaters",
+  "shortName": "Repeaters",
+  "version": "0.1.0",
+  "api": 1,
+  "description": "Repeaters near you from a list you import, with frequency, offset and tone, plus the simplex calling channels",
+  "category": "dashboard",
+  "icon": "radio-tower",
+  "keywords": [
+    "repeater",
+    "fm",
+    "vhf",
+    "uhf",
+    "simplex",
+    "dashboard",
+    "panel"
+  ],
+  "hooks": [
+    "panel"
+  ],
+  "requiresLocation": true,
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  }
+}
