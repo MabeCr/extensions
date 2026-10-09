@@ -16,13 +16,19 @@ const MINUTE = 60_000
 const HOUR = 3_600_000
 let panes = 0
 
-type Counts = { getLocation: number; kvGet: number; kvSet: number; fetch: number; fetched: string[] }
+type Counts = { getLocation: number; kvGet: number; kvSet: number; getSettings: number; setSettings: number; fetch: number; fetched: string[] }
 
 /// A panel whose host counts what it is asked for: the point of this file is how seldom that is.
-async function panel(device: () => { latitude: number; longitude: number } | null = () => null, storage = new Map<string, unknown>()) {
+/// `storage` is what `kvSet` keeps, `settings` the extension's own settings group: pass them on to a
+/// second panel to stand for a relaunch that keeps them.
+async function panel(
+  device: () => { latitude: number; longitude: number } | null = () => null,
+  storage = new Map<string, unknown>(),
+  settings = new Map<string, unknown>(),
+) {
   forgetAll()
   const id = ++panes
-  const counts: Counts = { getLocation: 0, kvGet: 0, kvSet: 0, fetch: 0, fetched: [] }
+  const counts: Counts = { getLocation: 0, kvGet: 0, kvSet: 0, getSettings: 0, setSettings: 0, fetch: 0, fetched: [] }
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
       getLocation: () => {
@@ -36,6 +42,14 @@ async function panel(device: () => { latitude: number; longitude: number } | nul
       kvSet: (params) => {
         counts.kvSet += 1
         storage.set(String(params.key), params.value)
+      },
+      getSettings: () => {
+        counts.getSettings += 1
+        return { extensions: { "extension_km4be-satellite-info": Object.fromEntries(settings) } }
+      },
+      setSettings: (params) => {
+        counts.setSettings += 1
+        for (const [k, v] of Object.entries(params.values as Record<string, unknown>)) settings.set(k, v)
       },
       fetch: (params) => {
         counts.fetch += 1
@@ -61,12 +75,13 @@ async function panel(device: () => { latitude: number; longitude: number } | nul
     clock: { nowMillis: at, realNowMillis: at },
   })
   const reset = () => {
-    counts.getLocation = counts.kvGet = counts.kvSet = counts.fetch = 0
+    counts.getLocation = counts.kvGet = counts.kvSet = counts.getSettings = counts.setSettings = counts.fetch = 0
     counts.fetched.length = 0
   }
   return {
     counts,
     storage,
+    settings,
     reset,
     render: async (config: Record<string, unknown>, at: number) =>
       (await ext.runHook("panel", "render", args(config, at), { ctx })) as { scene: { strings: Record<string, string>; controls: { id: string; opacity?: number }[] } },
@@ -76,7 +91,7 @@ async function panel(device: () => { latitude: number; longitude: number } | nul
 }
 
 const cfg = { grid: "EL95vs" }
-const quiet = (c: Counts) => ({ getLocation: c.getLocation, kvGet: c.kvGet, kvSet: c.kvSet, fetch: c.fetch })
+const quiet = (c: Counts) => ({ getLocation: c.getLocation, kvGet: c.kvGet, kvSet: c.kvSet, getSettings: c.getSettings, setSettings: c.setSettings, fetch: c.fetch })
 
 test("a redraw within the time things are good for asks the host for nothing at all", async () => {
   const p = await panel()
@@ -86,7 +101,7 @@ test("a redraw within the time things are good for asks the host for nothing at 
 
   await p.render(cfg, t0 + 20_000)
   await p.render(cfg, t0 + 40_000)
-  assert.deepEqual(quiet(p.counts), { getLocation: 0, kvGet: 0, kvSet: 0, fetch: 0 })
+  assert.deepEqual(quiet(p.counts), { getLocation: 0, kvGet: 0, kvSet: 0, getSettings: 0, setSettings: 0, fetch: 0 })
 })
 
 test("going from the Sky page back to the list is free", async () => {
@@ -102,7 +117,7 @@ test("going from the Sky page back to the list is free", async () => {
   await p.event(cfg, t0 + 12_000, "back", "back")
   const back = await p.render(cfg, t0 + 12_000)
   assert.match(back.scene.strings.header, /^EL95vs /)
-  assert.deepEqual(quiet(p.counts), { getLocation: 0, kvGet: 0, kvSet: 0, fetch: 0 })
+  assert.deepEqual(quiet(p.counts), { getLocation: 0, kvGet: 0, kvSet: 0, getSettings: 0, setSettings: 0, fetch: 0 })
 })
 
 test("each thing is asked for again when it is out of date, and only that thing", async () => {
@@ -112,7 +127,7 @@ test("each thing is asked for again when it is out of date, and only that thing"
 
   // A minute on: the device is asked where it is, nothing else.
   await p.render(cfg, t0 + MINUTE + 1)
-  assert.deepEqual(quiet(p.counts), { getLocation: 1, kvGet: 0, kvSet: 0, fetch: 0 })
+  assert.deepEqual(quiet(p.counts), { getLocation: 1, kvGet: 0, kvSet: 0, getSettings: 0, setSettings: 0, fetch: 0 })
   p.reset()
 
   // Ten minutes: AMSAT's reports.
@@ -134,17 +149,18 @@ test("each thing is asked for again when it is out of date, and only that thing"
 test("what is stored on the device is read once, when the panel starts, and not again", async () => {
   const first = await panel()
   await first.render(cfg, t0)
-  const storage = first.storage
+  const { storage, settings } = first
 
   // A restart: memory is gone, the device's storage is not.
-  const second = await panel(() => null, storage)
+  const second = await panel(() => null, storage, settings)
   await second.render(cfg, t0 + HOUR)
   assert.equal(second.counts.fetch, 1, "only the reports, which are an hour old and good for ten minutes")
   assert.deepEqual(second.counts.fetched, [statusUrl(24)])
-  assert.equal(second.counts.kvGet, 4, "the list, the orbits, the reports and the favorites, once each")
+  assert.equal(second.counts.kvGet, 3, "the list, the orbits and the reports, once each")
+  assert.equal(second.counts.getSettings, 1, "and the favorites, once")
   second.reset()
   await second.render(cfg, t0 + HOUR + 20_000)
-  assert.deepEqual(quiet(second.counts), { getLocation: 0, kvGet: 0, kvSet: 0, fetch: 0 })
+  assert.deepEqual(quiet(second.counts), { getLocation: 0, kvGet: 0, kvSet: 0, getSettings: 0, setSettings: 0, fetch: 0 })
 })
 
 test("favorites are written once when they change and never read again", async () => {
@@ -154,13 +170,28 @@ test("favorites are written once when they change and never read again", async (
   p.reset()
 
   await p.event(cfg, t0 + 1_000, star.id, "star")
-  assert.equal(p.counts.kvSet, 1)
-  assert.equal(p.counts.kvGet, 0)
+  assert.equal(p.counts.setSettings, 1)
+  assert.equal(p.counts.getSettings, 0)
   const after = await p.render(cfg, t0 + 2_000)
-  assert.equal(p.counts.kvGet, 0, "the new list is already known")
+  assert.equal(p.counts.getSettings, 0, "the new list is already known")
   const name = star.id.split(":")[1]
   assert.ok([0, 1, 2, 3, 4].map((i) => after.scene.strings[`row${i}`]).filter(Boolean).every((r) => r.startsWith(name)))
-  assert.deepEqual(p.storage.get("favorites"), [name])
+  assert.deepEqual(p.settings.get("favorites"), [name])
+})
+
+test("favorites outlast a relaunch, which empties what kvSet kept", async () => {
+  const p = await panel()
+  const first = await p.render(cfg, t0)
+  const star = first.scene.controls.find((c) => c.id.startsWith("star:") && c.opacity !== 0)!
+  await p.event(cfg, t0 + 1_000, star.id, "star")
+  const name = star.id.split(":")[1]
+
+  // The app's kv store is in memory, so a relaunch starts it empty; the settings are kept.
+  const relaunched = await panel(() => null, new Map(), p.settings)
+  const after = await relaunched.render(cfg, t0 + 2_000)
+  assert.equal(after.scene.strings.mode, "favorites")
+  assert.ok(after.scene.controls.filter((c) => c.id.startsWith(`star:${name}:`)).length > 0)
+  assert.ok([0, 1, 2, 3, 4].map((i) => after.scene.strings[`row${i}`]).filter(Boolean).every((r) => r.startsWith(name)), "Favorites shows only the followed satellite")
 })
 
 test("the device's position is remembered for a minute, and a move is noticed after it", async () => {
