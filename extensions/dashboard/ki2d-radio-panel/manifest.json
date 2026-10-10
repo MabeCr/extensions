@@ -1,8 +1,8 @@
 {
   "key": "ki2d-radio-panel",
   "name": "KI2D’s Radio Panel",
-  "version": "0.1.0",
-  "description": "Interactive SVG front face for the designated local CAT radio",
+  "version": "0.2.0",
+  "description": "Live CAT readout, meters and panadapter for a local radio",
   "category": "dashboard",
   "icon": "radio-handheld",
   "hooks": [
@@ -12,10 +12,10 @@
   "translations": {
     "es": {
       "name": "Panel de radio de KI2D",
-      "description": "Panel SVG interactivo para la radio CAT local seleccionada"
+      "description": "Lecturas CAT, medidores y panorámico de una radio local"
     }
   },
-  "api": 1,
+  "api": 7,
   "sharedDependencies": {
     "@ham2k/lib-callsigns": "^1.0.0",
     "@ham2k/lib-country-files": "^1.0.0",
