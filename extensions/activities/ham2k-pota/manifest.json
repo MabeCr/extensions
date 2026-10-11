@@ -2,12 +2,12 @@
   "key": "ham2k-pota",
   "name": "POTA: Parks on the Air",
   "shortName": "POTA",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Activate and chase parks worldwide; spots on pota.app",
   "category": "activity",
   "icon": "pine-tree",
   "accentColor": "#068541",
-  "api": 1,
+  "api": 8,
   "keywords": [
     "parks",
     "activation",
@@ -24,10 +24,12 @@
     "ref:pota",
     "ref:potaActivation",
     "scoring",
+    "settingsPanel",
     "spots"
   ],
   "domains": [
     "api.pota.app",
+    "devapi.pota.app",
     "pota.app"
   ],
   "sharedDependencies": {

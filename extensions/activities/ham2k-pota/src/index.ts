@@ -30,6 +30,9 @@ import type {
   PostSelfSpotRequest,
   PostOtherSpotRequest,
   DataFileDefinition,
+  DynamicSettingsPanel,
+  FormDefinition,
+  SettingsPanelDescriptor,
   SuggestArgs,
   ActivitySuggestion,
   LookupRow,
@@ -94,6 +97,27 @@ interface POTAParkInfo {
   lon?: number
 }
 
+const POTA_API = 'https://api.pota.app'
+
+/// POTA's test server, with spots and parks of its own. The "Use POTA Dev
+/// Servers" developer setting sends spots and park network lookups here, so a
+/// spot posted while testing never reaches a real hunter.
+const POTA_DEV_API = 'https://devapi.pota.app'
+
+/// Only in developer mode: the switch is hidden outside it, and a switch left
+/// on where nobody can see it would send an operator's spots where no hunter
+/// ever reads them.
+async function usingDevServers(): Promise<boolean> {
+  const settings = await host.getSettings()
+  const extensions = settings.extensions as Record<string, JSONValue> | undefined
+  const mine = extensions?.[`extension_${manifest.key}`] as Record<string, JSONValue> | undefined
+  return settings.developerMode === true && mine?.useDevServers === true
+}
+
+async function potaApi(): Promise<string> {
+  return (await usingDevServers()) ? POTA_DEV_API : POTA_API
+}
+
 const parkCache = new Map<string, POTAParkInfo | null>()
 
 async function fetchPark(ref: string): Promise<POTAParkInfo | null> {
@@ -123,7 +147,7 @@ async function fetchPark(ref: string): Promise<POTAParkInfo | null> {
   // 2. Fall back to network fetch
   let park: POTAParkInfo | null = null
   try {
-    const response = await host.fetch(`https://api.pota.app/park/${encodeURIComponent(ref)}`)
+    const response = await host.fetch(`${await potaApi()}/park/${encodeURIComponent(ref)}`)
     if (response.status === 200 && response.body && response.body !== 'null') {
       park = JSON.parse(response.body) as POTAParkInfo
       // The live API names these `latitude`/`longitude` (matching the CSV
@@ -530,40 +554,51 @@ interface POTAApiSpot {
   count: number
 }
 
+/// One POTA server's activator spots, QRT spots dropped.
+async function fetchSpotsFrom(api: string): Promise<Spot[]> {
+  const response = await host.fetch(`${api}/spot/activator`)
+  if (response.status !== 200) throw new Error(`POTA API returned HTTP ${response.status}`)
+  const apiSpots = JSON.parse(response.body) as POTAApiSpot[]
+
+  return apiSpots
+    .filter((spot) => !spot.comments?.match(/QRT/i))
+    .map((spot) => {
+      const freq = parseFloat(spot.frequency)
+      return {
+        their: { call: spot.activator },
+        freq: freq || undefined,
+        band: freq ? bandForFrequency(freq) : undefined,
+        mode: spot.mode,
+        refs: [{ ref: spot.reference, type: HUNTING_TYPE }],
+        spot: {
+          timeInMillis: Date.parse(spot.spotTime + 'Z'),
+          source: 'pota',
+          label: `${spot.reference}: ${[simplifyStates(spot.locationDesc), spot.name].filter((x) => x).join(' • ')}`,
+          sourceInfo: {
+            source: spot.source,
+            id: spot.spotId,
+            comments: spot.comments,
+            spotter: spot.spotter,
+            count: spot.count,
+          },
+        },
+      }
+    })
+}
+
 const SpotsHook = {
   sourceName: 'POTA.app',
 
   async fetchSpots(_args: Record<string, never>, ctx: HookContext): Promise<Spot[]> {
     if (!ctx.online) return []
+    if (!(await usingDevServers())) return fetchSpotsFrom(POTA_API)
 
-    const response = await host.fetch('https://api.pota.app/spot/activator')
-    if (response.status !== 200) throw new Error(`POTA API returned HTTP ${response.status}`)
-    const apiSpots = JSON.parse(response.body) as POTAApiSpot[]
-
-    return apiSpots
-      .filter((spot) => !spot.comments?.match(/QRT/i))
-      .map((spot) => {
-        const freq = parseFloat(spot.frequency)
-        return {
-          their: { call: spot.activator },
-          freq: freq || undefined,
-          band: freq ? bandForFrequency(freq) : undefined,
-          mode: spot.mode,
-          refs: [{ ref: spot.reference, type: HUNTING_TYPE }],
-          spot: {
-            timeInMillis: Date.parse(spot.spotTime + 'Z'),
-            source: 'pota',
-            label: `${spot.reference}: ${[simplifyStates(spot.locationDesc), spot.name].filter((x) => x).join(' • ')}`,
-            sourceInfo: {
-              source: spot.source,
-              id: spot.spotId,
-              comments: spot.comments,
-              spotter: spot.spotter,
-              count: spot.count,
-            },
-          },
-        }
-      })
+    // Both servers, not just the dev one: a developer testing spots still
+    // hunts the live activators. All or nothing — a failing dev server
+    // fails the fetch, so its outage never passes for a spot that didn't
+    // post, and the board keeps the spots it already had.
+    const [live, dev] = await Promise.all([fetchSpotsFrom(POTA_API), fetchSpotsFrom(POTA_DEV_API)])
+    return [...live, ...dev]
   },
 
   async isSelfSpotEnabled({ operation }: { operation: Record<string, JSONValue> }, _ctx: HookContext): Promise<SpotEligibility> {
@@ -583,7 +618,7 @@ const SpotsHook = {
     // TEST_OPERATION_REF's doc.
     const refs = isTestOperation(call) ? [TEST_OPERATION_REF] : refsOfType(operation, ACTIVATION_TYPE)
     if (refs.length === 0) return { ok: false, message: 'No POTA activation on this operation' }
-    return postSpotToPOTA({ call, spotter: call, freq, mode, refs, comment, appName: ctx.appName })
+    return postSpotToPOTA({ api: await potaApi(), call, freq, mode, refs, comment, appName: ctx.appName })
   },
 
   async postOtherSpot({ qso, comment, spotterCall }: PostOtherSpotRequest, ctx: HookContext): Promise<PostResult> {
@@ -594,8 +629,9 @@ const SpotsHook = {
     const their = (qso.their ?? {}) as Record<string, JSONValue>
     const our = (qso.our ?? {}) as Record<string, JSONValue>
     return postSpotToPOTA({
+      api: await potaApi(),
       call: String(their.call ?? ''),
-      spotter: String(our.call ?? spotterCall ?? ''),
+      spotter: String(our.call ?? spotterCall ?? '').split(',')[0].trim(),
       freq,
       mode: qso.mode ? String(qso.mode) : undefined,
       refs,
@@ -605,19 +641,39 @@ const SpotsHook = {
   },
 }
 
+/// The most calls POTA takes as one spot's activator.
+const MAX_ACTIVATOR_CALLS = 10
+
 /// Posts directly to the POTA API — no authentication required (unlike
 /// SOTA's spot API, which needs a logged-in account). Ported from
 /// app-polo's POTAPostSpotAPI.js.
+///
+/// POTA takes a list of calls as the activator (`KI2D,NK2Y`), up to
+/// [MAX_ACTIVATOR_CALLS], but only one as the spotter. A longer list posts in
+/// batches, each spotted by its own first call unless [spotter] names one.
 async function postSpotToPOTA(
-  { call, spotter, freq, mode, refs, comment, appName }: { call: string; spotter: string; freq: number; mode?: string; refs: Ref[]; comment?: string; appName?: string },
+  { api, call, spotter, freq, mode, refs, comment, appName }: { api: string; call: string; spotter?: string; freq: number; mode?: string; refs: Ref[]; comment?: string; appName?: string },
+): Promise<PostResult> {
+  const calls = call.split(',').map((c) => c.trim()).filter((c) => c)
+  if (calls.length === 0) return { ok: false, message: 'No call to spot' }
+  const batches: string[][] = []
+  for (let i = 0; i < calls.length; i += MAX_ACTIVATOR_CALLS) batches.push(calls.slice(i, i + MAX_ACTIVATOR_CALLS))
+  const results = await Promise.all(
+    batches.map((batch) => postOneSpotToPOTA({ api, activator: batch.join(','), spotter: spotter ?? batch[0], freq, mode, refs, comment, appName })),
+  )
+  return results.find((result) => !result.ok) ?? { ok: true }
+}
+
+async function postOneSpotToPOTA(
+  { api, activator, spotter, freq, mode, refs, comment, appName }: { api: string; activator: string; spotter: string; freq: number; mode?: string; refs: Ref[]; comment?: string; appName?: string },
 ): Promise<PostResult> {
   const refComment = refs.length > 1 ? `${refs.length}-fer: ${refs.map((r) => r.ref).join(' ')}` : ''
   try {
-    const response = await host.fetch('https://api.pota.app/spot', {
+    const response = await host.fetch(`${api}/spot`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        activator: call,
+        activator,
         spotter,
         frequency: freq,
         reference: refs[0].ref,
@@ -640,6 +696,42 @@ function simplifyStates(locationDesc: string): string {
   const states = locationDesc.split(',')
   const oneState = states[0].split('-', 2)[1]?.trim()
   return states.length > 1 ? `${oneState}+${states.length - 1}` : (oneState ?? '')
+}
+
+/// Exists only to carry the developer switch to the test servers: out of the
+/// sidebar, its one field `devMode`, and targeted at the Developer panel.
+const SettingsPanel: DynamicSettingsPanel = {
+  kind: 'dynamic',
+
+  async getPanels(_args: Record<string, never>, _ctx: HookContext): Promise<SettingsPanelDescriptor[]> {
+    return [{ key: manifest.key, title: manifest.shortName, icon: manifest.icon, sidebar: false }]
+  },
+
+  async getDefinition(_args: { panelKey: string }, ctx: HookContext): Promise<FormDefinition> {
+    const t = tFor(ctx)
+    return {
+      elements: [
+        {
+          type: 'field',
+          fieldType: 'checkbox',
+          key: 'useDevServers',
+          label: t('useDevServers'),
+          description: t('useDevServersDescription'),
+          value: await usingDevServers(),
+          devMode: true,
+          target: 'developer',
+        },
+      ],
+    }
+  },
+
+  async onChangeField({ fieldKey, value }: { fieldKey: string; value: unknown }, _ctx: HookContext): Promise<void> {
+    if (fieldKey !== 'useDevServers') return
+    await host.setSettings({ useDevServers: value === true })
+    // After the write, not before: a lookup between the two would read the
+    // old setting and cache the other server's answer.
+    parkCache.clear()
+  },
 }
 
 const potaDataFile: DataFileDefinition = {
@@ -748,6 +840,7 @@ defineExtension({
       key: manifest.key,
     })
     registerHook('spots', { hook: SpotsHook, key: manifest.key })
+    registerHook('settingsPanel', { hook: SettingsPanel, key: manifest.key })
     // Priority 100 — higher than every lookup source (QRZ 99, ...), so the
     // POTA park's grid is resolved BEFORE a home-QTH lookup can set
     // callInfo.grid; the `if (callInfo.grid) return []` guard below would
