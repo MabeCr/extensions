@@ -49,9 +49,18 @@ test('the same call on the same band and mode is a dupe worth nothing', () => {
 test('the same call on a new band still counts, and says so', () => {
   const { scores, sheet } = run([qso('W1AW', '20m'), qso('W1AW', '40m')])
   assert.equal(scores[1].value, 1)
-  assert.equal(scores[1].dupe, undefined)
+  assert.equal(scores[1].dupe, false)
   assert.ok(scores[1].notices?.includes('newBand'))
   assert.equal(sheet.points, 2)
+})
+
+// `dupe: false` makes the host's core dupe rule yield to this one, so this one
+// has to fold modes at least as far: a sideband spelled two ways is one
+// emission, and calling it a new mode would let a repeat through unmarked.
+test('the same call on USB after SSB is a dupe, not a new mode', () => {
+  const { scores } = run([qso('W1AW', '20m', 'SSB'), qso('W1AW', '20m', 'USB')])
+  assert.equal(scores[1].dupe, true)
+  assert.equal(scores[1].notices, undefined)
 })
 
 test('the same call on a new mode still counts, and says so', () => {

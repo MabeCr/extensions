@@ -140,6 +140,11 @@ export const ARRLVHFScorer: ContestScorer<ARRLVHFScoresheet> = {
       return { scoresheet: base, score: { value: 0, dupe: true, alerts: ['duplicate'] } }
     }
 
+    // Worked before, never on this band. The host's core scorer would say so,
+    // but steps aside for this verdict (`dupe: false` below), so it says so here.
+    const workedBands = Object.keys(base.worked).filter((k) => k.startsWith(`${call}|`)).map((k) => k.split('|')[1])
+    const newBand = workedBands.length > 0 && !workedBands.includes(band)
+
     const alerts: string[] = []
     const fullGrid = theirGrid.length >= event.gridChars
     if (event.score !== 'points' && !fullGrid) alerts.push('shortGrid')
@@ -187,7 +192,11 @@ export const ARRLVHFScorer: ContestScorer<ARRLVHFScoresheet> = {
       base.maxDistancePerBand[band] = Math.max(base.maxDistancePerBand[band] ?? 0, distance)
     }
 
-    const score: QsoScoreVerdict = { value, band }
+    // `dupe: false` says this contact passed the contest's own duplicate test —
+    // a rover in a new square is not a repeat — which is what makes the host's
+    // core scorer step aside rather than mark it by call, band and mode.
+    const score: QsoScoreVerdict = { value, band, dupe: false }
+    if (newBand) score.notices = ['newBand']
     if (distance !== null) score.distance = distance
     if (alerts.length > 0) score.alerts = alerts
     return { scoresheet: base, score }
