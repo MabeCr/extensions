@@ -289,7 +289,16 @@ test('a rover who moves may work the same station again, from the new county', (
     ourLocation: ['ALB', 'REN'],
   })
   assert.equal(scores[1].value, 2)
-  assert.equal(scores[1].dupe, undefined)
+  assert.equal(scores[1].dupe, false)
+})
+
+// Same call, band and mode is the host core scorer's duplicate. Only a ruling
+// from the party makes core's yield, so a contact the party clears has to say
+// so — silence leaves "Dupe!" on the row beside the new county.
+test('a mobile worked again from a new county is ruled not a duplicate', () => {
+  const { scores } = run([qso({ location: 'ERI' }), qso({ location: 'ALB' })])
+  assert.equal(scores[1].dupe, false)
+  assert.ok(scores[1].value > 0)
 })
 
 test('a rover activates each county they operate from', () => {

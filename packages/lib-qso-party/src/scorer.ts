@@ -424,7 +424,11 @@ export function qsoPartyScorer(params: QsoPartyParams): ContestScorer<QsoPartySc
       sheet.qsos += 1
       sheet.points += value
 
-      const score: QsoScoreVerdict = { value, band }
+      // `dupe: false` says out loud that this contact passed the party's own
+      // duplicate test. Without it, the host's core scorer keeps its coarser
+      // call+band+mode rule, and a mobile worked again from a new county reads
+      // "Dupe!" beside the "New Mult" it earned.
+      const score: QsoScoreVerdict = { value, band, dupe: false }
       if (notices.length > 0) score.notices = notices
       if (typedOurState) score.alerts = ['ourLocation']
       return { scoresheet: sheet, score }
