@@ -41,6 +41,7 @@ import type {
 import { REFERENCE_REGEX, normalizeReference, entityPrefixForCall, transformsForPrefix, hunterDefaultPrefix, activationDefaultPrefix, parkOutlineUrl } from "./refFormatting.ts"
 import { suggestOperationTitleForPota } from "./titleSuggestion.ts"
 import { tFor } from "./i18n.ts"
+import { potaHunterProgram } from "./chasing.ts"
 import { looksLikeReference } from "@ham2k/extension-sdk"
 
 import manifest from "../manifest.json" with { type: "json" }
@@ -120,7 +121,9 @@ async function potaApi(): Promise<string> {
 
 const parkCache = new Map<string, POTAParkInfo | null>()
 
-async function fetchPark(ref: string): Promise<POTAParkInfo | null> {
+/// [online] false reads the local parks database alone: a park missing from it
+/// is not fetched, and not cached as missing either.
+async function fetchPark(ref: string, { online = true }: { online?: boolean } = {}): Promise<POTAParkInfo | null> {
   const cached = parkCache.get(ref)
   if (cached !== undefined) return cached
 
@@ -145,6 +148,7 @@ async function fetchPark(ref: string): Promise<POTAParkInfo | null> {
   }
 
   // 2. Fall back to network fetch
+  if (!online) return null
   let park: POTAParkInfo | null = null
   try {
     const response = await host.fetch(`${await potaApi()}/park/${encodeURIComponent(ref)}`)
@@ -439,28 +443,23 @@ const TEST_OPERATION_REF: Ref = { type: ACTIVATION_TYPE, ref: 'K-TEST' }
 /// be large, so its single-point grid may be off by a few grids); the merge
 /// keeps whichever same-scope result is most accurate, so this doesn't have
 /// to bail when a grid already exists — a more precise SOTA summit on the same
-/// qso still wins. Skips when there's no POTA ref or
-/// this pass is offline (the network fallback in `fetchPark` needs online).
+/// qso still wins. Skips when there's no POTA ref.
+///
+/// Offline it answers from the local parks database alone, and failing that
+/// from the `location` a spot's ref carries: what a spot board asks about
+/// every park spotted, for the state the park is in.
 async function lookupCall(
   { callInfo, qso }: { callInfo: AnnotatedCallInfo; qso: Record<string, JSONValue>; operation: Record<string, JSONValue> },
   ctx: HookContext,
 ): Promise<LookupResult> {
   const refs = refsOfType(qso, HUNTING_TYPE)
   if (refs.length === 0) return []
-  if (!ctx.online) return []
 
-  const park = await fetchPark(refs[0].ref!.toUpperCase())
-  if (!park?.grid6) return []
-
-  // In state-relevant countries, a park whose locationDesc names exactly one
-  // area sits in a single state — surface it (the area's second, post-`-`
-  // part) both on the guess and in the location text.
-  const country = park.reference.split('-')[0]
-  const areas = park.locationDesc.split(',').map((a) => a.trim()).filter((a) => a)
-  let state: string | undefined
-  if (COUNTRIES_WHERE_STATES_MATTER.has(country) && areas.length === 1) {
-    const s = areas[0].split('-')[1]
-    if (s) state = s
+  const reference = refs[0].ref!.toUpperCase()
+  const park = await fetchPark(reference, { online: ctx.online })
+  const state = stateOfPark(reference, park?.locationDesc || refs[0].location)
+  if (!park?.grid6) {
+    return state ? [{ call: callInfo.call, source: 'pota', scope: 'qso', locationScope: 'portable', state }] : []
   }
 
   const namePart = park.name ? `: ${park.name}` : ''
@@ -477,6 +476,15 @@ async function lookupCall(
   }
   if (state) result.state = state
   return [result]
+}
+
+/// In state-relevant countries, a park whose `locationDesc` names exactly one
+/// area sits in a single state: the area's second, post-`-` part.
+function stateOfPark(reference: string, locationDesc: string | undefined): string | undefined {
+  const country = reference.split('-')[0]
+  const areas = (locationDesc ?? '').split(',').map((a) => a.trim()).filter((a) => a)
+  if (!COUNTRIES_WHERE_STATES_MATTER.has(country) || areas.length !== 1) return undefined
+  return areas[0].split('-')[1] || undefined
 }
 
 const AdifFieldsHook = {
@@ -569,7 +577,7 @@ async function fetchSpotsFrom(api: string): Promise<Spot[]> {
         freq: freq || undefined,
         band: freq ? bandForFrequency(freq) : undefined,
         mode: spot.mode,
-        refs: [{ ref: spot.reference, type: HUNTING_TYPE }],
+        refs: [{ ref: spot.reference, type: HUNTING_TYPE, ...(spot.locationDesc ? { location: spot.locationDesc } : {}) }],
         spot: {
           timeInMillis: Date.parse(spot.spotTime + 'Z'),
           source: 'pota',
@@ -839,6 +847,7 @@ defineExtension({
       }),
       key: manifest.key,
     })
+    registerHook('chasing', { hook: potaHunterProgram(HUNTING_TYPE), key: manifest.key })
     registerHook('spots', { hook: SpotsHook, key: manifest.key })
     registerHook('settingsPanel', { hook: SettingsPanel, key: manifest.key })
     // Priority 100 — higher than every lookup source (QRZ 99, ...), so the

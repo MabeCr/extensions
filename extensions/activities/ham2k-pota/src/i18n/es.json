@@ -10,5 +10,7 @@
   "parksPlural": "parques",
   "p2p": "P2P",
   "useDevServers": "Usar los servidores de prueba de POTA",
-  "useDevServersDescription": "Los spots y las búsquedas de parques van a devapi.pota.app; los spots se leen de ambos servidores"
+  "useDevServersDescription": "Los spots y las búsquedas de parques van a devapi.pota.app; los spots se leen de ambos servidores",
+  "oneParkHunted": "1 parque cazado",
+  "manyParksHunted": "{{formatted}} parques cazados"
 }

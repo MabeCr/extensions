@@ -125,3 +125,11 @@ test("turning the switch on forgets parks the live server answered", async () =>
   await pota.runHook("ref:pota", "decorateRef", { ref: { type: "pota", ref: "US-0009" } })
   assert.deepEqual(sent.map((r) => r.url), [`${LIVE}/park/US-0009`, `${DEV}/park/US-0009`])
 })
+
+// Chasing WAS reads a spotted park's state from its ref, offline, when the
+// parks file is not on the device.
+test("a spot's park ref says where the park is", async () => {
+  feeds = { [LIVE]: [apiSpot("W1AW", "US-0001")] }
+  const [spot] = (await fetchSpots()) as unknown as { refs: Record<string, unknown>[] }[]
+  assert.deepEqual(spot.refs, [{ ref: "US-0001", type: "pota", location: "US-NY" }])
+})
