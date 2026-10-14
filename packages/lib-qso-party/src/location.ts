@@ -83,10 +83,10 @@ export function ourOwnCodes(party: Party): Set<string> {
   return codes
 }
 
-/// The separators a county line may be typed with. A comma is accepted because
-/// the operator may well reach for one; the canonical form written back out is
-/// the slash, which is what the sponsors' Cabrillo samples use.
-const SEPARATORS = /[/,]/
+/// The separators a county line may be typed with. A comma or a plus is accepted
+/// because the operator may well reach for one; the canonical form written back
+/// out is the slash, which is what the sponsors' Cabrillo samples use.
+const SEPARATORS = /[/,+]/
 
 export const COUNTY_LINE_SEPARATOR = '/'
 

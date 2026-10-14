@@ -318,11 +318,11 @@ export function cabrilloCategories(
 }
 
 /// The live rewrites the exchange field applies as the operator types: one, and
-/// only for a party that has county lines — a comma becomes the separator the
-/// operator meant.
+/// only for a party that has county lines — a comma or a plus becomes the
+/// separator the operator meant, the same ones `splitLocations` reads.
 export function exchangeTransforms(party: Party): { pattern: string; replacement: string; flags?: string }[] {
   if (!party.countyLine) return []
-  return [{ pattern: ',', replacement: COUNTY_LINE_SEPARATOR, flags: 'g' }]
+  return [{ pattern: '[,+]', replacement: COUNTY_LINE_SEPARATOR, flags: 'g' }]
 }
 
 /// How many characters a second county may borrow from the first — the
