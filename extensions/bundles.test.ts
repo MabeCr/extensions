@@ -152,6 +152,7 @@ function loadBundle(source: string): { definition: Record<string, unknown>; regi
 /// that a built-in ported here lands in the directory it came from.
 const DIRECTORY_FOR_CATEGORY: Record<string, string> = {
   activity: "activities",
+  award: "awards",
   contest: "contests",
   dashboard: "dashboard",
   lookup: "lookups",
