@@ -536,9 +536,9 @@ test('our location suggests counties, then everything that may only stand alone'
   assert.equal(byCode.NY, undefined)
   assert.deepEqual(field.multiValue, { separator: '/' })
   assert.equal(field.uppercase, true)
-  // The scorer reads `ALB,SCH` and `ALB+SCH` as lines; without the rewrite the
-  // field would flag as unknown what the score counts.
-  assert.deepEqual(field.transforms, [{ pattern: '[,+]', replacement: '/', flags: 'g' }])
+  // The scorer reads `ALB,SCH`, `ALB+SCH` and `ALB.SCH` as lines; without the
+  // rewrite the field would flag as unknown what the score counts.
+  assert.deepEqual(field.transforms, [{ pattern: '[,+.]', replacement: '/', flags: 'g' }])
 })
 
 test('a party without county lines takes one location, and no separator', async () => {

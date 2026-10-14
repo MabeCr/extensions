@@ -27,10 +27,12 @@ const codes = (params: typeof NY, text: string, opts?: Parameters<typeof parseLo
 
 test('a county line is two values, however it was typed', () => {
   assert.deepEqual(splitLocations('ALB/ERI'), ['ALB', 'ERI'])
-  // A comma or a plus is accepted because an operator may well reach for one.
+  // A comma, a plus or a period is accepted because an operator may well reach
+  // for one.
   assert.deepEqual(splitLocations('alb,eri'), ['ALB', 'ERI'])
   assert.deepEqual(splitLocations('ALB+ERI'), ['ALB', 'ERI'])
-  assert.deepEqual(splitLocations('ALB+ERI,ONE/OTS'), ['ALB', 'ERI', 'ONE', 'OTS'])
+  assert.deepEqual(splitLocations('ALB.ERI'), ['ALB', 'ERI'])
+  assert.deepEqual(splitLocations('ALB+ERI,ONE.OTS/SCH'), ['ALB', 'ERI', 'ONE', 'OTS', 'SCH'])
   assert.deepEqual(splitLocations('ALB'), ['ALB'])
   assert.deepEqual(splitLocations(''), [])
 })

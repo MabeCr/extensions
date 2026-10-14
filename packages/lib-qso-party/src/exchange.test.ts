@@ -254,11 +254,15 @@ test('the county-line shorthand is declared, not rewritten', () => {
   assert.equal(exchangeInheritPrefix(resolveParty(SEVEN_QP)), 2)
   // A party whose codes are three letters has no shorthand at all…
   assert.equal(exchangeInheritPrefix(ny), 0)
-  // …and the only live rewrite left is the comma or plus an operator may reach
-  // for, written as the slash the field splits on. Applied the way the host
-  // applies it, so a pattern that stops matching one of them fails here.
+  // …and the only live rewrite left is the comma, plus or period an operator may
+  // reach for, written as the slash the field splits on. Applied the way the
+  // host applies it, so a pattern that stops matching one of them — or a bare
+  // `.` that matches every character — fails here.
   const [rewrite] = exchangeTransforms(ny)
-  assert.equal('ALB+ERI,ONE/OTS'.replace(new RegExp(rewrite.pattern, rewrite.flags), rewrite.replacement), 'ALB/ERI/ONE/OTS')
+  assert.equal(
+    'ALB+ERI,ONE.OTS/SCH'.replace(new RegExp(rewrite.pattern, rewrite.flags), rewrite.replacement),
+    'ALB/ERI/ONE/OTS/SCH',
+  )
   assert.deepEqual(exchangeTransforms(resolveParty(WI)), [])
 })
 
