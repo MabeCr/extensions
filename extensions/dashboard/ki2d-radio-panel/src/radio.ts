@@ -7,10 +7,10 @@ type RadioHost = {
   kvGet?(key: string): Promise<JSONValue | null>; kvSet?(key: string, value: JSONValue): Promise<void>
 }
 const en = {
-  connect: 'Connect', disconnect: 'Disconnect', mode: 'Mode', radio: 'Radio', automatic: 'Automatic (logging radio)', theme: 'Theme', light: 'Light', meterScale: 'Switch signal scale between dBm and S-units', power: 'Power', powerAdjust: 'Adjust power', antenna: 'Antenna', rxAntenna: 'Receive antenna', txAntenna: 'Transmit antenna', filter: 'Receive filter: shift and width', filterLow: 'Receive filter low edge', filterHigh: 'Receive filter high edge',
+  connect: 'Connect', disconnect: 'Disconnect', mode: 'Mode', radio: 'Radio', automatic: 'Automatic (logging radio)', theme: 'Theme', light: 'Light', meterScale: 'Switch signal scale between dBm and S-units', powerAdjust: 'Adjust power', antenna: 'Antenna', rxAntenna: 'Receive antenna', txAntenna: 'Transmit antenna', filter: 'Receive filter: shift and width', filterLow: 'Receive filter low edge', filterHigh: 'Receive filter high edge',
   display: 'Display', both: 'Panadapter and waterfall', panOnly: 'Panadapter only', waterfallOnly: 'Waterfall only', off: 'Off',
   panWidth: 'Panadapter width', speed: 'Waterfall speed',
-  colors: 'Waterfall colors', teal: 'Teal', classic: 'Classic', gray: 'Gray', heat: 'Heat', tune: 'Tune frequency', panadapter: 'Panadapter', tuner: 'Antenna tuner', atu: 'ATU', bypass: 'BYPASS', tuning: 'TUNING', tuneFailed: 'ATU FAIL',
+  colors: 'Waterfall colors', teal: 'Teal', classic: 'Classic', gray: 'Gray', heat: 'Heat', tune: 'Tune frequency', panadapter: 'Panadapter', tuner: 'Antenna tuner', atu: 'ATU', bypass: 'BYPASS', bypassShort: 'BYP', tuning: 'TUNING', tuneFailed: 'ATU FAIL', tuneFailedShort: 'FAIL', startTune: 'Start a tune', tuneButton: 'TUNE', tuneShort: 'T',
   title: 'KI2D’s Radio Panel', description: 'Live CAT readout, meters and panadapter',
   none: 'Select a local radio in Station Configuration', disconnected: 'Disconnected', connecting: 'Connecting',
   connected: 'Connected', stale: 'No current radio data', error: 'Radio error', disconnecting: 'Disconnecting',
@@ -19,10 +19,10 @@ const en = {
   rejected: 'Radio is not connected or its readings are stale.', awaiting: 'Awaiting radio confirmation', unconfirmed: 'Radio has not confirmed the requested tune',
 }
 const es: typeof en = {
-  connect: 'Conectar', disconnect: 'Desconectar', mode: 'Modo', radio: 'Radio', automatic: 'Automática (radio del registro)', theme: 'Tema', light: 'Claro', meterScale: 'Cambiar la escala de señal entre dBm y unidades S', power: 'Potencia', powerAdjust: 'Ajustar potencia', antenna: 'Antena', rxAntenna: 'Antena de recepción', txAntenna: 'Antena de transmisión', filter: 'Filtro de recepción: desplazamiento y ancho', filterLow: 'Borde inferior del filtro', filterHigh: 'Borde superior del filtro',
+  connect: 'Conectar', disconnect: 'Desconectar', mode: 'Modo', radio: 'Radio', automatic: 'Automática (radio del registro)', theme: 'Tema', light: 'Claro', meterScale: 'Cambiar la escala de señal entre dBm y unidades S', powerAdjust: 'Ajustar potencia', antenna: 'Antena', rxAntenna: 'Antena de recepción', txAntenna: 'Antena de transmisión', filter: 'Filtro de recepción: desplazamiento y ancho', filterLow: 'Borde inferior del filtro', filterHigh: 'Borde superior del filtro',
   display: 'Pantalla', both: 'Panorámico y cascada', panOnly: 'Solo panorámico', waterfallOnly: 'Solo cascada', off: 'Apagada',
   panWidth: 'Ancho del panorámico', speed: 'Velocidad de la cascada',
-  colors: 'Colores de la cascada', teal: 'Verde azulado', classic: 'Clásicos', gray: 'Grises', heat: 'Calor', tune: 'Sintonizar frecuencia', panadapter: 'Panorámico', tuner: 'Acoplador de antena', atu: 'ATU', bypass: 'BYPASS', tuning: 'AFINANDO', tuneFailed: 'ATU FALLO',
+  colors: 'Colores de la cascada', teal: 'Verde azulado', classic: 'Clásicos', gray: 'Grises', heat: 'Calor', tune: 'Sintonizar frecuencia', panadapter: 'Panorámico', tuner: 'Acoplador de antena', atu: 'ATU', bypass: 'BYPASS', bypassShort: 'BYP', tuning: 'AFINANDO', tuneFailed: 'ATU FALLO', tuneFailedShort: 'FALLO', startTune: 'Iniciar el afinado', tuneButton: 'AFINAR', tuneShort: 'T',
   title: 'Panel de radio de KI2D', description: 'Lecturas CAT, medidores y panorámico',
   none: 'Selecciona una radio local en Configuración de estación', disconnected: 'Desconectada', connecting: 'Conectando',
   connected: 'Conectada', stale: 'Sin datos actuales de la radio', error: 'Error de radio', disconnecting: 'Desconectando',
@@ -60,7 +60,7 @@ const panCategory = (mode?: string | null): PanCategory =>
   mode === 'CW' || mode === 'CW-R' ? 'cw' : ['USB', 'LSB', 'AM', 'FM'].includes(mode ?? '') ? 'phone' : 'digital'
 const panWidths: Record<PanCategory, number[]> = { cw: [10000, 50000, 150000], phone: [20000, 75000, 150000], digital: [6000, 30000, 100000] }
 /** How the operator has the face arranged, as opposed to what the radio reports. */
-type View = { longSwrHold?: boolean; waterfallRate?: number; radio?: string; spectrum?: Spectrum; panWidthHz?: number; theme?: Theme; meterScale?: MeterScale; powerOpen?: boolean; requestedWatts?: number }
+type View = { longSwrHold?: boolean; waterfallRate?: number; radio?: string; spectrum?: Spectrum; panWidthHz?: number; theme?: Theme; meterScale?: MeterScale }
 /** Above this an SWR reads as a warning. */
 const swrWarning = 1.8
 const swrHoldMillis = 3000
@@ -101,6 +101,24 @@ function widened([low, high]: [number, number], width: number): [number, number]
 /** `2700` as `2.7K`, `250` as is — the preset menu's labels. */
 const hz = (v: number) => v >= 1000 ? `${Number((v / 1000).toFixed(1))}K` : `${v}`
 
+/**
+ * The power menu's steps, by the radio's maximum: those listed for the first maximum at or above it,
+ * ending at the radio's own — a 15 W radio gets the 20 W radio's steps under 15, then 15.
+ */
+const powerTiers: [number, number[]][] = [
+  [5, [1, 2, 3, 4, 5]],
+  [10, [1, 2, 5, 7, 8, 10]],
+  [20, [1, 5, 10, 15, 18, 20]],
+  [100, [1, 5, 20, 50, 80, 90, 100]],
+  [200, [1, 5, 20, 75, 100, 150, 200]],
+  [600, [1, 5, 20, 100, 200, 400, 600]],
+  [1500, [1, 5, 50, 100, 400, 800, 1200, 1500]],
+]
+export function powerSteps(maxWatts: number) {
+  const [, steps] = powerTiers.find(([most]) => most >= maxWatts) ?? powerTiers[powerTiers.length - 1]
+  return [...steps.filter(watts => watts < maxWatts), maxWatts]
+}
+
 /** A port's name as it fits a pill beside `RX:`: `ANT1` as `A1`, `RX_A` as `RA`, `XVTA` as `XA`. */
 const shortPort = (port: string | null) => !port ? '—' : port.replace(/^ANT(\d)$/, 'A$1').replace(/^RX_?([A-Z])$/, 'R$1').replace(/^XVT([A-Z])$/, 'X$1')
 
@@ -115,7 +133,7 @@ function mix(a: string, b: string, t: number) {
 }
 export function createRadioPanel(host: RadioHost): PanelHook {
   const placements = new Map<string, {
-    id: string | null; selection?: string; requested?: number; dial?: boolean; mode?: string; sent?: number; watts?: number; wattsSent?: number
+    id: string | null; selection?: string; requested?: number; dial?: boolean; mode?: string; sent?: number
     /** The scope span last asked of the radio for the panadapter's width: asked once per change. */
     spanAsked?: number
     panCategory?: PanCategory
@@ -124,10 +142,10 @@ export function createRadioPanel(host: RadioHost): PanelHook {
     passbandSent?: number
   }>()
   // Outside `placements`, which is reset whenever the radio changes: these are the operator's choices, not the radio's.
-  const views = new Map<string, { meterScale?: MeterScale; powerOpen?: boolean; panWidth?: Partial<Record<PanCategory, number>>; waterfallRate?: number }>()
+  const views = new Map<string, { meterScale?: MeterScale; panWidth?: Partial<Record<PanCategory, number>>; waterfallRate?: number }>()
   const view = (key: string) => views.get(key) ?? views.set(key, {}).get(key)!
-  // The scale, the span presets and the waterfall's rate are kept per placement across restarts; the
-  // power slider's being open is not. Read once, the first time a placement renders.
+  // The scale, the span presets and the waterfall's rate are kept per placement across restarts. Read
+  // once, the first time a placement renders.
   const stored = (key: string) => `view:${key}`
   async function restore(key: string) {
     if (views.has(key)) return
@@ -180,9 +198,6 @@ export function createRadioPanel(host: RadioHost): PanelHook {
       // has been still a moment, the readout follows the radio again.
       if (p.requested !== undefined && p.dial && args.clock.realNowMillis - (p.sent ?? 0) > 1500) delete p.requested
       if (p.mode !== undefined && r?.mode === p.mode) delete p.mode
-      // Not a pending confirmation like frequency: a radio rounds power to its own steps, so the
-      // request is only held long enough for the slider not to jump back before the report.
-      if (p.watts !== undefined && (r?.powerWatts === p.watts || args.clock.realNowMillis - (p.wattsSent ?? 0) > 2000)) delete p.watts
       // Mid-scroll the radio's report lags what was asked: the knobs keep moving from the request.
       if (args.clock.realNowMillis - (p.passbandSent ?? 0) > 1500) p.passband = r?.passband ? [r.passband.lowHz, r.passband.highHz] : undefined
       // The panadapter's width: the scope set to the narrowest span covering it, the display cropped to it.
@@ -200,7 +215,7 @@ export function createRadioPanel(host: RadioHost): PanelHook {
       const waiting = p.requested !== undefined || p.mode !== undefined
       const pending = waiting ? ((args.clock.realNowMillis - (p.sent ?? 0)) > 5000 ? t.unconfirmed : t.awaiting) : ''
       return { kind: 'svgScene', title: r?.name?.trim() || t.title, scene: radioDocument(args.environment, r, p.requested, pending, {
-        ...view(key), radio: selection, spectrum: spectrumConfig(args.config), panWidthHz, longSwrHold, requestedWatts: p.watts,
+        ...view(key), radio: selection, spectrum: spectrumConfig(args.config), panWidthHz, longSwrHold,
         theme: typeof args.config.theme === 'string' && args.config.theme in themes ? args.config.theme as Theme : 'light',
       }) }
     },
@@ -221,10 +236,6 @@ export function createRadioPanel(host: RadioHost): PanelHook {
       if ((event.controlId === 'meter-scale' || event.controlId === 'meter-scale-axis') && event.phase === 'activate') {
         view(key).meterScale = view(key).meterScale === 's' ? 'dbm' : 's'
         persist(key)
-        return { values: {} as Record<string, number> }
-      }
-      if (event.controlId === 'power-pill' && event.phase === 'activate') {
-        view(key).powerOpen = !view(key).powerOpen
         return { values: {} as Record<string, number> }
       }
       if (!p?.id) throw new Error(t.rejected)
@@ -264,8 +275,10 @@ export function createRadioPanel(host: RadioHost): PanelHook {
         command = { id: p.id, frequencyHz: Math.round(event.value!) }
       } else if (event.controlId === 'atu-pill' && event.phase === 'activate' && ['tuner-inline', 'tuner-bypass'].includes(event.action)) {
         command = { id: p.id, tunerInline: event.action === 'tuner-inline' }
-      } else if (event.controlId === 'power-slider' && event.action === 'power' && ['change', 'commit'].includes(event.phase) && Number.isFinite(event.value)) {
-        command = { id: p.id, powerWatts: event.value! }
+      } else if (event.controlId === 'tune-pill' && event.phase === 'activate' && event.action === 'start-tune') {
+        command = { id: p.id, startTune: true }
+      } else if (event.controlId === 'power-pill' && event.phase === 'activate' && event.action.startsWith('watts-') && Number.isFinite(Number(event.action.slice(6)))) {
+        command = { id: p.id, powerWatts: Number(event.action.slice(6)) }
       } else if (event.controlId === 'mode' && event.phase === 'activate' && event.action.startsWith('mode-') && modes.includes(event.action.slice(5) as typeof modes[number])) {
         command = { id: p.id, mode: event.action.slice(5) as typeof modes[number] }
       } else throw new Error(t.invalid)
@@ -273,12 +286,8 @@ export function createRadioPanel(host: RadioHost): PanelHook {
       const result = await host.setRadio(command)
       if (!result.accepted) throw new Error(result.reason === 'changed' ? t.changed : result.reason === 'transmitting' ? t.transmitting : result.reason === 'invalid' ? t.invalid : t.rejected)
       // The pill follows the radio's report, not the request; the box shows what was asked until the radio answers.
-      if (command.tunerInline !== undefined || command.antenna) return { values: {} as Record<string, number> }
+      if (command.tunerInline !== undefined || command.startTune || command.antenna || command.powerWatts !== undefined) return { values: {} as Record<string, number> }
       if (command.passband) return { values: passbandValues([command.passband.lowHz, command.passband.highHz]) }
-      if (command.powerWatts !== undefined) {
-        p.watts = command.powerWatts; p.wattsSent = args.clock?.realNowMillis ?? 0
-        return { values: { power: p.watts } }
-      }
       if (command.frequencyHz !== undefined) p.dial = command.dial === true
       p.requested = command.frequencyHz ?? p.requested
       p.mode = command.mode ?? p.mode
@@ -295,8 +304,8 @@ export function radioDocument(e: PanelEnvironment, r: PanelRadioState | null, re
   const left = e.safeInsets.left, top = e.safeInsets.top, w = width - left - e.safeInsets.right, h = height - top - e.safeInsets.bottom
   const requested = (requestedHz ?? r?.frequencyHz ?? 0) / 1000
   const live = r?.status === 'connected' && !r.stale && !r.problem, canTune = live && r.canTune && r.transmitting !== true
-  const maxWatts = r?.maxWatts ?? 100, watts = Math.max(0, Math.min(maxWatts, view.requestedWatts ?? r?.powerWatts ?? 0))
-  const layers: SvgSceneLayer[] = [], scene: SvgScene = { version: 1, width, height, values: { reported: (r?.frequencyHz ?? 0) / 1000, requested, rf: r?.meters.powerOut ?? 0, power: watts }, layers, controls: [] }
+  const maxWatts = r?.maxWatts ?? 100
+  const layers: SvgSceneLayer[] = [], scene: SvgScene = { version: 1, width, height, values: { reported: (r?.frequencyHz ?? 0) / 1000, requested, rf: r?.meters.powerOut ?? 0 }, layers, controls: [] }
   if (w < 70 || h < 50) return scene
   const label = e.typography.label, line = label.scaledFontSize * label.lineHeight + 4
   function svg(id: string, x: number, y: number, sw: number, sh: number, art: string): SvgSceneLayer {
@@ -334,15 +343,16 @@ export function radioDocument(e: PanelEnvironment, r: PanelRadioState | null, re
   // tuner and antennas. The panafall starts below the longest.
   const rowY = top + 8
   const leftBottom = rowY + pillsHeight + pillGap * 2 + 38, rightBottom = rowY + rightRows * (line + pillGap) - pillGap
-  const pill = (id: string, x: number, y: number, fill = c.surfaceContainer) => layers.push(svg(id, x, y, pillWidth, line,
-    `<rect width="${pillWidth}" height="${line}" rx="${line / 2}" fill="${fill}"/>`))
+  const pill = (id: string, x: number, y: number, fill = c.surfaceContainer, pw = pillWidth) => layers.push(svg(id, x, y, pw, line,
+    `<rect width="${pw}" height="${line}" rx="${line / 2}" fill="${fill}"/>`))
 
   // Mode over power.
   function pills(y: number) {
     const modeY = y, powerY = y + line + pillGap
     pill('power-pill', left + 12, powerY)
     text('power', r?.powerWatts == null ? '— W' : `${r.powerWatts} W`, left + 12, powerY, pillWidth, 'label', c.onSurface, 'center')
-    if (canTune) scene.controls!.push({ id: 'power-pill', label: t.powerAdjust, kind: 'button', x: left + 12, y: powerY, width: pillWidth, height: line, event: 'toggle-power' })
+    if (canTune) scene.controls!.push({ id: 'power-pill', label: t.powerAdjust, kind: 'button', x: left + 12, y: powerY, width: pillWidth, height: line,
+      menu: powerSteps(maxWatts).map(watts => ({ label: `${watts} W`, event: `watts-${watts}` })) })
     pill('mode-pill', left + 12, modeY)
     text('mode', r?.mode ?? '—', left + 12, modeY, pillWidth, 'label', c.onSurface, 'center')
     if (canTune) scene.controls!.push({ id: 'mode', label: t.mode, kind: 'button', x: left + 12, y: modeY, width: pillWidth, height: line,
@@ -364,11 +374,27 @@ export function radioDocument(e: PanelEnvironment, r: PanelRadioState | null, re
       const atuY = y + line + pillGap
       // A tune is a carrier on the air: red, like the transmit bar, while it lasts.
       const tuning = tuner === 'tuning'
-      pill('atu-pill', atuX, atuY, tuning ? transmitRed : c.surfaceContainer)
-      const atuLabel = { inline: t.atu, bypassed: t.bypass, tuning: t.tuning, failed: t.tuneFailed }[tuner]
-      text('atu', atuLabel, atuX, atuY, pillWidth, 'label', tuning ? '#ffffff' : tuner === 'bypassed' ? c.outline : c.onSurface, 'center')
+      // A radio that tunes apart from its in-line switch gets a Tune pill beside it: a whole one where
+      // the column has room for two, otherwise a "T" sharing the one pill's width, the tuner's words
+      // shortened to fit.
+      const startable = r?.canStartTune === true
+      const roomy = columnX <= atuX - pillGap - pillWidth
+      const tuneWidth = !startable ? 0 : roomy ? pillWidth : Math.max(line, 24)
+      const atuLeft = !startable || roomy ? atuX : atuX + tuneWidth + pillGap, atuWidth = atuX + pillWidth - atuLeft
+      if (startable) {
+        const tuneX = roomy ? atuX - pillGap - pillWidth : atuX
+        pill('tune-pill', tuneX, atuY, tuning ? transmitRed : c.surfaceContainer, tuneWidth)
+        text('tune', roomy ? t.tuneButton : t.tuneShort, tuneX, atuY, tuneWidth, 'label', tuning ? '#ffffff' : c.onSurface, 'center')
+        // Not again while one runs: the radio is already on the air with it.
+        if (canTune && !tuning) scene.controls!.push({ id: 'tune-pill', label: t.startTune, kind: 'button', x: tuneX, y: atuY, width: tuneWidth, height: line, event: 'start-tune' })
+      }
+      pill('atu-pill', atuLeft, atuY, tuning ? transmitRed : c.surfaceContainer, atuWidth)
+      const atuLabel = roomy || !startable
+        ? { inline: t.atu, bypassed: t.bypass, tuning: t.tuning, failed: t.tuneFailed }[tuner]
+        : { inline: t.atu, bypassed: t.bypassShort, tuning: t.atu, failed: t.tuneFailedShort }[tuner]
+      text('atu', atuLabel, atuLeft, atuY, atuWidth, 'label', tuning ? '#ffffff' : tuner === 'bypassed' ? c.outline : c.onSurface, 'center')
       // In line takes the tuner out; anything else puts it back — on a Flex, by tuning.
-      if (canTune) scene.controls!.push({ id: 'atu-pill', label: t.tuner, kind: 'button', x: atuX, y: atuY, width: pillWidth, height: line,
+      if (canTune) scene.controls!.push({ id: 'atu-pill', label: t.tuner, kind: 'button', x: atuLeft, y: atuY, width: atuWidth, height: line,
         event: tuner === 'inline' ? 'tuner-bypass' : 'tuner-inline' })
     }
     if (antennas) {
@@ -481,17 +507,6 @@ export function radioDocument(e: PanelEnvironment, r: PanelRadioState | null, re
   const status = !r?.id ? t.none : r.stale ? t.stale : t[r.status]
   // As wide as the frequency above it.
   const barX = frequencyX, barWidth = Math.max(1, frequencyEndX - frequencyX)
-  if (view.powerOpen && canTune && w >= 220) {
-    const trackY = y + 10, thumb = 16
-    layers.push(svg('power-track', barX, trackY - 2, barWidth, 4, `<rect width="${barWidth}" height="4" rx="2" fill="${c.surfaceContainer}"/>`))
-    layers.push({ ...svg('power-thumb', barX - thumb / 2, trackY - thumb / 2, thumb, thumb, `<circle cx="${thumb / 2}" cy="${thumb / 2}" r="${thumb / 2 - 1}" fill="${c.onSurface}"/>`),
-      translateX: { value: 'power', input: [0, maxWatts], output: [0, barWidth] } })
-    layers.push({ id: 'power-value', x: Math.min(barX + barWidth + 8, left + w - 12 - numberWidth), y: trackY - line / 2, width: numberWidth, height: line,
-      text: { value: 'power', decimals: maxWatts <= 20 ? 1 : 0, suffix: ' W', size: label.fontSize, fontFamily: label.fontFamily ?? undefined, fontWeight: label.fontWeight, lineHeight: label.lineHeight, color: c.onSurface } })
-    scene.controls!.push({ id: 'power-slider', label: t.power, kind: 'slider', x: barX - thumb / 2, y: trackY - thumb / 2, width: barWidth + thumb, height: thumb,
-      value: 'power', min: 0, max: maxWatts, step: maxWatts <= 20 ? .5 : 1, event: 'power', continuous: true })
-    y += 28
-  }
   // Under the pills, beside the meter.
   if (!compact && w >= 220 && h >= 160) passbandBox(left + 12, rowY + pillsHeight + pillGap * 2)
   if (w >= 220 && h >= 160) {

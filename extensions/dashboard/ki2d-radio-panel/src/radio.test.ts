@@ -3,7 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { JSONValue, PanelEnvironment, PanelRenderArgs, HookContext, PanelRadioState, PanelRadioSet, PanelRadioSpectrumSet, SvgScene } from '@ham2k/extension-sdk'
-import { createRadioPanel, radioDocument } from './radio.ts'
+import { createRadioPanel, powerSteps, radioDocument } from './radio.ts'
 
 type Host = Parameters<typeof createRadioPanel>[0]
 const style = { fontFamily: 'Roboto', fontFamilyFallback: ['NotoColorEmoji'], fontSize: 14, scaledFontSize: 14, fontWeight: 400, lineHeight: 1.2, letterSpacing: 0 }
@@ -185,6 +185,43 @@ test('a tune shows in the transmit bar\'s red, as the carrier it is', () => {
   assert.ok(!art('inline').includes('#d04a34'))
 })
 
+test('a radio that tunes apart from its tuner switch gets a Tune pill beside the ATU pill, and a press tunes', async () => {
+  const state = { ...live, tuner: 'bypassed' as const, canStartTune: true }
+  const { host, commands } = radioHost(() => state)
+  const scene = radioDocument(environment, state)
+  const tune = scene.controls!.find(c => c.id === 'tune-pill')!, atu = scene.controls!.find(c => c.id === 'atu-pill')!
+  assert.equal(tune.y, atu.y, 'side by side')
+  assert.ok(tune.x! + tune.width! <= atu.x!, 'to its left, not over it')
+  assert.equal(scene.layers.find(l => l.id === 'tune')?.text?.literal, 'TUNE')
+  assert.equal(scene.layers.find(l => l.id === 'atu')?.text?.literal, 'BYPASS')
+  const panel = createRadioPanel(host)
+  await panel.render(args, ctx)
+  await panel.onEvent!(event('tune-pill', 'start-tune', 'activate'), ctx)
+  // Alone: the host refuses a tune that rides with any other setting.
+  assert.deepEqual(commands, [{ id: 'rig-a', startTune: true }])
+})
+
+test('without room for two pills, the Tune pill is a "T" in the one pill\'s width, the tuner\'s words shortened', () => {
+  const state = { ...live, tuner: 'bypassed' as const, canStartTune: true }
+  const scene = radioDocument({ ...environment, width: 320 }, state)
+  const tune = scene.controls!.find(c => c.id === 'tune-pill')!, atu = scene.controls!.find(c => c.id === 'atu-pill')!
+  const alone = radioDocument({ ...environment, width: 320 }, { ...state, canStartTune: false }).controls!.find(c => c.id === 'atu-pill')!
+  assert.equal(tune.x, alone.x, 'the column does not widen into the frequency')
+  assert.equal(atu.x! + atu.width!, alone.x! + alone.width!)
+  assert.equal(scene.layers.find(l => l.id === 'tune')?.text?.literal, 'T')
+  assert.equal(scene.layers.find(l => l.id === 'atu')?.text?.literal, 'BYP')
+})
+
+test('no Tune pill where the radio cannot start one apart — a Flex, whose in line is the tune — nor while one runs', () => {
+  const flex = radioDocument(environment, { ...live, tuner: 'bypassed', canStartTune: false })
+  assert.equal(flex.controls!.find(c => c.id === 'tune-pill'), undefined)
+  assert.equal(flex.layers.find(l => l.id === 'tune'), undefined)
+  // Pressed again mid-tune it would key the radio over its own carrier.
+  const tuning = radioDocument(environment, { ...live, tuner: 'tuning', canStartTune: true })
+  assert.equal(tuning.controls!.find(c => c.id === 'tune-pill'), undefined)
+  assert.ok(tuning.layers.find(l => l.id === 'tune-pill')!.svg!.includes('#d04a34'), 'red, like the carrier it is')
+})
+
 test('too narrow for three columns, only the left column moves, to a row above the panafall', () => {
   const state = { ...live, tuner: 'inline' as const, passband: { lowHz: 100, highHz: 2800 } }
   const top = (scene: SvgScene, id: string) => scene.controls!.find(c => c.id === id)!.y!
@@ -209,4 +246,30 @@ test('a radio picking receive and transmit antennas apart gets a pill for each',
   // One port for both, or only one port: no pill to choose with.
   assert.ok(radioDocument(environment, { ...live, antennas: { ...antennas, separate: false } }).layers.some(l => l.id === 'antenna'))
   assert.ok(!radioDocument(environment, { ...live, antennas: { rxPorts: ['ANT1'], txPorts: ['ANT1'], rx: 'ANT1', tx: 'ANT1', separate: false } }).layers.some(l => l.id.startsWith('antenna')))
+})
+
+test('the power pill offers steps that suit the radio\'s maximum, and picking one sets the power', async () => {
+  const menu = (maxWatts?: number) => radioDocument(environment, { ...live, maxWatts }).controls!.find(c => c.id === 'power-pill')!.menu!.map(i => i.label)
+  assert.deepEqual(menu(5), ['1 W', '2 W', '3 W', '4 W', '5 W'])
+  assert.deepEqual(menu(10), ['1 W', '2 W', '5 W', '7 W', '8 W', '10 W'])
+  assert.deepEqual(menu(20), ['1 W', '5 W', '10 W', '15 W', '18 W', '20 W'])
+  assert.deepEqual(menu(100), ['1 W', '5 W', '20 W', '50 W', '80 W', '90 W', '100 W'])
+  assert.deepEqual(menu(200), ['1 W', '5 W', '20 W', '75 W', '100 W', '150 W', '200 W'])
+  assert.deepEqual(menu(600), ['1 W', '5 W', '20 W', '100 W', '200 W', '400 W', '600 W'])
+  assert.deepEqual(menu(1500), ['1 W', '5 W', '50 W', '100 W', '400 W', '800 W', '1200 W', '1500 W'])
+  // A radio stating no maximum is taken for a 100 W one.
+  assert.deepEqual(menu(undefined), menu(100))
+  // A maximum between the listed ones never offers more than the radio has, and always offers all of it.
+  assert.deepEqual(powerSteps(15), [1, 5, 10, 15])
+  assert.deepEqual(powerSteps(50), [1, 5, 20, 50])
+  assert.deepEqual(powerSteps(300), [1, 5, 20, 100, 200, 300])
+  assert.deepEqual(powerSteps(1000), [1, 5, 50, 100, 400, 800, 1000])
+  assert.deepEqual(powerSteps(2000), [1, 5, 50, 100, 400, 800, 1200, 1500, 2000])
+  const { host, commands } = radioHost(() => live)
+  const panel = createRadioPanel(host)
+  await panel.render(args, ctx)
+  await panel.onEvent!(event('power-pill', 'watts-50', 'activate'), ctx)
+  assert.deepEqual(commands, [{ id: 'rig-a', powerWatts: 50 }])
+  // The pill shows the radio's report, which a radio rounds to its own steps, not the step picked.
+  assert.equal(sceneOf(await panel.render(args, ctx)).layers.find(l => l.id === 'power')?.text?.literal, '5 W')
 })
