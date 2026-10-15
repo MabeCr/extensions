@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-ki2d-aprs-spotting",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Ham2K Logger extension: self-spots as APRS position beacons",
   "author": "Sebastian Delmont <sd@ham2k.com>",

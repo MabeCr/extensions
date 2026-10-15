@@ -2,7 +2,7 @@
   "key": "ki2d-aprs-spotting",
   "name": "KI2D’s APRS Self-Spotting",
   "shortName": "APRS",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "api": 1,
   "description": "Self-spots become an APRS position beacon naming your frequency and what you are activating — for aprs.fi and the QSO party mobile trackers",
   "category": "spots",
