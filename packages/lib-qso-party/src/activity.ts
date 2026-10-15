@@ -33,9 +33,12 @@ import {
   ourOverlayClass,
   ourPowerClass,
   ourStationClass,
+  exchangeRefType,
+  partyContactRefIn,
+  ourSerialOf,
   partyRefIn,
-  serial as serialOf,
   str,
+  theirSerialOf,
 } from "./entry.ts"
 import {
   exchangeInheritPrefix,
@@ -92,26 +95,33 @@ async function callHistory(
 /// of this event.
 ///
 /// This operation's comes first and is taken as it is — the operator copied
-/// it from this station minutes ago. An earlier running is found by the
-/// event's ref type, which its operations carry, and has to still hold
-/// (`pastExchangeHolds`): the station can have moved.
+/// it from this station minutes ago, under whichever type the operation is
+/// logged under. An earlier running is found by the event's ref type, which
+/// its operations carry, and has to still hold (`pastExchangeHolds`): the
+/// station can have moved.
 async function priorExchange(
   ctx: HookContext,
   party: Party,
   call: string,
-  operationUuid: string,
+  operation: Record<string, JSONValue>,
   options: { code: string }[],
   guessedState: string,
 ): Promise<string> {
+  const operationUuid = str(operation.uuid)
   if (!operationUuid) return ''
-  const here = await callHistory(ctx, call, { operation: operationUuid, refType: party.refType })
+  const here = await callHistory(ctx, call, {
+    operation: operationUuid,
+    refType: exchangeRefType(party, operation as Record<string, unknown>),
+  })
   // Could not ask about this operation: an earlier running must not answer
   // over what may be in it.
   if (here === null) return ''
-  const found = loggedExchangeFor(party, here, call)
+  const found = loggedExchangeFor(party, here, call, { operation })
   if (found) return found
   const before = await callHistory(ctx, call, { refType: party.refType, excludeOperation: operationUuid })
-  return loggedExchangeFor(party, before ?? [], call, (location) => pastExchangeHolds(party, options, guessedState, location))
+  return loggedExchangeFor(party, before ?? [], call, {
+    accept: (location) => pastExchangeHolds(party, options, guessedState, location),
+  })
 }
 
 /// The English an operator reads where the party's own translator says nothing.
@@ -509,6 +519,10 @@ export function qsoPartyActivity(params: QsoPartyParams): ActivityHook {
       const controls: LoggingControlDescriptor[] = []
       const chrome = { icon: party.icon, color: party.accentColor }
       const t = labelsFor(party, ctx)
+      // The keys stay the party's own whatever the type: they are what the
+      // operator's field order and hidden fields are stored under, and what
+      // the serial sequence is named by.
+      const refType = exchangeRefType(party, operation as Record<string, unknown>)
 
       if (party.exchange.number) {
         controls.push({
@@ -516,14 +530,14 @@ export function qsoPartyActivity(params: QsoPartyParams): ActivityHook {
           label: t('ourSerial'),
           ...chrome,
           order: 10,
-          input: { kind: 'serial', refType: party.refType, field: 'ourSerial', sequence: { key: 'serial' } },
+          input: { kind: 'serial', refType, field: 'ourSerial', sequence: { key: 'serial' } },
         })
         controls.push({
           key: `${party.refType}/theirSerial`,
           label: t('theirSerial'),
           ...chrome,
           order: 20,
-          input: { kind: 'text', refType: party.refType, field: 'theirSerial', numeric: true, maxLength: 5 },
+          input: { kind: 'text', refType, field: 'theirSerial', numeric: true, maxLength: 5 },
         })
       }
 
@@ -533,7 +547,7 @@ export function qsoPartyActivity(params: QsoPartyParams): ActivityHook {
           label: t('theirName'),
           ...chrome,
           order: 30,
-          input: { kind: 'text', refType: party.refType, field: 'theirName', maxLength: 12 },
+          input: { kind: 'text', refType, field: 'theirName', maxLength: 12 },
         })
       }
 
@@ -542,7 +556,7 @@ export function qsoPartyActivity(params: QsoPartyParams): ActivityHook {
       // Only asked for when there is a callsign: this hook is also called with
       // no QSO at all, and none of those callers can use the answer.
       const call = str((qso?.their as Record<string, JSONValue> | undefined)?.call)
-      const logged = call ? await priorExchange(ctx, party, call, str(operation.uuid), options, guessedState) : ''
+      const logged = call ? await priorExchange(ctx, party, call, operation, options, guessedState) : ''
       // Otherwise the value an empty exchange is scored and filed as anyway,
       // so a prefill left alone changes nothing about the log.
       const hint = defaultTheirLocation(party, (qso ?? {}) as Record<string, JSONValue>)
@@ -564,7 +578,7 @@ export function qsoPartyActivity(params: QsoPartyParams): ActivityHook {
         order: 40,
         input: {
           kind: 'options',
-          refType: party.refType,
+          refType,
           field: 'location',
           options,
           // Hold the line back until the second character: a county code is three
@@ -610,9 +624,9 @@ export function qsoPartyActivity(params: QsoPartyParams): ActivityHook {
       { qso, operation }: { qso: Record<string, JSONValue>; operation: Record<string, JSONValue> },
       _ctx: HookContext,
     ): Promise<Record<string, JSONValue> | null> {
-      const qsoRef = partyRefIn(party, qso as Record<string, unknown>)
+      const qsoRef = partyContactRefIn(party, qso as Record<string, unknown>, operation as Record<string, unknown>)
       const location = str(qsoRef?.location).trim().toUpperCase()
-      const serial = serialOf(qsoRef?.theirSerial)
+      const serial = theirSerialOf(qsoRef)
       const name = str(qsoRef?.theirName).trim().toUpperCase()
       const ours = ourLocationText(party, operation as Record<string, unknown>)
 
@@ -624,7 +638,7 @@ export function qsoPartyActivity(params: QsoPartyParams): ActivityHook {
       // whatever a co-active activity has just put there — and a DX contact makes
       // it every time, since no party asks a DX station to send anything.
       const decided = qsoRef !== undefined
-        && ['location', 'theirSerial', 'theirName'].some((field) => field in qsoRef)
+        && ['location', 'theirSerial', 'theirNumber', 'theirName'].some((field) => field in qsoRef)
 
       // Re-projected on every save, edits included: the host hands this hook
       // the operation that was true when the contact was made, so a rover who
@@ -632,7 +646,7 @@ export function qsoPartyActivity(params: QsoPartyParams): ActivityHook {
       // not the one they have driven to. (An `ourLocation` stamp an earlier
       // build left on the ref is not read — the segment is the record.)
       const ourExchange = [
-        serialOf(qsoRef?.ourSerial),
+        ourSerialOf(qsoRef),
         ourName(party, operation as Record<string, unknown>),
         ours,
       ].filter((part) => part).join(' ')

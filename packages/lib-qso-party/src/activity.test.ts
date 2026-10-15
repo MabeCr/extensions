@@ -445,6 +445,68 @@ test('the exchange is mirrored into the field the rest of the app reads', async 
   assert.deepEqual(patch!.our, { exchange: '12 ALAM' })
 })
 
+/// An operation logged when the parties were one extension: the party's code
+/// on the operation's `qp` ref, and each contact's exchange on a bare one.
+const LEGACY_CA: QsoPartyParams = { ...CA, legacyRefs: [{ type: 'qp', prefix: 'ca' }] }
+const legacyOperation = (location: string): Record<string, JSONValue> =>
+  ({ uuid: 'op', stationCall: 'N0DEV', refs: [{ type: 'qp', ref: 'CA', location }] })
+
+test('on a log kept under the old combined extension, the exchange is typed into the old shape', async () => {
+  // The core admits an exchange field only for a ref type the operation
+  // carries. Published under the party's own type, the fields never appear on
+  // such a log; and a contact typed under it would not match the hundreds
+  // before it, nor continue their serials.
+  const controls = await qsoPartyActivity(LEGACY_CA).loggingControls!({ operation: legacyOperation('ALAM') }, ctx)
+  assert.ok(controls.length > 0)
+  for (const control of controls) {
+    assert.equal((control.input as { refType: string }).refType, 'qp', control.key)
+    // The keys are the operator's stored field order and the serial's name.
+    assert.ok(control.key.startsWith(`${CA.refType}/`), control.key)
+  }
+})
+
+test('on a log kept under the old combined extension, the exchange is mirrored from the bare ref', async () => {
+  const patch = await qsoPartyActivity(LEGACY_CA).processQsoBeforeSave!({
+    qso: { refs: [{ type: 'qp', location: 'butt', theirSerial: '34', ourSerial: 12 }] },
+    operation: legacyOperation('ALAM'),
+  }, ctx)
+  assert.deepEqual(patch!.their, { exchange: '34 BUTT' })
+  assert.deepEqual(patch!.our, { exchange: '12 ALAM' })
+})
+
+test('a contact app-polo logged keeps its serials when it is saved again here', async () => {
+  // app-polo files the serials as `ourNumber`/`theirNumber`. Read under this
+  // engine's names alone, an edit made here re-projects `34 BUTT` as `BUTT`,
+  // and the log loses the number on every device it syncs to.
+  const patch = await qsoPartyActivity(LEGACY_CA).processQsoBeforeSave!({
+    qso: { refs: [{ type: 'qp', location: 'BUTT', theirNumber: '34', ourNumber: '12' }] },
+    operation: legacyOperation('ALAM'),
+  }, ctx)
+  assert.deepEqual(patch!.their, { exchange: '34 BUTT' })
+  assert.deepEqual(patch!.our, { exchange: '12 ALAM' })
+})
+
+test('on a log kept under the old combined extension, what a station sent earlier in it is offered', async () => {
+  // This operation's contacts are asked for under the type they carry, and
+  // read as bare refs. Asked under the party's own type, or read by code, the
+  // county a station sent on 40m is not offered when they turn up on 20m.
+  const asked: Record<string, unknown>[] = []
+  const history: HookContext = {
+    online: false,
+    getHistoryForCall: (async (_call: string, options: Record<string, unknown>) => {
+      asked.push(options)
+      return options.operation ? [{ their: { call: 'W6ABC' }, band: '40m', refs: [{ type: 'qp', location: 'BUTT' }] }] : []
+    }) as never,
+  }
+  const controls = await qsoPartyActivity(LEGACY_CA).loggingControls!(
+    { operation: legacyOperation('ALAM'), qso: { their: { call: 'W6ABC', entityPrefix: 'K' } } },
+    history,
+  )
+  const input = controls.find((c) => c.key === `${CA.refType}/location`)!.input as OptionsInputDescriptor
+  assert.equal(asked[0].refType, 'qp')
+  assert.equal(input.suggestedValue, 'BUTT')
+})
+
 test('a contact with nothing of ours on it is left alone', async () => {
   // `their.exchange` is one field shared by every activity on the operation, and
   // the patch is merged one level deep — so answering with an empty string

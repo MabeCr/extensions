@@ -22,7 +22,7 @@ import type {
   JSONValue,
 } from "@ham2k/extension-sdk"
 
-import { ourLocationText, ourName, partyRefIn, serial, str } from "./entry.ts"
+import { ourLocationText, ourName, ourSerialOf, partyContactRefIn, partyRefIn, str, theirSerialOf } from "./entry.ts"
 import {
   cabrilloFor,
   RESOLVED_MARKER,
@@ -65,13 +65,13 @@ export function qsoPartyAdifFields(params: QsoPartyParams): AdifFieldsHook {
       const opRef = partyRefIn(party, operation as Record<string, unknown>)
       if (!opRef) return []
 
-      const qsoRef = partyRefIn(party, qso as Record<string, unknown>)
+      const qsoRef = partyContactRefIn(party, qso as Record<string, unknown>, operation as Record<string, unknown>)
       // `operation` is already the segment-effective one for this contact (the
       // core generator resolves it), so our county is simply the operation's.
       const ours = ourLocationText(party, operation as Record<string, unknown>, opRef)
       const weAreInParty = allInParty(parseOurLocations(party, ours))
-      const ourSerial = serial(qsoRef?.ourSerial)
-      const theirSerial = serial(qsoRef?.theirSerial)
+      const ourSerial = ourSerialOf(qsoRef)
+      const theirSerial = theirSerialOf(qsoRef)
       const theirName = str(qsoRef?.theirName)
       const ourOwnName = ourName(party, operation as Record<string, unknown>, opRef)
 
@@ -89,7 +89,7 @@ export function qsoPartyAdifFields(params: QsoPartyParams): AdifFieldsHook {
       // only way this hook can know what a station sent on an earlier band.
       const resolved = opRef[RESOLVED_MARKER] as Record<string, string> | undefined
       const theirsForFile = resolved?.[str(qso.uuid)]
-        ?? theirLocationForFile(party, qso, { weAreInParty })
+        ?? theirLocationForFile(party, qso, { weAreInParty, operation: operation as Record<string, unknown> })
       const received = [theirSerial, theirName, theirsForFile].filter((part) => part).join(' ')
       if (sent) fields.push({ name: 'STX_STRING', value: sent })
       if (received) fields.push({ name: 'SRX_STRING', value: received })

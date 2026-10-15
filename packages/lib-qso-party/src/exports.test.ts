@@ -170,6 +170,25 @@ test('the Cabrillo is the sponsor′s file, headers and all', async () => {
   assert.match(lines.find((line) => line.startsWith('QSO:'))!, /N0DEV\s+1\s+ALAM\s+K1ABC\s+7\s+BUTT\s*$/)
 })
 
+test('a log kept under the old combined extension files the serials and counties its contacts carry', async () => {
+  // The old extension kept the party's code on the operation and wrote each
+  // contact's exchange on a bare `{type: 'qp'}`. Read by code, those contacts
+  // file with serials of 0 and -, and an in-state station's county is lost
+  // with nothing to fall back on — so it drops out of the file altogether.
+  const legacy = { ...CA, legacyRefs: [{ type: 'qp', prefix: 'ca' }] }
+  const result = await define(legacy).export.generateExport({
+    exportType: `${CA.refType}-cabrillo`,
+    operation: { ...operation(CA, 'ALAM'), refs: [{ type: 'qp', ref: 'CA', location: 'ALAM' }] },
+    qsos: [contact('', CA, {
+      their: { call: 'W6ABC', entityPrefix: 'K', state: 'CA' },
+      refs: [{ type: 'qp', location: 'BUTT', ourSerial: 1, theirSerial: '7' }],
+    })],
+  }, ctx)
+
+  const lines = result.content.split('\n')
+  assert.match(lines.find((line) => line.startsWith('QSO:'))!, /N0DEV\s+1\s+ALAM\s+W6ABC\s+7\s+BUTT\s*$/)
+})
+
 test('the Cabrillo is a whole file: framed, signed, and one line per contact with a county at each end', async () => {
   // A checker refuses a file without its START/END lines or a CALLSIGN before
   // it reads a single contact, and a QSO party's line needs the county sent
@@ -246,12 +265,13 @@ test('a log kept under the old combined extension is handed the resolved exchang
   // `adifFields` reads whichever ref `partyRefIn` finds, the old `qp` one
   // included. Marking only refs of the party's own type leaves that one bare,
   // and the ADIF then resolves each contact alone — so the second contact's
-  // SRX_STRING disagrees with the Cabrillo's for the same station.
+  // SRX_STRING disagrees with the Cabrillo's for the same station. The
+  // contacts' refs carry no code, as the old extension wrote them.
   const legacy = { ...NY, legacyRefs: [{ type: 'qp', prefix: 'ny' }] }
-  const old = (location: string) => [{ type: 'qp', ref: 'NY', location }]
+  const old = (location: string) => [{ type: 'qp', location }]
   const result = await define(legacy).export.generateExport({
     exportType: `${NY.refType}-adif`,
-    operation: { uuid: 'op', stationCall: 'N0DEV', refs: old('ALB') },
+    operation: { uuid: 'op', stationCall: 'N0DEV', refs: [{ type: 'qp', ref: 'NY', location: 'ALB' }] },
     qsos: [contact('', legacy, { refs: old('ERI') }), { ...contact('', legacy, { refs: old('') }), uuid: 'q2', band: '40m' }],
   } as ExportRequest, ctx)
 
@@ -291,15 +311,32 @@ test('a log that is not this party′s gets no ADIF fields from it', async () =>
 test('a log kept under the old combined extension is still this party′s', async () => {
   // `{type: 'qp', ref: 'CA'}` is how every party was stored when fifty were one
   // extension. Checking for the party's own refType alone would read those
-  // logs as someone else's and drop their contest fields.
+  // logs as someone else's and drop their contest fields. The code is on the
+  // operation only: the contact's ref is a bare `{type: 'qp'}`, so reading it
+  // by code loses what the station sent.
   const legacy = { ...CA, legacyRefs: [{ type: 'qp', prefix: 'ca' }] }
   const fields = await define(legacy).adifFields.fieldsForOneQSO({
-    qso: contact('', CA, { refs: [{ type: 'qp', ref: 'CA', location: 'BUTT' }] }),
+    qso: contact('', CA, { refs: [{ type: 'qp', location: 'BUTT', ourSerial: 3, theirSerial: '17' }] }),
     operation: { uuid: 'op', stationCall: 'N0DEV', refs: [{ type: 'qp', ref: 'CA', location: 'ALAM' }] },
   }, ctx)
 
   assert.deepEqual(fields.find((field) => field.name === 'CONTEST_ID'), { name: 'CONTEST_ID', value: 'CA-QSO-PARTY' })
-  assert.deepEqual(fields.find((field) => field.name === 'STX_STRING'), { name: 'STX_STRING', value: 'ALAM' })
+  assert.deepEqual(fields.find((field) => field.name === 'STX_STRING'), { name: 'STX_STRING', value: '3 ALAM' })
+  assert.deepEqual(fields.find((field) => field.name === 'SRX_STRING'), { name: 'SRX_STRING', value: '17 BUTT' })
+})
+
+test('a legacy contact that carries the party′s code, or app-polo′s serial names, files its exchange', async () => {
+  // Both shapes are in logs today: a contact ref with the code on it, and
+  // app-polo's `ourNumber`/`theirNumber`. Reading only the bare shape, or only
+  // this engine's serial names, files them with no exchange or no numbers.
+  const legacy = { ...CA, legacyRefs: [{ type: 'qp', prefix: 'ca' }] }
+  const fields = await define(legacy).adifFields.fieldsForOneQSO({
+    qso: contact('', CA, { refs: [{ type: 'qp', ref: 'CA', location: 'BUTT', ourNumber: '3', theirNumber: '17' }] }),
+    operation: { uuid: 'op', stationCall: 'N0DEV', refs: [{ type: 'qp', ref: 'CA', location: 'ALAM' }] },
+  }, ctx)
+
+  assert.deepEqual(fields.find((field) => field.name === 'STX_STRING'), { name: 'STX_STRING', value: '3 ALAM' })
+  assert.deepEqual(fields.find((field) => field.name === 'SRX_STRING'), { name: 'SRX_STRING', value: '17 BUTT' })
 })
 
 

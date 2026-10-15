@@ -403,8 +403,8 @@ test('an exchange from an earlier running of the event is offered only while it 
   // first exchange that still holds wins, newest first.
   const entry = (location: string) =>
     ({ their: { call: 'K2ABC' }, band: '20m', refs: [{ type: NY.refType, location }] }) as Record<string, JSONValue>
-  assert.equal(loggedExchangeFor(ny, [entry('ALB')], 'K2ABC', (l) => pastExchangeHolds(ny, us, 'PA', l)), '')
-  assert.equal(loggedExchangeFor(ny, [entry('ALB')], 'K2ABC', (l) => pastExchangeHolds(ny, us, 'NY', l)), 'ALB')
+  assert.equal(loggedExchangeFor(ny, [entry('ALB')], 'K2ABC', { accept: (l) => pastExchangeHolds(ny, us, 'PA', l) }), '')
+  assert.equal(loggedExchangeFor(ny, [entry('ALB')], 'K2ABC', { accept: (l) => pastExchangeHolds(ny, us, 'NY', l) }), 'ALB')
 })
 
 test('the declared entry classes become the Cabrillo CATEGORY lines', () => {

@@ -167,6 +167,25 @@ test('nothing scores until the operator says where WE are', () => {
   assert.deepEqual(scores[0].alerts, ['ourLocation'])
 })
 
+test('a log kept under the old combined extension scores the exchange its contacts carry', () => {
+  // The party's code is on the operation's `qp` ref alone; each contact's
+  // exchange is on a bare `{type: 'qp'}`. Read by code, every contact scores as
+  // if nothing had been copied — an in-state station's county is lost outright.
+  const scorer = qsoPartyScorer({ ...NY, legacyRefs: [{ type: 'qp', prefix: 'ny' }] })
+  const ref = { type: 'qp', ref: 'NY', location: 'ALB' }
+  const operation = { uuid: 'op', stationCall: 'N0DEV', refs: [ref] }
+  const contact = { ...qso(), refs: [{ type: 'qp', location: 'ERI' }] }
+  const { scoresheet, score } = scorer.scoreQso(
+    { scoresheet: scorer.startScoresheet({ operation, ref }, ctx), qso: contact, operation, ref, isNewDay: false },
+    ctx,
+  )
+
+  const expected = run([qso({ location: 'ERI' })])
+  assert.equal(score.alerts, undefined)
+  assert.equal(score.value, expected.scores[0].value)
+  assert.deepEqual(Object.keys(scoresheet.mults), Object.keys(expected.sheet.mults))
+})
+
 test('an exchange that was never sent, and one that means nothing', () => {
   assert.deepEqual(run([qso({ location: '' })]).scores[0].alerts, ['missingExchange'])
   assert.deepEqual(run([qso({ location: 'ZZZ', entityPrefix: '' })]).scores[0].alerts, ['invalidExchange'])

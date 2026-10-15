@@ -72,16 +72,84 @@ export function partyRefIn(
 ): Record<string, unknown> | undefined {
   const own = refOfType(record, party.refType)
   if (own) return own
-  const legacy = party.legacyRefs ?? []
-  if (legacy.length === 0) return undefined
-  const refs = (record?.refs as Record<string, unknown>[] | undefined) ?? []
-  for (const claim of legacy) {
-    const found = refs.find(
-      (ref) => ref?.type === claim.type && str(ref?.ref).toLowerCase().startsWith(claim.prefix),
-    )
+  const refs = refsOf(record)
+  for (const claim of party.legacyRefs ?? []) {
+    const found = refs.find((ref) => ref?.type === claim.type && codeClaimedBy(ref, claim))
     if (found) return found
   }
   return undefined
+}
+
+function refsOf(record: Record<string, unknown> | undefined): Record<string, unknown>[] {
+  return (record?.refs as Record<string, unknown>[] | undefined) ?? []
+}
+
+function codeClaimedBy(ref: Record<string, unknown>, claim: { prefix: string }): boolean {
+  return str(ref?.ref).toLowerCase().startsWith(claim.prefix)
+}
+
+/// The ref type this party reads and writes a contact's exchange under on
+/// [operation]: a legacy type the operation carries a claim of, else the
+/// party's own.
+///
+/// On an operation logged under a legacy claim the exchange controls publish
+/// that legacy type, so the contacts logged from here on land on the same
+/// shape as the ones before them and continue their serials — and the core,
+/// which admits an exchange field only for a type the operation carries,
+/// shows the fields at all. The legacy type wins even beside the party's own
+/// ref: an operator who added the party again by its current name has not
+/// started a new log.
+export function exchangeRefType(party: Party, operation: Record<string, unknown> | undefined): string {
+  const refs = refsOf(operation)
+  for (const claim of party.legacyRefs ?? []) {
+    if (refs.some((ref) => ref?.type === claim.type && codeClaimedBy(ref, claim))) return claim.type
+  }
+  return party.refType
+}
+
+/// The ref on a CONTACT that this party answers for, on [operation] — the
+/// contact's own operation, segment-effective where the caller has one.
+///
+/// A contact's legacy ref carries no code: the built-in the parties were once
+/// part of and app-polo both write `{type: 'qp', location: 'NHA'}` on the
+/// contact and keep the party's code on the operation alone. Read by code, as
+/// [partyRefIn] reads, such a contact matches nothing, and scores and files as
+/// if no exchange had been copied. So a bare ref of a claimed legacy type is
+/// this party's wherever the operation carries that claim — looked for in its
+/// own right, not through [partyRefIn]: an operation the operator has since
+/// added the party to under its current name carries both refs, and the
+/// contacts logged before that are still the bare ones.
+///
+/// A contact ref that does name a code is read by it, so another party's
+/// contact is never this one's, whatever operation it sits under.
+export function partyContactRefIn(
+  party: Party,
+  qso: Record<string, unknown> | undefined,
+  operation: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  const own = refOfType(qso, party.refType)
+  if (own) return own
+  const refs = refsOf(qso)
+  const operationRefs = refsOf(operation)
+  for (const claim of party.legacyRefs ?? []) {
+    const claimed = operationRefs.some((ref) => ref?.type === claim.type && codeClaimedBy(ref, claim))
+    const found = refs.find((ref) => ref?.type === claim.type && (str(ref?.ref) ? codeClaimedBy(ref, claim) : claimed))
+    if (found) return found
+  }
+  return undefined
+}
+
+/// The serial we sent, off a contact's party ref. app-polo files it as
+/// `ourNumber`, so read under this engine's name alone, every serial of a log
+/// kept there is blank — in the file, and in the exchange a save re-projects.
+export function ourSerialOf(ref: Record<string, unknown> | undefined): string {
+  return serial(ref?.ourSerial) || serial(ref?.ourNumber)
+}
+
+/// The serial they sent, off a contact's party ref — app-polo's `theirNumber`
+/// as [ourSerialOf] reads its `ourNumber`.
+export function theirSerialOf(ref: Record<string, unknown> | undefined): string {
+  return serial(ref?.theirSerial) || serial(ref?.theirNumber)
 }
 
 /// Where we are operating from, as typed — one county, or a county line's two

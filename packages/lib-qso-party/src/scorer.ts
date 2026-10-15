@@ -28,7 +28,7 @@
 import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
 import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
 
-import { isMobile, ourLocationText, partyRefIn, powerMultiplier, str } from "./entry.ts"
+import { isMobile, ourLocationText, partyContactRefIn, powerMultiplier, str } from "./entry.ts"
 import { tFor } from "./i18n.ts"
 import type { QsoPartyLocation, QsoPartyParams } from "./params.ts"
 import {
@@ -276,7 +276,7 @@ export function qsoPartyScorer(params: QsoPartyParams): ContestScorer<QsoPartySc
       // us earlier, then to what their callsign says — a DX station's exchange
       // is its entity, and no party asks them to type it.
       const entityPrefix = entityPrefixOf(qso)
-      const qsoRef = partyRefIn(party, qso as Record<string, unknown>)
+      const qsoRef = partyContactRefIn(party, qso as Record<string, unknown>, operation as Record<string, unknown>)
       const typed = str(qsoRef?.location).trim()
       const fallback = sheet.lastLocation[call] ?? defaultTheirLocation(party, qso)
       const { locations: theirs, standing } = theirLocations(party, typed || fallback, {

@@ -19,10 +19,11 @@ import {
   ourOperatorClass,
   ourOverlayClass,
   ourPowerClass,
+  ourSerialOf,
   ourStationClass,
-  partyRefIn,
-  serial,
+  partyContactRefIn,
   str,
+  theirSerialOf,
 } from "./entry.ts"
 import {
   allInParty,
@@ -42,13 +43,17 @@ import { normalizeCode, type Party, partyStates, stateForCounty, WARC_BANDS } fr
 
 /// What a contact with no exchange typed is recorded as, resolved the way the
 /// scorer resolves it: what this station sent us earlier, then what their
-/// callsign says.
+/// callsign says. [operation] is the contact's own (`partyContactRefIn`).
 export function theirLocationForFile(
   party: Party,
   qso: Record<string, JSONValue>,
-  { weAreInParty, lastLocation }: { weAreInParty: boolean; lastLocation?: Record<string, string> },
+  { weAreInParty, lastLocation, operation }: {
+    weAreInParty: boolean
+    lastLocation?: Record<string, string>
+    operation?: Record<string, unknown>
+  },
 ): string {
-  const qsoRef = partyRefIn(party, qso as Record<string, unknown>)
+  const qsoRef = partyContactRefIn(party, qso as Record<string, unknown>, operation)
   const entityPrefix = entityPrefixOf(qso as Record<string, unknown>)
   const their = (qso.their as Record<string, JSONValue>) ?? {}
   const call = str(their.call).toUpperCase()
@@ -103,6 +108,7 @@ export function resolvedExchanges(
       // A contact the scorer refuses teaches it nothing, so it may not teach
       // this fold either.
       lastLocation: claimableBand(str(qso.band)) ? lastLocation : undefined,
+      operation,
     })
     if (uuid) resolved[uuid] = text
   }
@@ -139,7 +145,7 @@ export function cabrilloRowsFor(
   ourCall: string,
   { segments, lastLocation }: { segments?: OperationSegmentPayload[]; lastLocation?: Record<string, string> } = {},
 ): string[][] {
-  const qsoRef = partyRefIn(party, qso as Record<string, unknown>)
+  const qsoRef = partyContactRefIn(party, qso as Record<string, unknown>, operation as Record<string, unknown>)
   const their = (qso.their as Record<string, JSONValue>) ?? {}
   const call = str(their.call).toUpperCase()
   const theirCall = cabrilloCall(party, str(their.call))
@@ -182,8 +188,8 @@ export function cabrilloRowsFor(
   // column late takes the 599 for the serial.
   const isCw = str(qso.mode) === 'CW' || str(qso.mode) === 'RTTY'
   const report = party.exchange.number ? [] : [(isCw ? '599' : '59').padEnd(3, ' ')]
-  const ourSerial = serial(qsoRef?.ourSerial)
-  const theirSerial = serial(qsoRef?.theirSerial)
+  const ourSerial = ourSerialOf(qsoRef)
+  const theirSerial = theirSerialOf(qsoRef)
   const ourOwnName = ourName(party, operation as Record<string, unknown>)
   const theirName = str(qsoRef?.theirName).toUpperCase()
 
@@ -357,15 +363,22 @@ export function exchangeInheritPrefix(party: Party): number {
 /// and answers the station's latest contacts of any kind (the SDK's contract).
 /// The operation cannot be checked — a contact's data does not carry it — so
 /// on such a host the answer may come from an earlier operation for this same
-/// event; the ref type is per event, so never from another party's.
+/// event; the ref type is per event, so never from another party's — except
+/// under a legacy claim, whose contacts' `qp` refs name no party, and which
+/// such a host can then answer from another party's log.
 ///
-/// [accept] narrows it further, for a history the operator did not just copy
+/// [operation] is the one the history was asked of, for a history of that one
+/// operation (`partyContactRefIn`); [accept]
+/// narrows it further, for a history the operator did not just copy
 /// (`pastExchangeHolds`).
 export function loggedExchangeFor(
   party: Party,
   history: Record<string, JSONValue>[],
   call: string,
-  accept: (location: string) => boolean = () => true,
+  { accept = () => true, operation }: {
+    accept?: (location: string) => boolean
+    operation?: Record<string, unknown>
+  } = {},
 ): string {
   const wanted = call.trim().toUpperCase()
   if (!wanted) return ''
@@ -373,7 +386,7 @@ export function loggedExchangeFor(
     if (qso.band === 'event') continue
     const their = (qso.their as Record<string, JSONValue>) ?? {}
     if (str(their.call).toUpperCase() !== wanted) continue
-    const location = str(partyRefIn(party, qso as Record<string, unknown>)?.location).trim()
+    const location = str(partyContactRefIn(party, qso as Record<string, unknown>, operation)?.location).trim()
     if (location && accept(location)) return location
   }
   return ''
