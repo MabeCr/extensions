@@ -1,6 +1,6 @@
 # Dashboard extensions
 
-`ham2k-custom-text` provides the text panel. The three SVG reference panels
+`ham2k-custom-text` provides the text panel. The SVG reference panels
 live here rather than being bundled into HaLo:
 
 - `ki2d-weather-panel`: forecast, hourly inspection and weather icons.
@@ -9,8 +9,11 @@ live here rather than being bundled into HaLo:
   selection, tuning, connection controls and received-signal metering.
   Its manifest declares `requiresRadioWrite`: the host refuses the radio
   calls to an extension that does not, and names the claim at install.
+- `ki2d-rate-chart`: QSO rates over the trailing 10 and 60 minutes and the
+  last 10 contacts, with peaks, lows, a rate goal, and a chart per operator
+  for multi-operator stations.
 
-All three are published to the extension catalog at
+All of them are published to the extension catalog at
 [catalog.ham2k.net](https://catalog.ham2k.net). Their keys follow the
 `<callsign>-<name>` convention, so a packed `.h2kext` also installs from a file
 like any other extension; manage them under Features & Extensions. They need

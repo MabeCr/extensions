@@ -1,0 +1,23 @@
+{
+  "name": "@ham2k/ext-ki2d-rate-chart",
+  "version": "0.2.0",
+  "private": true,
+  "description": "QSO rates over the trailing 10 and 60 minutes, charted with their peaks and lows",
+  "author": "Sebastian Delmont <sd@ham2k.com>",
+  "license": "MPL-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test 'src/*.test.ts'",
+    "pack": "npm run build && h2kext-pack build"
+  },
+  "devDependencies": {
+    "@ham2k/extension-sdk": "^0.12.9",
+    "@ham2k/extension-tools": "^0.12.0",
+    "esbuild": "^0.25.5"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
