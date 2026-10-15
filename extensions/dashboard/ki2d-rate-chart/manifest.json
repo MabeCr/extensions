@@ -1,7 +1,7 @@
 {
   "key": "ki2d-rate-chart",
   "name": "KI2D’s Rate Chart",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "QSO rates over the trailing 10 and 60 minutes, charted with their peaks and lows",
   "category": "dashboard",
   "icon": "chart-line",

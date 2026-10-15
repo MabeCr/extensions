@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-ki2d-rate-chart",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "QSO rates over the trailing 10 and 60 minutes, charted with their peaks and lows",
   "author": "Sebastian Delmont <sd@ham2k.com>",
