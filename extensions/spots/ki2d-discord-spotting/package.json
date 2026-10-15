@@ -1,0 +1,23 @@
+{
+  "name": "@ham2k/ext-ki2d-discord-spotting",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ham2K Logger extension: self-spots posted to Discord channels through webhooks",
+  "author": "Sebastian Delmont <sd@ham2k.com>",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --import ../../../scripts/sdk-node-resolve.mjs --experimental-strip-types --test 'src/**/*.test.ts'",
+    "typecheck": "tsc --noEmit",
+    "pack": "npm run build && h2kext-pack build"
+  },
+  "devDependencies": {
+    "@ham2k/extension-sdk": "^0.12.0",
+    "@ham2k/extension-tools": "^0.12.0",
+    "esbuild": "^0.25.5"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

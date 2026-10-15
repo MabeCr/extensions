@@ -13,26 +13,27 @@ Three kinds of thing live here. The **QSO parties**: the app carries one `qp`
 extension holding all fifty, and this repository publishes them **one event per
 extension**, so an operator installs the Texas QSO Party and gets the Texas QSO
 Party. **Catalog copies of the app's own built-ins**, so that each can ship
-and update without an app release — see **Porting a built-in**. And **two spotting
+and update without an app release — see **Porting a built-in**. And **three spotting
 sources the app never shipped**, under the `ki2d-` callsign prefix a third
 party's extension takes: the QSO Party Hub and APRS Tracker feeds that
-app-polo's `qp` extension carried inside it, and an APRS position beacon.
+app-polo's `qp` extension carried inside it, an APRS position beacon, and
+Discord channel webhooks.
 
 ## What is here
 
-100 extensions, grouped by the manifest's own `category`:
+101 extensions, grouped by the manifest's own `category`:
 
 | directory | manifest `category` | n | of which |
 |---|---|--:|---|
 | `extensions/activities/` | `activity` | 20 | 18 ported built-ins, 2 new programs |
 | `extensions/contests/` | `contest` | 68 | 14 ported built-ins, 49 QSO party events, 5 park events |
 | `extensions/lookups/` | `lookup` | 5 | 5 ported built-ins |
-| `extensions/spots/` | `spots` | 3 | 1 ported built-in, 2 new spotting sources |
+| `extensions/spots/` | `spots` | 4 | 1 ported built-in, 3 new spotting sources |
 | `extensions/dashboard/` | `dashboard` | 4 | 1 ported built-in, 3 SVG reference panels |
-| **total** | | **100** | **39 ported, 58 new, 3 SVG reference panels** |
+| **total** | | **101** | **39 ported, 59 new, 3 SVG reference panels** |
 
-The 39 are the app's own extensions, ported one for one. The 58 are new: events
-the app has never shipped separately, five state-park events, two spotting
+The 39 are the app's own extensions, ported one for one. The 59 are new: events
+the app has never shipped separately, five state-park events, three spotting
 sources, and two award programs:
 
 - **`ham2k-hota`** — [History on the Air](https://cqhota.app), historic sites
@@ -84,6 +85,18 @@ sources, and two award programs:
   the tracker parses and what app-polo sends; from a park it names the
   reference. One beacon source, deliberately: the QP source reads the tracker
   and never beacons, so the two installed together beacon once.
+- **`ki2d-discord-spotting`** posts each self-spot to the Discord channels
+  the operator lists in its settings, one webhook each, every one with its
+  own Liquid template and an on/off switch — plus, as app-polo has them,
+  optional templates for the name and avatar the message is posted under. The default template posts only
+  the QRV and QRT spots, so a channel hears when the operator goes on and off
+  the air rather than every respot. A template that renders blank skips its
+  channel, and when every one does, the answer is `skipped` and
+  the Spotting control leaves the icon gray. Templates name `spot.freq`,
+  `spot.mode`, `spot.comments`, `spot.qcode` and `spot.qrest` — app-polo's
+  spot-discord names, lowercased, with PoLo's `qCode` and `qRest` working
+  too — besides the app's `op`; the app's template editor
+  does not know `spot` yet, so its preview shows those blank.
 
 The SVG reference panels carry `ki2d-` keys and install from a file.
 See [dashboard development](extensions/dashboard/README.md) for building and

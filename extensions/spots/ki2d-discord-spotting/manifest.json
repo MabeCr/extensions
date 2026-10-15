@@ -1,0 +1,55 @@
+{
+  "key": "ki2d-discord-spotting",
+  "name": "KI2D’s Discord Spotting",
+  "shortName": "Discord",
+  "version": "0.1.0",
+  "api": 1,
+  "description": "Self-spots go to your Discord channels too — one webhook per channel, each with its own message template",
+  "category": "spots",
+  "icon": "forum",
+  "accentColor": "#5865F2",
+  "keywords": [
+    "spots",
+    "spotting",
+    "self-spot",
+    "discord",
+    "webhook",
+    "club",
+    "chat"
+  ],
+  "hooks": [
+    "settingsPanel",
+    "spots"
+  ],
+  "domains": [
+    "discord.com",
+    "ptb.discord.com",
+    "canary.discord.com",
+    "discordapp.com"
+  ],
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  },
+  "translations": {
+    "es": {
+      "name": "Spots a Discord de KI2D",
+      "description": "Tus auto-spots llegan también a tus canales de Discord — un webhook por canal, cada uno con su propia plantilla de mensaje",
+      "keywords": [
+        "spots",
+        "spotting",
+        "auto-spot",
+        "discord",
+        "webhook",
+        "club",
+        "chat"
+      ]
+    }
+  }
+}
