@@ -365,7 +365,9 @@ export function exchangeInheritPrefix(party: Party): number {
 /// on such a host the answer may come from an earlier operation for this same
 /// event; the ref type is per event, so never from another party's — except
 /// under a legacy claim, whose contacts' `qp` refs name no party, and which
-/// such a host can then answer from another party's log.
+/// such a host can then answer from another party's log. For an earlier
+/// running, [accept] is what holds that back: a code this party offers, in the
+/// station's state.
 ///
 /// [operation] is the one the history was asked of, for a history of that one
 /// operation (`partyContactRefIn`); [accept]

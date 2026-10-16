@@ -390,6 +390,33 @@ test('with nothing from this operation, an earlier running of the event is asked
   assert.equal(asked[1].excludeOperation, 'op')
 })
 
+test('an earlier running logged before the parties were split is asked by its legacy claim', async () => {
+  // Every running before this year's sits under `{type: 'qp', ref: 'NY'}` on
+  // the operation and a bare `{type: 'qp', location}` on each contact — asked
+  // by the event's own type alone, last year's log is invisible, and read
+  // without its operation's claim, its bare ref names no party.
+  const LEGACY_NY: QsoPartyParams = { ...NY, legacyRefs: [{ type: 'qp', prefix: 'ny' }] }
+  const asked: Record<string, unknown>[] = []
+  const lastYear = [{ their: { call: 'K2ABC' }, band: '40m', refs: [{ type: 'qp', location: 'ALB' }] }]
+  const history: HookContext = {
+    online: false,
+    getHistoryForCall: (async (_call: string, options: Record<string, unknown>) => {
+      asked.push(options)
+      return options.refType === 'qp' && options.refPrefix === 'ny' ? lastYear : []
+    }) as never,
+  }
+  const call = { their: { call: 'K2ABC', entityPrefix: 'K', guess: { state: 'NY' } } }
+  const { input } = await exchangeInput(LEGACY_NY, call, history)
+  assert.equal(input.suggestedValue, 'ALB')
+  assert.equal(asked.at(-1)!.excludeOperation, 'op', 'never this operation, which was asked first')
+
+  // Still only while it holds: a county another state's party sent is no New
+  // York exchange, whatever log a host that ignores the filters answers from.
+  const elsewhere = [{ their: { call: 'K2ABC' }, band: '40m', refs: [{ type: 'qp', location: 'TRAV' }] }]
+  const moved: HookContext = { online: false, getHistoryForCall: (async () => elsewhere) as never }
+  assert.equal((await exchangeInput(LEGACY_NY, call, moved)).input.suggestedValue, undefined)
+})
+
 test("a Hawaiian in the Hawaii QSO Party is hinted their state, not handed it", async () => {
   // KH6 is not K, so a Hawaiian's field is freeform with no list to reject
   // anything — and their fallback location is `HI`. Prefilled, `HI` would

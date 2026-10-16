@@ -97,8 +97,9 @@ async function callHistory(
 /// This operation's comes first and is taken as it is — the operator copied
 /// it from this station minutes ago, under whichever type the operation is
 /// logged under. An earlier running is found by the event's ref type, which
-/// its operations carry, and has to still hold (`pastExchangeHolds`): the
-/// station can have moved.
+/// its operations carry, else by each legacy claim (`{type: 'qp', ref: 'NY'}`,
+/// every running logged before the parties were split), and has to still hold
+/// (`pastExchangeHolds`): the station can have moved.
 async function priorExchange(
   ctx: HookContext,
   party: Party,
@@ -118,10 +119,26 @@ async function priorExchange(
   if (here === null) return ''
   const found = loggedExchangeFor(party, here, call, { operation })
   if (found) return found
+  const accept = (location: string) => pastExchangeHolds(party, options, guessedState, location)
   const before = await callHistory(ctx, call, { refType: party.refType, excludeOperation: operationUuid })
-  return loggedExchangeFor(party, before ?? [], call, {
-    accept: (location) => pastExchangeHolds(party, options, guessedState, location),
-  })
+  const past = loggedExchangeFor(party, before ?? [], call, { accept })
+  if (past) return past
+  for (const claim of party.legacyRefs ?? []) {
+    const legacy = await callHistory(ctx, call, {
+      refType: claim.type,
+      refPrefix: claim.prefix,
+      excludeOperation: operationUuid,
+    })
+    // A legacy contact's ref names no party — the code is on its operation,
+    // which a contact's data does not carry. The host matched that operation
+    // by this claim, so the contacts are read as under one carrying it.
+    const found = loggedExchangeFor(party, legacy ?? [], call, {
+      accept,
+      operation: { refs: [{ type: claim.type, ref: claim.prefix }] },
+    })
+    if (found) return found
+  }
+  return ''
 }
 
 /// The English an operator reads where the party's own translator says nothing.
