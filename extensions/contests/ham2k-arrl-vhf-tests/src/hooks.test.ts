@@ -5,8 +5,8 @@
 // traps: a rules link for a family whose events do not share one document, an
 // ADIF export that delegates to the whole `export` category (re-entering itself,
 // and letting another program's fields onto the contest's log) or drops the
-// operator's privacy choice on the way, and a scorer that reads the BASE
-// operation's grid when a rover's segment has moved it.
+// operator's privacy choice on the way, and a scorer or Cabrillo row that reads
+// the BASE operation's grid when a rover's segment has moved it.
 
 import { test } from "node:test"
 import assert from "node:assert/strict"
@@ -107,6 +107,24 @@ test('the Cabrillo comes out of the shared writer', async () => {
   const lines = result.content.split('\n')
   assert.equal(lines[0], 'START-OF-LOG: 3.0')
   assert.equal(lines.filter((line) => line.startsWith('QSO:')).length, 3)
+})
+
+test("a rover's Cabrillo row names the grid that contact was made from", async () => {
+  // Rows sent from the base grid fail log-checking for every contact a rover made after moving.
+  const base = operationFor({ grid: 'FN32aa' })
+  const segments = [
+    { fromMillis: -(2 ** 62), operation: base },
+    { fromMillis: Date.UTC(2026, 5, 13, 18, 2), operation: { ...base, grid: 'FN33bb' } },
+  ]
+  const qsos = qsosFor(4)
+  // A grid the contact carries itself (HaLo's export stamp, or its own fix) outranks its segment.
+  ;(qsos[3].our as Record<string, JSONValue>).grid = 'FN44cc'
+  const result = await generate({ exportType: `${TYPE}-cabrillo`, operation: base, qsos, segments })
+  const lines = result.content.split('\n')
+  const sentGrids = lines.filter((line) => line.startsWith('QSO:')).map((line) => line.split(/\s+/)[7])
+
+  assert.deepEqual(sentGrids, ['FN32', 'FN32', 'FN33', 'FN44'])
+  assert.ok(lines.includes('GRID-LOCATOR: FN32'))
 })
 
 test("each contact is scored from the grid its own segment was operating from", async () => {

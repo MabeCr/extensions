@@ -17,7 +17,7 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
-import { adifForExport, contestScorer, defineExtension, exportFilename, startMillisOf } from "@ham2k/extension-sdk"
+import { adifForExport, contestScorer, defineExtension, exportFilename, operationForQso, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
   ExportOption,
@@ -311,11 +311,17 @@ const ExportHook = {
           ['GRID-LOCATOR', ourGrid],
         ],
         qsoParts: (qso) => {
+          // A rover's grid changes at each break, so a row states the grid THIS
+          // contact was made from; the GRID-LOCATOR header keeps the base one.
+          const rowGrid = trimmedGrid(
+            str(((qso.our as Record<string, JSONValue>) ?? {}).grid) || str(operationForQso(operation, qso, args.segments).grid),
+            event,
+          )
           const theirGrid = trimmedGrid(str(refOfType(qso, TYPE)?.grid), event)
           return [
             ourCall || '-',
             reportFor(qso, 'our'),
-            ourGrid || '-',
+            rowGrid || '-',
             str(((qso.their as Record<string, JSONValue>) ?? {}).call) || '-',
             reportFor(qso, 'their'),
             theirGrid || '-',

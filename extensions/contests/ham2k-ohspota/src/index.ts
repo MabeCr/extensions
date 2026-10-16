@@ -17,7 +17,7 @@
 // scorer.ts, and what each side's park is, in parks.ts.
 
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
-import { contestScorer, defineExtension, exportFilename, exportTypeDefinition, startMillisOf } from "@ham2k/extension-sdk"
+import { contestScorer, defineExtension, exportFilename, exportTypeDefinition, operationForQso, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
   ExportOption,
@@ -391,10 +391,10 @@ const ExportHook = {
         ['GRID-LOCATOR', str(operation.grid)],
       ],
       // The sponsor's own layout: no signal reports, and a location column each
-      // side.
+      // side. Ours is the park THIS contact was made from, which a segment moves.
       qsoParts: (qso) => [
         (ourCall || '-').padEnd(18, ' '),
-        ours.padEnd(12, ' '),
+        (ourPark(operationForQso(operation, qso, args.segments)) || NOT_IN_A_PARK).padEnd(12, ' '),
         (str(((qso.their as Record<string, JSONValue>) ?? {}).call) || '-').padEnd(17, ' '),
         theirCabrilloLocation(qso).padEnd(12, ' '),
       ],
