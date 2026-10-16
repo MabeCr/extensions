@@ -7,6 +7,6 @@ import { createSolarPanel } from './solar.ts'
 defineExtension({
   ...manifest,
   onActivation({ registerHook }) {
-    registerHook('panel', { key: manifest.key, hook: createSolarPanel(host.fetch) })
+    registerHook('panel', { key: manifest.key, hook: createSolarPanel(host.fetch, form => host.showForm(form), message => host.log(message)) })
   },
 })

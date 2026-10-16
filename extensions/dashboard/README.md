@@ -4,7 +4,9 @@
 live here rather than being bundled into HaLo:
 
 - `ki2d-weather-panel`: forecast, hourly inspection and weather icons.
-- `ki2d-solar-panel`: solar conditions, propagation and history charts.
+- `ki2d-solar-panel`: solar conditions, propagation, MUF and foF2 from the
+  nearest ionosonde (KC2G), and history charts, each row and the theme chosen
+  per placement.
 - `ki2d-radio-panel`: a radio front panel, including Modern/LCD displays, radio
   selection, tuning, connection controls and received-signal metering.
   Its manifest declares `requiresRadioWrite`: the host refuses the radio
