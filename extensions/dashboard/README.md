@@ -37,6 +37,21 @@ npm run pack --workspace @ham2k/ext-ki2d-radio-panel
 ```
 
 The same three scripts exist for `@ham2k/ext-ki2d-weather-panel` and
-`@ham2k/ext-ki2d-solar-panel`. A new release goes to the catalog with
+`@ham2k/ext-ki2d-solar-panel`.
+
+To see a panel while working on it, preview it in a browser:
+
+```sh
+node scripts/preview-panels.mjs extensions/dashboard/ki2d-solar-panel
+```
+
+It serves every panel the extension registers at http://localhost:4417/, at
+several pane sizes in light and dark, and rebuilds and re-renders on each
+change to the source. Hovering a chart inspects it, and buttons send their
+events to the panel. A `preview.json` beside the manifest adds cases (an
+operation, a QSO, a placement's settings, a locale); the script's header
+describes its fields. Network responses are cached for 15 minutes, radio
+panels see a demo radio, and the browser lays out the text, so check spacing
+on a device before calling it final. A new release goes to the catalog with
 `h2kext-publish`, under a new version: a version's bundle is frozen once the
 catalog approves it.

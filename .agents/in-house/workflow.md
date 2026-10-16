@@ -93,12 +93,31 @@ loaded from the catalog.
   second) — or the package name of the `packages/*` library being edited.
 - **build one bundle**: `npm run build -w @ham2k/ext-<key>`;
   `npm run pack -w @ham2k/ext-<key>` writes the `.h2kext`.
+- **previewing a panel** — the closest thing to a running app, and what
+  `/iterate` keeps up for panel work:
+  `node scripts/preview-panels.mjs extensions/dashboard/<key> [port]`
+  (default port 4417), run from the worktree root. It builds the extension,
+  loads the bundle against a stand-in kernel and serves every panel at
+  several sizes in light and dark, plus the cases in the extension's
+  `preview.json`. A change under `src/`, or to `manifest.json` or
+  `preview.json`, rebuilds and re-renders by itself and the open page
+  follows; a change to the script itself needs a restart. Its log prints
+  `rendered N panels` on each render, and `ERROR` for a failed build,
+  render or event — watch for that. `LOG` lines are the extension's own
+  `host.log`, and `HOST <call> is not stood in for` names a host call the
+  stand-in answers with `{}`. Text is laid out by the browser rather than
+  Flutter, so spacing and fit are close, not exact.
 
 ## Finding this worktree's processes
 
-Nothing here runs in the background: no dev server, no watcher. Builds and
-tests run to completion in the foreground, so there are no processes to find
-or stop.
+Builds and tests run to completion in the foreground. The one long-lived
+process is a panel preview, found by its working directory:
+
+```sh
+for pid in $(pgrep -f 'scripts/preview-panels.mjs'); do
+  [ "$(lsof -a -p "$pid" -d cwd -Fn | sed -n 's/^n//p')" = "$(git rev-parse --show-toplevel)" ] && echo "$pid"
+done
+```
 
 ## Deploy and publishing
 
