@@ -27,7 +27,9 @@
 <script>
 let lastStamp, pageVersion
 const bind = (b, values) => {
-  let x = (values[b.value] ?? 0) * (b.scale ?? 1)
+  // A missing reading binds as the bottom of the binding's range, as in the host.
+  if (values[b.value] === undefined) return b.samples?.length ? b.samples[0] : b.output[0]
+  let x = values[b.value] * (b.scale ?? 1)
   if (b.truncate) x = Math.trunc(x)
   if (b.modulo) x = x % b.modulo
   const [i0, i1] = b.input, f = Math.max(0, Math.min(1, (x - i0) / ((i1 - i0) || 1)))
@@ -97,6 +99,7 @@ function build(entry) {
   for (const l of scene.layers) {
     const el = document.createElement('div'); el.className = 'layer'; el._layer = l
     Object.assign(el.style, { left: l.x + 'px', top: l.y + 'px', width: l.width + 'px', height: l.height + 'px' })
+    if (l.pivot) el.style.transformOrigin = `${l.pivot[0] * 100}% ${l.pivot[1] * 100}%`
     if (l.svg) el.innerHTML = l.svg
     if (l.text) {
       const t = l.text; el.classList.add('text')

@@ -115,16 +115,19 @@ test('the meters are bound to the host\'s live readings, not drawn from the last
   assert.ok(!JSON.stringify(scene).includes('-93'))
 })
 
-test('a bad match holds its SWR for ten seconds, and the dBm stays away until then', async () => {
+test('a bad match holds its SWR for ten seconds, and the dBm and receive level stay away until then', async () => {
   let state: PanelRadioState = { ...live, lastTransmission: { swrAverage: 2.4, endedAtMillis: now - 5000 } }
   const panel = createRadioPanel(radioHost(() => state).host)
   const ids = async (millis = now) => sceneOf(await panel.render(at(millis), ctx)).layers.map(l => l.id)
+  const cover = async () => sceneOf(await panel.render(at(now), ctx)).layers.find(l => l.id === 'rx-hold-cover')!
   assert.ok(!(await ids()).includes('receive-level'))
   assert.ok((await ids()).includes('swr-held-long'))
+  assert.deepEqual((await cover()).opacity, { value: 'radio.secondsSinceTransmit', input: [10, 10.01], output: [1, 0] })
   assert.ok((await ids(now + 5001)).includes('receive-level'))
   // At the warning level but under 2.0, the ordinary 3-second hold: the host times that one alone.
   state = { ...state, lastTransmission: { swrAverage: 1.9, endedAtMillis: now - 5000 } }
   assert.ok((await ids()).includes('receive-level'))
+  assert.deepEqual((await cover()).opacity, { value: 'radio.secondsSinceTransmit', input: [3, 3.01], output: [1, 0] })
 })
 
 test('the S-unit scale is the operator\'s choice per placement, and survives a restart', async () => {
@@ -230,6 +233,24 @@ test('too narrow for three columns, only the left column moves, to a row above t
   assert.ok(top(narrow, 'mode') > top(narrow, 'meter-scale'))
   assert.ok(top(narrow, 'mode') < top(narrow, 'panadapter'))
   assert.ok(top(narrow, 'atu-pill') < top(narrow, 'meter-scale'))
+})
+
+test('the meter and the passband box show whenever they fit, and never push the narrow row of pills out', () => {
+  const state = { ...live, passband: { lowHz: 100, highHz: 2800 } }
+  const has = (scene: SvgScene, id: string) => scene.layers.some(l => l.id === id)
+  const inside = (scene: SvgScene, height: number) => scene.layers.filter(l => /^(rx-|tx-|passband-)/.test(l.id)).every(l => l.y + l.height <= height)
+  const short = radioDocument({ ...environment, height: 130 }, state)
+  assert.ok(has(short, 'rx-ramp') && has(short, 'passband-box'), 'a pane well short of 160 still has room for both')
+  assert.ok(inside(short, 130))
+  const tiny = radioDocument({ ...environment, height: 90 }, state)
+  assert.ok(!has(tiny, 'rx-ramp') && !has(tiny, 'passband-box'))
+  const problem = radioDocument({ ...environment, height: 130 }, { ...state, problem: 'Cable unplugged' })
+  const notice = problem.layers.find(l => l.id === 'confirmation')!
+  assert.ok(problem.layers.filter(l => /^(rx-|passband-)/.test(l.id)).every(l => l.y + l.height <= notice.y), 'nor do they run into a lasting notice')
+  const narrow = (height: number) => radioDocument({ ...environment, width: 320, height }, state)
+  const mode = narrow(140).controls!.find(c => c.id === 'mode')!
+  assert.ok(!has(narrow(140), 'rx-ramp') && mode.y! + mode.height! <= 140, 'narrow, the pills come before the meter')
+  assert.ok(has(narrow(220), 'rx-ramp'))
 })
 
 test('a radio picking receive and transmit antennas apart gets a pill for each', async () => {

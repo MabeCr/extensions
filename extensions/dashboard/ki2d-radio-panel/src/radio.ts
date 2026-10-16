@@ -507,15 +507,27 @@ export function radioDocument(e: PanelEnvironment, r: PanelRadioState | null, re
   const status = !r?.id ? t.none : r.stale ? t.stale : t[r.status]
   // As wide as the frequency above it.
   const barX = frequencyX, barWidth = Math.max(1, frequencyEndX - frequencyX)
+  const bottom = top + h - line - 6
+  // A tune's confirmation is transient: it never takes room from the panadapter, whose size would
+  // otherwise jump with every click. Only a lasting state — a problem, no connection — does.
+  const lasting = r?.problem || (!live ? status : '')
+  // The meter and the passband box show whenever they end above the panel's bottom edge, or above
+  // the lasting notice when there is one. Narrow, the row of pills under the meter comes first: the
+  // meter shows only if that row still fits below it.
+  const floor = lasting ? bottom - 4 : top + h - 6, bar = 18, meterHeight = Math.max(line, bar + 26)
+  const meterEnd = compact ? Math.max(y + meterHeight + 6, rightBottom + 10) + Math.max(pillsHeight, passbandHeight) : y + meterHeight
+  const meterFits = w >= 220 && meterEnd <= floor
+  const passbandFits = !compact && w >= 220 && leftBottom <= floor
   // Under the pills, beside the meter.
-  if (!compact && w >= 220 && h >= 160) passbandBox(left + 12, rowY + pillsHeight + pillGap * 2)
-  if (w >= 220 && h >= 160) {
+  if (passbandFits) passbandBox(left + 12, rowY + pillsHeight + pillGap * 2)
+  if (meterFits) {
     // Drawn from the radio's live values (`scene.radio`), which the host updates as the radio
     // reports them: no render is needed for the bars, the numbers, or the switch between receive
     // and transmit. Only the dBm/S-unit labels, the power ceiling and the SWR hold come from here.
     scene.radio = view.radio ? { node: view.radio } : {}
-    // The number sits inside the bar at its left.
-    const meterWidth = barWidth, meterX = barX, bar = 18, numberX = meterX + 3, numberY = y + 2, numberW = Math.min(60, meterWidth - 6)
+    // The receive level sits inside the bar at its left, the SWR at its right.
+    const meterWidth = barWidth, meterX = barX, numberX = meterX + 3, numberY = y + 2, numberW = Math.min(60, meterWidth - 6)
+    const swrX = meterX + meterWidth - 3 - numberW
     const rx = { value: 'radio.transmitting', input: [0, 1] as [number, number], output: [1, 0] as [number, number] }
     const tx = { value: 'radio.transmitting', input: [0, 1] as [number, number], output: [0, 1] as [number, number] }
     // Off the scene while receiving: a layer that needs a second condition beside its own opacity.
@@ -547,23 +559,27 @@ export function radioDocument(e: PanelEnvironment, r: PanelRadioState | null, re
       `<stop offset=".8" stop-color="#c98a16"/><stop offset=".8" stop-color="#d04a34"/></linearGradient></defs><rect width="${meterWidth}" height="${bar}" fill="url(#level)"/>`), opacity: rx })
     layers.push({ ...svg('rx-cover', meterX, y + 2, meterWidth, bar, `<rect width="${meterWidth}" height="${bar}" fill="${track}"/>`),
       pivot: [1, .5], scaleX: { value: 'radio.signalDbm', input: [-130, -10], output: [1, 0] }, opacity: rx })
-    layers.push({ ...svg('rx-frame', meterX, y, meterWidth, bar + 10, frame(rxTicks, rxLabels.map(([v]) => v), dbmAt)), opacity: rx })
-    labelLayers('rx-scale', rxLabels, dbmAt, rx)
-    // After a transmission its average SWR holds the number's place — 3 seconds, 10 when it was over
-    // 2.0 — timed by the host, so it appears the moment the radio unkeys. The dBm steps aside meanwhile;
-    // the longer hold is known only here, so for that one it waits for the hold's render to clear.
     const since = 'radio.secondsSinceTransmit', average = 'radio.swrAverage'
     const offWhileTx = { value: 'radio.transmitting', input: [0, 1] as [number, number], output: [0, 10000] as [number, number] }
     const held = (seconds: number) => ({ value: since, input: [seconds, seconds + .01] as [number, number], output: [1, 0] as [number, number] })
+    // While a transmission's SWR holds, it is all the meter shows: the receive level waits under the track.
+    layers.push({ ...svg('rx-hold-cover', meterX, y + 2, meterWidth, bar, `<rect width="${meterWidth}" height="${bar}" fill="${track}"/>`),
+      translateY: offWhileTx, opacity: held((view.longSwrHold ? swrHighHoldMillis : swrHoldMillis) / 1000) })
+    layers.push({ ...svg('rx-frame', meterX, y, meterWidth, bar + 10, frame(rxTicks, rxLabels.map(([v]) => v), dbmAt)), opacity: rx })
+    labelLayers('rx-scale', rxLabels, dbmAt, rx)
+    // After a transmission its average SWR shows at the bar's right end — 3 seconds, 10 when it was
+    // over 2.0 — timed by the host, so it appears the moment the radio unkeys. The dBm and the receive
+    // level step aside meanwhile; the longer hold is known only here, so for that one the dBm waits for
+    // the hold's render to clear.
     const above = (swr: number, shown: boolean) => ({ value: average, input: [swr, swr + .001] as [number, number], output: (shown ? [10000, 0] : [0, 10000]) as [number, number] })
     if (!view.longSwrHold) {
       layers.push({ id: 'receive-level', x: numberX, y: numberY, width: numberW, height: bar, opacity: rx,
         translateX: { value: since, input: [swrHoldMillis / 1000, swrHoldMillis / 1000 + .01], output: [10000, 0] }, text: { ...numberText, value: 'radio.signalDbm', suffix: ' dBm' } })
     }
-    const heldText = { ...numberText, value: average, prefix: 'SWR ', decimals: 1, color: swrColor, glow: swrGlow }, warningText = { ...heldText, color: swrWarningColor, fontWeight: 700 }
-    layers.push({ id: 'swr-held', x: numberX, y: numberY, width: numberW, height: bar, translateY: offWhileTx, opacity: held(swrHoldMillis / 1000), translateX: above(swrWarning, false), text: heldText })
-    layers.push({ id: 'swr-held-warning', x: numberX, y: numberY, width: numberW, height: bar, translateY: offWhileTx, opacity: held(swrHoldMillis / 1000), translateX: above(swrWarning, true), text: warningText })
-    layers.push({ id: 'swr-held-long', x: numberX, y: numberY, width: numberW, height: bar, translateY: offWhileTx, opacity: held(swrHighHoldMillis / 1000), translateX: above(swrHigh, true), text: warningText })
+    const heldText = { ...numberText, value: average, prefix: 'SWR ', decimals: 1, color: swrColor, glow: swrGlow, align: 'end' as const }, warningText = { ...heldText, color: swrWarningColor, fontWeight: 700 }
+    layers.push({ id: 'swr-held', x: swrX, y: numberY, width: numberW, height: bar, translateY: offWhileTx, opacity: held(swrHoldMillis / 1000), translateX: above(swrWarning, false), text: heldText })
+    layers.push({ id: 'swr-held-warning', x: swrX, y: numberY, width: numberW, height: bar, translateY: offWhileTx, opacity: held(swrHoldMillis / 1000), translateX: above(swrWarning, true), text: warningText })
+    layers.push({ id: 'swr-held-long', x: swrX, y: numberY, width: numberW, height: bar, translateY: offWhileTx, opacity: held(swrHighHoldMillis / 1000), translateX: above(swrHigh, true), text: warningText })
     scene.controls!.push({ id: 'meter-scale', label: t.meterScale, kind: 'button', x: numberX, y: numberY, width: numberW, height: bar, event: 'toggle-scale', opacity: rx })
     // The scale's own labels switch it too.
     scene.controls!.push({ id: 'meter-scale-axis', label: t.meterScale, kind: 'button', x: meterX - 14, y: y + bar + 7, width: meterWidth + 28, height: 18, event: 'toggle-scale', opacity: rx })
@@ -578,25 +594,21 @@ export function radioDocument(e: PanelEnvironment, r: PanelRadioState | null, re
       pivot: [0, .5], scaleX: { value: 'radio.powerOut', input: [0, maxWatts], output: [0, 1] }, opacity: tx })
     layers.push({ ...svg('tx-frame', meterX, y, meterWidth, bar + 10, frame(Array.from({ length: 11 }, (_, i) => i * maxWatts / 10), txLabels.map(([v]) => v), wattsAt)), opacity: tx })
     labelLayers('tx-scale', txLabels, wattsAt, tx)
-    layers.push({ id: 'tx-swr', x: numberX, y: numberY, width: numberW, height: bar, opacity: tx, text: { ...numberText, value: 'radio.swr', prefix: 'SWR ', decimals: 1, color: swrColor, glow: swrGlow } })
+    layers.push({ id: 'tx-swr', x: swrX, y: numberY, width: numberW, height: bar, opacity: tx, text: { ...numberText, value: 'radio.swr', prefix: 'SWR ', decimals: 1, color: swrColor, glow: swrGlow, align: 'end' } })
     // The same number in red over it, faded in above the warning level.
-    layers.push({ id: 'tx-swr-warning', x: numberX, y: numberY, width: numberW, height: bar, translateX: offWhileRx,
+    layers.push({ id: 'tx-swr-warning', x: swrX, y: numberY, width: numberW, height: bar, translateX: offWhileRx,
       opacity: { value: 'radio.swr', input: [swrWarning, swrWarning + .001], output: [0, 1] },
-      text: { ...numberText, value: 'radio.swr', prefix: 'SWR ', decimals: 1, color: swrWarningColor, fontWeight: 700, glow: swrGlow } })
-    y += Math.max(line, bar + 26) + 6
+      text: { ...numberText, value: 'radio.swr', prefix: 'SWR ', decimals: 1, color: swrWarningColor, fontWeight: 700, glow: swrGlow, align: 'end' } })
+    y += meterHeight + 6
   }
   // Narrow: the pills and the passband box, in a row of their own above the panafall.
   // The panafall below the longest column.
-  y = Math.max(y, rightBottom + 10, compact || w < 220 || h < 160 ? 0 : leftBottom + 10)
+  y = Math.max(y, rightBottom + 10, passbandFits ? leftBottom + 10 : 0)
   if (compact) {
     pills(y)
     passbandBox(left + 12 + pillWidth + 8, y)
     y += Math.max(pillsHeight, passbandHeight) + 10
   }
-  const bottom = top + h - line - 6
-  // A tune's confirmation is transient: it never takes room from the panadapter, whose size would
-  // otherwise jump with every click. Only a lasting state — a problem, no connection — does.
-  const lasting = r?.problem || (!live ? status : '')
   const panBottom = lasting ? bottom - 6 : top + h - 8
   const sp = view.spectrum ?? spectrumConfig({})
   const panadapter = sp.display !== 'off' && r?.id !== undefined && r?.id !== null && panBottom - y >= (sp.display === 'both' ? 100 : 60)

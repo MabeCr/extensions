@@ -1,0 +1,8 @@
+{
+  "cases": [
+    { "label": "transmitting, SWR 1.4", "readings": { "radio.transmitting": 1, "radio.powerOut": 80, "radio.swr": 1.4, "radio.secondsSinceTransmit": 0 } },
+    { "label": "transmitting, SWR 2.6", "readings": { "radio.transmitting": 1, "radio.powerOut": 60, "radio.swr": 2.6, "radio.secondsSinceTransmit": 0 } },
+    { "label": "just unkeyed, SWR held", "readings": { "radio.secondsSinceTransmit": 1, "radio.swrAverage": 1.3 } },
+    { "label": "narrow, transmitting", "width": 300, "height": 220, "readings": { "radio.transmitting": 1, "radio.powerOut": 80, "radio.swr": 1.4, "radio.secondsSinceTransmit": 0 } }
+  ]
+}

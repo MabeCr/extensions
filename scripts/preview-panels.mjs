@@ -27,8 +27,9 @@
 //   }
 //
 // A case may set `panel`, `config`, `operation`, `qso`, `qsos` (what
-// `ctx.getQsos` answers), `app` (the app's brightness), `locale`, `width`,
-// `height` and `label`. SIZES (`360x520,220x150`) and LOCALES (`en,es`) in the
+// `ctx.getQsos` answers), `readings` (the live radio values a scene with
+// `radio` is fed, as `{"radio.transmitting": 1, "radio.swr": 1.4}`), `app`
+// (the app's brightness), `locale`, `width`, `height` and `label`. SIZES (`360x520,220x150`) and LOCALES (`en,es`) in the
 // environment replace the default grid.
 
 import { spawn } from "node:child_process"
@@ -156,6 +157,8 @@ async function readCases() {
 }
 
 let loaded, cases = [], results = { rendered: null, results: [] }
+/// The demo radio, receiving, long after its last transmission. A case's `readings` replace any of them.
+const radioReadings = { "radio.signalDbm": -85, "radio.powerOut": 0, "radio.supplyVolts": 13.8, "radio.transmitting": 0, "radio.secondsSinceTransmit": 1e6 }
 
 function argsFor(c, index, panelKey) {
   const now = Date.now(), environment = {
@@ -176,6 +179,8 @@ async function renderCase(c, index) {
     for (const descriptor of descriptors.filter(d => !c.panel || d.key === c.panel)) {
       try {
         const result = await hook.render({ ...args, panelKey: descriptor.key }, ctx)
+        // The host feeds a scene that asks for the radio its live readings, with no render between.
+        if (result?.scene?.radio) Object.assign(result.scene.values, { ...radioReadings, ...c.readings })
         entries.push({ ...c, index, hook: key, panel: descriptor.key, result })
       } catch (error) {
         entries.push({ ...c, index, hook: key, panel: descriptor.key, error: String(error?.stack ?? error) })
