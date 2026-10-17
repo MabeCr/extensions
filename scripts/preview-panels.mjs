@@ -27,7 +27,8 @@
 //   }
 //
 // A case may set `panel`, `config`, `operation`, `qso`, `qsos` (what
-// `ctx.getQsos` answers), `readings` (the live radio values a scene with
+// `ctx.getQsos` answers), `contacts` (a run of QSOs ending now, generated
+// fresh on each render: `{"minutes": 120, "rate": 60, "operators": ["KI2D"]}`), `readings` (the live radio values a scene with
 // `radio` is fed, as `{"radio.transmitting": 1, "radio.swr": 1.4}`), `app`
 // (the app's brightness), `locale`, `width`, `height` and `label`. SIZES (`360x520,220x150`) and LOCALES (`en,es`) in the
 // environment replace the default grid.
@@ -160,13 +161,24 @@ let loaded, cases = [], results = { rendered: null, results: [] }
 /// The demo radio, receiving, long after its last transmission. A case's `readings` replace any of them.
 const radioReadings = { "radio.signalDbm": -85, "radio.powerOut": 0, "radio.supplyVolts": 13.8, "radio.transmitting": 0, "radio.secondsSinceTransmit": 1e6 }
 
+/// A run of contacts ending now at about `rate` an hour, its pace swinging so a chart has some shape.
+function contactRun({ minutes = 120, rate = 60, operators = [] }, now) {
+  const qsos = []
+  for (let t = now - minutes * 60000, i = 0; t <= now; i++) {
+    qsos.push({ startAtMillis: Math.round(t), band: "20m", our: operators.length ? { operatorCall: operators[i % operators.length] } : {} })
+    t += 3600000 / (rate * (1 + .6 * Math.sin(i / 9)))
+  }
+  return qsos
+}
+
 function argsFor(c, index, panelKey) {
   const now = Date.now(), environment = {
     version: 1, width: c.width, height: c.height, safeInsets: { left: 0, top: 0, right: 0, bottom: 0 },
     brightness: c.app, colors: colors[c.app], typography, locale: c.locale, textDirection: "ltr", devicePixelRatio: 2, reducedMotion: false, highContrast: false,
   }
-  const args = { environment, clock: { nowMillis: now, realNowMillis: now }, instanceId: `case-${index}`, panelKey, operation: c.operation ?? {}, qso: c.qso, qsoCount: c.qsos?.length ?? 0, config: c.config ?? {}, reason: "preview" }
-  const ctx = { online: true, locale: c.locale, distanceUnits: "kilometers", getQsos: async () => c.qsos ?? [] }
+  const qsos = c.contacts ? contactRun(c.contacts, now) : c.qsos ?? []
+  const args = { environment, clock: { nowMillis: now, realNowMillis: now }, instanceId: `case-${index}`, panelKey, operation: c.operation ?? {}, qso: c.qso, qsoCount: qsos.length, config: c.config ?? {}, reason: "preview" }
+  const ctx = { online: true, locale: c.locale, distanceUnits: "kilometers", getQsos: async () => qsos }
   return { args, ctx }
 }
 

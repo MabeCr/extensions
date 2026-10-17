@@ -15,6 +15,9 @@ live here rather than being bundled into HaLo:
   last 10 contacts, with peaks, lows, a rate goal, and a chart per operator
   for multi-operator stations.
 
+The weather, solar and rate panels each offer a theme per placement —
+Automatic, Light, Dark or Teal — from `packages/lib-panel-themes`.
+
 All of them are published to the extension catalog at
 [catalog.ham2k.net](https://catalog.ham2k.net). Their keys follow the
 `<callsign>-<name>` convention, so a packed `.h2kext` also installs from a file

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 import type { JSONValue, PanelEnvironment, PanelTypography, PanelHook, PanelScene, PanelSceneControl, PanelSceneLayer, SceneBinding, SettingsField } from '@ham2k/extension-sdk'
 import { type Contacts, HOUR, MINUTE, contactTimes, extremes, lastRate, rateAt } from './rates.ts'
+import { panelTheme, themeColors, themeField } from '@ham2k/lib-panel-themes'
 
 const en = {
   title: 'KI2D’s Rate Chart', description: 'QSO rates over the trailing 10 and 60 minutes',
@@ -40,7 +41,7 @@ export function createRatePanel(): PanelHook {
         type: 'field', fieldType: 'select', key: 'span', label: t.span, value: DEFAULT_SPAN,
         options: Object.entries(t.spans).map(([value, label]) => ({ value, label })),
       }, { type: 'field', fieldType: 'number', key: 'goal', label: t.goalField, placeholder: t.goalNone },
-      { type: 'field', fieldType: 'checkbox', key: 'perOperator', label: t.perOperatorField, value: false }]
+      { type: 'field', fieldType: 'checkbox', key: 'perOperator', label: t.perOperatorField, value: false }, themeField(ctx.locale)]
       return [{ key: 'rate', title: t.title, description: t.description, icon: 'chart-line', on: ['qsoLogged', 'operation', 'tick:30'], form }]
     },
     async render(args, ctx) {
@@ -49,7 +50,7 @@ export function createRatePanel(): PanelHook {
       if (!ctx.getQsos) return { kind: 'markdown', content: t.noLog }
       const qsos = await ctx.getQsos(String(args.operation.uuid ?? ''))
       if (qsos === null) return { kind: 'markdown', content: t.noLog }
-      const scene = rateScene(args.environment, contactTimes(qsos), args.clock.nowMillis, spanOf(args.config), goalOf(args.config), perOperatorOf(args.config), current.get(args.instanceId ?? ''),
+      const scene = rateScene({ ...args.environment, colors: themeColors(panelTheme(args.config), args.environment.colors) }, contactTimes(qsos), args.clock.nowMillis, spanOf(args.config), goalOf(args.config), perOperatorOf(args.config), current.get(args.instanceId ?? ''),
         String(args.operation.operatorCall || args.operation.stationCall || '').trim().toUpperCase())
       return { kind: 'scene', scene }
     },

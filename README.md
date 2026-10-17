@@ -181,6 +181,10 @@ saying publishes to `stable`.
     into another one's source and two copies of a scoring table diverge. The
     writer is contest-agnostic, the shape `@ham2k/lib-qson-cabrillo`'s is, so
     if the host ever carries it only the manifests change.
+  - `@ham2k/lib-panel-themes` — the themes a dashboard panel offers in its
+    settings: Automatic (the app's colors), Light, Dark and Teal, the last
+    KI2D's Radio Panel's face. One table, so every panel's Teal is the same
+    teal; the radio panel keeps its own, which predates it.
 - `extensions/<category>/<key>` — one directory per published extension, grouped
   by the manifest's own `category`. The directory names a group and the manifest
   names one extension, so they differ by a plural: `activity` lives in

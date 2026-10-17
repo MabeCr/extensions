@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 import type { FetchOptions, FetchResponse, FormDefinition, JSONValue, PanelEnvironment, SettingsField, PanelHook, SceneBinding, SvgScene, SvgSceneLayer } from '@ham2k/extension-sdk'
 import { distanceOnEarth, gridToLocation } from '@ham2k/lib-geo-tools'
+import { panelTheme, themeColors, themeField, themeSurface, type PanelTheme } from '@ham2k/lib-panel-themes'
 import { solarPalette, tealPalette, solarFluxColor, solarAColor, solarKColor } from './palette.ts'
 import { parseSolarXml } from './spaceWeather.ts'
 
@@ -14,20 +15,7 @@ type Conditions = { flux: number; spots: number | null; a: number | null; k: num
 type Feed = { points: Point[]; fetched?: number; failed: boolean }
 const ROWS = ['metrics', 'muf', 'bands', 'sfi', 'wind', 'kp'] as const
 type Row = typeof ROWS[number]
-const THEMES = ['auto', 'light', 'dark', 'teal'] as const
-type Theme = typeof THEMES[number]
-export type Options = { rows: Record<Row, boolean>; days: 1 | 3 | 7; theme: Theme }
-type Colors = PanelEnvironment['colors']
-// Light and dark are Material 3 schemes from the app's teal (#006783), so a placement can differ from the
-// app's own brightness. Teal is KI2D's Radio Panel's face: the app's teal, lightened and muted, with black ink.
-const palettes: Record<Exclude<Theme, 'auto'>, Colors> = {
-  light: { surface: '#f5fafc', surfaceContainer: '#e9eff1', onSurface: '#171c1f', onSurfaceVariant: '#40484c', accent: '#006783', primary: '#006783', onPrimary: '#ffffff',
-    secondary: '#4c626a', outline: '#70787d', outlineVariant: '#c0c8cc', error: '#ba1a1a', onError: '#ffffff' },
-  dark: { surface: '#0f1416', surfaceContainer: '#1b2023', onSurface: '#dee3e6', onSurfaceVariant: '#c0c8cc', accent: '#86d1ec', primary: '#86d1ec', onPrimary: '#003545',
-    secondary: '#b3cad3', outline: '#8a9296', outlineVariant: '#40484c', error: '#ffb4ab', onError: '#690005' },
-  teal: { surface: '#a9c4cb', surfaceContainer: '#8faeb7', onSurface: '#000000', onSurfaceVariant: '#1f1f1f', accent: '#00384a', primary: '#000000', onPrimary: '#a9c4cb',
-    secondary: '#000000', outline: '#40575e', outlineVariant: '#7f9ea7', error: '#9c0f05', onError: '#ffffff' },
-}
+export type Options = { rows: Record<Row, boolean>; days: 1 | 3 | 7; theme: PanelTheme }
 export type Ionosonde = { code: string; name: string; lat: number; lon: number; time: number; muf: number | null; fof2: number | null }
 const HOUR = 3600000, BUCKET = 3 * HOUR
 export const urls = {
@@ -47,7 +35,6 @@ const en = {
   mufNoLocation: 'MUF: set a grid in the operation', mufNoStation: 'MUF: no recent ionosonde readings',
   rows: { metrics: 'Show solar indices', muf: 'Show MUF and foF2 from the nearest ionosonde', bands: 'Show band conditions', sfi: 'Show SFI history', wind: 'Show solar wind history', kp: 'Show Kp history' },
   range: 'History range', ranges: { 7: '7 days', 3: '3 days', 1: '1 day' },
-  theme: 'Theme', themes: { auto: 'Automatic', light: 'Light', dark: 'Dark', teal: 'Teal' },
   sources: 'Data sources', hamqsl: 'Solar indices and band conditions, by N0NBH', noaa: 'NOAA Space Weather Prediction Center: solar flux, Kp and solar wind history',
   kc2g: 'Ionosonde readings, gathered by KC2G', kc2gFrom: (station: string) => `MUF and foF2 from ${station}, gathered by KC2G`,
 }
@@ -60,7 +47,6 @@ const es: typeof en = {
   mufNoLocation: 'MUF: define una cuadrícula en la operación', mufNoStation: 'MUF: sin lecturas recientes de ionosondas',
   rows: { metrics: 'Mostrar índices solares', muf: 'Mostrar MUF y foF2 de la ionosonda más cercana', bands: 'Mostrar propagación por banda', sfi: 'Mostrar historial de SFI', wind: 'Mostrar historial del viento solar', kp: 'Mostrar historial de Kp' },
   range: 'Período del historial', ranges: { 7: '7 días', 3: '3 días', 1: '1 día' },
-  theme: 'Tema', themes: { auto: 'Automático', light: 'Claro', dark: 'Oscuro', teal: 'Verde azulado' },
   sources: 'Fuentes de datos', hamqsl: 'Índices solares y propagación por banda, de N0NBH', noaa: 'Centro de Predicción del Clima Espacial de NOAA: flujo solar, Kp e historial del viento solar',
   kc2g: 'Lecturas de ionosondas, recopiladas por KC2G', kc2gFrom: (station: string) => `MUF y foF2 de ${station}, recopilados por KC2G`,
 }
@@ -73,7 +59,7 @@ const words = (locale?: string) => locale?.startsWith('es') ? es : en
 export function panelOptions(config: Record<string, JSONValue> | undefined): Options {
   const rows = Object.fromEntries(ROWS.map(row => [row, config?.[row] !== false])) as Record<Row, boolean>
   const days = Number(config?.days)
-  return { rows, days: days === 1 || days === 3 ? days : 7, theme: THEMES.includes(config?.theme as Theme) ? config!.theme as Theme : 'auto' }
+  return { rows, days: days === 1 || days === 3 ? days : 7, theme: panelTheme(config) }
 }
 const numeric = (value: unknown): number | null => {
   if (typeof value !== 'number' && typeof value !== 'string' || String(value).trim() === '') return null
@@ -202,7 +188,7 @@ export function createSolarPanel(fetch: Fetch, showForm?: ShowForm, log?: Log): 
       const form: SettingsField[] = [
         ...ROWS.map(row => ({ type: 'field' as const, fieldType: 'checkbox' as const, key: row, label: t.rows[row], value: true })),
         { type: 'field', fieldType: 'select', key: 'days', label: t.range, value: '7', options: ([7, 3, 1] as const).map(days => ({ value: String(days), label: t.ranges[days] })) },
-        { type: 'field', fieldType: 'select', key: 'theme', label: t.theme, value: 'auto', options: THEMES.map(theme => ({ value: theme, label: t.themes[theme] })) },
+        themeField(ctx.locale),
       ]
       return [{ key: 'solar', title: t.title, description: t.description, icon: 'white-balance-sunny', multiple: true, on: ['operation', 'qso', 'tick:60'], form }]
     },
@@ -260,7 +246,7 @@ export function createSolarPanel(fetch: Fetch, showForm?: ShowForm, log?: Log): 
 }
 
 export function solarDocument(e: PanelEnvironment, r: Conditions, feeds: Record<'flux' | 'kp' | 'wind', Feed>, now: number, fetched: number, failed: boolean, station: Ionosonde | null = null, options: Options = panelOptions({}), mhzInUse: number | null = null, located = true): SvgScene {
-  const t = words(e.locale), c = options.theme === 'auto' ? e.colors : palettes[options.theme], status = options.theme === 'teal' ? tealPalette : solarPalette, style = e.typography.label
+  const t = words(e.locale), c = themeColors(options.theme, e.colors), status = options.theme === 'teal' ? tealPalette : solarPalette, style = e.typography.label
   const width = Math.max(1, Math.min(8192, e.width)), height = Math.max(1, Math.min(8192, e.height))
   const left = e.safeInsets.left, top = e.safeInsets.top, w = width - left - e.safeInsets.right, h = height - top - e.safeInsets.bottom
   const layers: SvgSceneLayer[] = [], scene: SvgScene = { version: 1, width, height, values: { time: 56 }, layers }
@@ -311,7 +297,7 @@ export function solarDocument(e: PanelEnvironment, r: Conditions, feeds: Record<
   if (show.muf && station && y + line < end) {
     // Bold numbers beside regular units need a layer per weight. A MUF under the operating frequency
     // shows in red. A foF2 over it shows in green: the band reflects straight up, with no skip zone.
-    const red = WARNING[options.theme === 'teal' ? 'teal' : options.theme === 'auto' ? e.brightness : options.theme]
+    const red = WARNING[themeSurface(options.theme, e.brightness)]
     const size = style.scaledFontSize, base = style.fontWeight, mhz = (v: number | null) => v === null ? '—' : v.toFixed(0)
     // Above 6 m the F2 layer is never the path, so a low MUF there says nothing worth a warning.
     const warnMuf = mhzInUse !== null && mhzInUse <= 54 && station.muf !== null && station.muf < mhzInUse

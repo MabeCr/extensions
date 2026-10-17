@@ -1,7 +1,7 @@
 {
   "key": "ki2d-weather-panel",
   "name": "KI2D’s Weather Panel",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Weather reference panel using the public SVG scene and render environment APIs",
   "category": "dashboard",
   "icon": "weather-partly-cloudy",

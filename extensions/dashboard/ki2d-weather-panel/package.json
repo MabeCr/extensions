@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-ki2d-weather-panel",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Weather reference panel using the public SVG scene and render environment APIs",
   "author": "Sebastian Delmont <sd@ham2k.com>",
@@ -11,6 +11,9 @@
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test 'src/*.test.ts'",
     "pack": "npm run build && h2kext-pack build"
+  },
+  "dependencies": {
+    "@ham2k/lib-panel-themes": "^0.1.0"
   },
   "devDependencies": {
     "@ham2k/extension-sdk": "^0.12.0",
