@@ -1,0 +1,14 @@
+{
+  "unsupported": "Esta versión de la app no puede conectarse a un DX Cluster",
+  "noCall": "No hay indicativo de operador con el que entrar al cluster",
+  "connectFailed": "No se pudo conectar con el nodo del cluster",
+  "needsPassword": "El nodo del cluster pide una contraseña — configúrala en Ajustes › DX Cluster",
+  "loginFailed": "El nodo del cluster rechazó la entrada",
+  "disconnected": "El nodo del cluster cortó la conexión",
+  "timeout": "El nodo del cluster no respondió",
+  "tooSoon": "Hace un momento salió otro spot — vuelve a intentarlo en unos segundos",
+  "invalidCall": "El cluster no acepta ese indicativo",
+  "invalidFrequency": "El spot necesita una frecuencia",
+  "refused": "El nodo del cluster dijo: {{message}}",
+  "notPosted": "El spot no se publicó"
+}

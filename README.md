@@ -97,6 +97,14 @@ sources, and two award programs:
   spot-discord names, lowercased, with PoLo's `qCode` and `qRest` working
   too — besides the app's `op`; the app's template editor
   does not know `spot` yet, so its preview shows those blank.
+- **`ki2d-cluster-spotter`** posts self-spots, and spots of stations worked,
+  to the DX cluster network, through the one telnet connection the app holds
+  to the node picked in Settings › DX Cluster (extension API 10,
+  `requiresClusterSpot`). Posting once, to one node, is the whole job: the
+  nodes forward each spot to one another. The comment names every activity,
+  contests first (`NYQP SUL/DEL - POTA US-1234`), because a reader's
+  80-column line shows only the comment's first 30 characters; a test
+  operation's spot starts with `TESTING`. It reads nothing from the cluster.
 
 The SVG reference panels carry `ki2d-` keys and install from a file.
 See [dashboard development](extensions/dashboard/README.md) for building and

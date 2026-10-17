@@ -1,0 +1,34 @@
+{
+  "name": "@ham2k/ext-ki2d-cluster-spotter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ham2K Logger extension: self-spots and spots of others to the DX cluster network",
+  "author": "Sebastian Delmont <sd@ham2k.com>",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --import ../../../scripts/sdk-node-resolve.mjs --experimental-strip-types --test 'src/**/*.test.ts'",
+    "typecheck": "tsc --noEmit",
+    "pack": "npm run build && h2kext-pack build"
+  },
+  "//dependencies": [
+    "The party identities name a QSO party in a spot's comment; bundled, as",
+    "the host does not carry them."
+  ],
+  "dependencies": {
+    "@ham2k/qso-parties": "^0.1.0"
+  },
+  "//devDependencies": [
+    "The cluster host calls arrived in SDK 0.12.12 (extension API 10), and",
+    "extension-tools 0.13.0 is the first packer that takes an API 10 manifest."
+  ],
+  "devDependencies": {
+    "@ham2k/extension-sdk": "^0.12.12",
+    "@ham2k/extension-tools": "^0.13.0",
+    "esbuild": "^0.25.5"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
