@@ -238,6 +238,17 @@ const adifFieldsHook = {
       return [...mine, { name: 'SIG', value: program }, { name: 'SIG_INFO', value: huntedReference }]
     })
   },
+
+  /// The one record the full ADIF export writes per contact: the first of the
+  /// records above, so a contact crediting several of their references names
+  /// the first, as app-polo's does. Without it the full export asks this hook
+  /// nothing and the operator's backup carries no custom fields at all.
+  async fieldsForOneQSO(
+    args: { qso: Record<string, unknown>; operation: Record<string, unknown> },
+    ctx: HookContext,
+  ): Promise<{ name: string; value: string }[]> {
+    return (await adifFieldsHook.fieldCombinationsForOneQSO(args, ctx))[0] ?? []
+  },
 }
 
 defineExtension({
