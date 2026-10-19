@@ -117,10 +117,11 @@ const { refHandler, activityHook, adifFieldsHook, adifImportHook } = referenceAc
 
 /// Five contacts, five different callsigns, one UTC day.
 ///
-/// A callsign counts once per day toward the five: working it again is a
-/// duplicate, and working it at a DIFFERENT reference credits that reference
-/// to the hunter side without counting a second callsign toward the
-/// activation. Band and mode are irrelevant to HOTA. `activityScorer` cannot
+/// A station can be worked once per band, mode and UTC day, as in POTA, but
+/// a callsign counts once per day toward the five: working it again on a new
+/// band or mode is a good contact that adds no callsign, and working it at a
+/// DIFFERENT reference credits that reference to the hunter side, again
+/// without a second callsign toward the activation. `activityScorer` cannot
 /// say "different callsigns" on its own; `oneCallsignPerDay` caps it.
 export const HOTA_SCORING = {
   label: 'HOTA',
@@ -129,7 +130,7 @@ export const HOTA_SCORING = {
   huntingType: HUNTING_TYPE,
   qsosToActivate: 5,
   allowsMultipleReferences: true,
-  uniquePer: ['day', 'ref'] as const,
+  uniquePer: ['band', 'mode', 'day', 'ref'] as const,
   freshRefRescuesActivation: false,
   activates: 'daily' as const,
   refNoun: (ctx: HookContext) => tFor(ctx)('site'),

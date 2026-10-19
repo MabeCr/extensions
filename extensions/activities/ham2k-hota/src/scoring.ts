@@ -13,7 +13,8 @@
 // So the scorer runs as it is, and this caps what it credited: the first
 // contact with a callsign on a UTC day is worth at most one toward the
 // activation, and every later one nothing. Hunting credit, an H&H contact
-// with a new site, is left exactly as the scorer gave it.
+// with a new site, is left exactly as the scorer gave it, and so is a
+// contact on a new band or mode: a good contact, just no new callsign.
 
 import type { ActivityScoresheet, ContestScorer, HookContext, JSONValue } from "@ham2k/extension-sdk"
 
@@ -69,8 +70,12 @@ export function oneCallsignPerDay(
 
       const value = Math.max(0, (score.value ?? 0) - excess)
       if (value > 0) return { scoresheet: sheet, score: { ...score, value } }
-      // Nothing left: a station already counted today, at no new site, is a
-      // duplicate as far as HOTA is concerned.
+      // Nothing left, but the scorer saw a new band or mode: worth nothing
+      // toward the activation, and not a duplicate either.
+      if (score.notices?.length) return { scoresheet: sheet, score: { ...score, value: 0 } }
+      // A station already counted today, on this band and mode, at no new
+      // site, is a duplicate the scorer missed only because one of the two
+      // contacts named a site.
       sheet.duplicates += 1
       sheet.dayDuplicates += 1
       return { scoresheet: sheet, score: { ...score, value: 0, dupe: true, alerts: ['duplicate'], notices: undefined } }
