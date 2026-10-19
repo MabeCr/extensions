@@ -72,6 +72,55 @@ test('shared cache deduplicates placements and keeps resize/theme/inspection net
   assert.equal(calls.length, 11, 'large wind history is not fetched on every refresh')
 })
 
+test('the week of wind follows hamqsl and never holds up a render', async () => {
+  // Beside hamqsl, the megabyte shares a slow link with the one request the panel cannot draw without;
+  // awaited by the render, it has to fit the render's few seconds, which on that link it never does.
+  const calls: string[] = []
+  let answerConditions!: () => void, answerHistory!: () => void
+  const conditionsGate = new Promise<void>(resolve => { answerConditions = resolve })
+  const historyGate = new Promise<void>(resolve => { answerHistory = resolve })
+  const week = JSON.stringify([['time_tag', 'speed'], [utc(now - 9 * 3600000), 350], ...stamps.map((time, i) => [utc(time), 390 + i * 20])])
+  const panel = createSolarPanel(async url => {
+    calls.push(url)
+    if (url === urls.conditions) await conditionsGate
+    if (url === urls.history) { await historyGate; return { status: 200, body: week } }
+    return { status: 200, body: bodies[url] }
+  })
+  const first = panel.render(args, ctx)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.ok(!calls.includes(urls.history), 'not while hamqsl is still answering')
+  answerConditions()
+  // Bounded, so a render that waits for the week fails here instead of hanging the run.
+  const drawn = await Promise.race([first, new Promise<null>(resolve => setTimeout(() => resolve(null), 200))])
+  assert.equal(drawn?.kind, 'svgScene', 'drawn while the week is still downloading')
+  assert.ok(calls.includes(urls.history))
+  answerHistory()
+  await new Promise(resolve => setImmediate(resolve))
+  const next = await panel.render({ ...args, clock: { nowMillis: now + 60000, realNowMillis: now + 60000 } }, ctx)
+  if (next.kind !== 'svgScene') return assert.fail('no scene')
+  // A reading only the week holds, drawn by a render that fetched nothing.
+  assert.match(next.scene.layers.find(l => l.id === 'wind-caption')!.text!.samples![0] as string, /Wind.* 350 km\/s/)
+})
+
+test('the week of wind downloads only for a placement that draws it', async () => {
+  // A placement hiding the wind must not pay for the megabyte, and the cache it shares must not then
+  // keep the week from a placement that shows the wind, even between rounds.
+  const calls: string[] = []
+  const panel = createSolarPanel(async url => { calls.push(url); return { status: 200, body: bodies[url] } })
+  await panel.render({ ...args, config: { wind: false } }, ctx)
+  assert.ok(calls.includes(urls.wind) && !calls.includes(urls.history))
+  const round = calls.length
+  await panel.render({ ...args, instanceId: 'two', clock: { nowMillis: now + 60000, realNowMillis: now + 60000 } }, ctx)
+  assert.deepEqual(calls.slice(round), [urls.history])
+})
+
+test('a failed hamqsl round does not ask for the week of wind', async () => {
+  const calls: string[] = []
+  const panel = createSolarPanel(async url => { calls.push(url); return { status: url === urls.conditions ? 503 : 200, body: bodies[url] } })
+  await panel.render(args, ctx)
+  assert.ok(calls.includes(urls.wind) && !calls.includes(urls.history))
+})
+
 test('partial NOAA failures keep good charts; primary failure marks cached indices and rate-limits retries', async () => {
   let fail = false, calls = 0
   const panel = createSolarPanel(async url => { calls++; return { status: fail ? 503 : 200, body: bodies[url] } })

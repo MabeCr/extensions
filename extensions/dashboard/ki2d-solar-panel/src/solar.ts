@@ -177,10 +177,22 @@ export function createSolarPanel(fetch: Fetch, showForm?: ShowForm, log?: Log): 
   let failed = false, pending: Promise<void> | undefined, historyAttempt: number | undefined, historySuccess: number | undefined
   const feeds: Record<'flux' | 'kp' | 'wind', Feed> = { flux: { points: [], failed: false }, kp: { points: [], failed: false }, wind: { points: [], failed: false } }
   let windRaw: Point[] = [], stations: Ionosonde[] = []
-  async function body(url: string) {
-    const response = await fetch(url, { timeout: 3800 })
+  // 3.8s keeps a round inside the host's five-second render budget, since the render waits for it.
+  async function body(url: string, options: FetchOptions = { timeout: 3800 }) {
+    const response = await fetch(url, options)
     if (response.status !== 200) throw new Error(`Solar HTTP ${response.status}`)
     return response.body
+  }
+  // The week of wind is 1.13MB: too big for a round's 3.8s on a slow link, and sharing the link with
+  // the round can push hamqsl past its timeout. So it starts only once hamqsl has answered, no render
+  // waits for it, it runs under the host's own longer timeout, and the next tick draws it.
+  function fetchHistory(real: number) {
+    historyAttempt = real
+    body(urls.history, {}).then(b => parseSeries(b, 'speed')).then(history => {
+      historySuccess = real
+      windRaw = mergePoints(history, windRaw).slice(-11000)
+      feeds.wind.points = windRaw
+    }).catch(error => log?.(`NOAA wind history failed: ${(error as Error)?.message ?? error}`))
   }
   return {
     async getPanels(_args, ctx) {
@@ -200,8 +212,6 @@ export function createSolarPanel(fetch: Fetch, showForm?: ShowForm, log?: Log): 
       if (due && (attempted === undefined || real - attempted >= 60000) && !pending) {
         attempted = real
         pending = (async () => {
-          const historyDue = (historySuccess === undefined || real - historySuccess >= 6 * HOUR) && (historyAttempt === undefined || real - historyAttempt >= 15 * 60000)
-          if (historyDue) historyAttempt = real
           await Promise.all([
             (async () => {
               try { conditions = parseConditions(await body(urls.conditions)); fetched = now; failed = false }
@@ -215,15 +225,11 @@ export function createSolarPanel(fetch: Fetch, showForm?: ShowForm, log?: Log): 
               catch { feeds[key].failed = true }
             }),
             (async () => {
-              const [recent, history] = await Promise.all([
-                body(urls.wind).then(b => parseSeries(b, 'speed')).catch(() => null),
-                historyDue ? body(urls.history).then(b => parseSeries(b, 'speed')).catch(() => null) : Promise.resolve(null),
-              ])
-              if (history) historySuccess = real
-              windRaw = mergePoints(mergePoints(windRaw, history ?? []), recent ?? []).slice(-11000)
+              const recent = await body(urls.wind).then(b => parseSeries(b, 'speed')).catch(() => null)
+              windRaw = mergePoints(windRaw, recent ?? []).slice(-11000)
               feeds.wind.points = windRaw
               feeds.wind.failed = recent === null
-              if (recent || history) feeds.wind.fetched = now
+              if (recent) feeds.wind.fetched = now
             })(),
           ])
           if (!failed) successful = real
@@ -231,8 +237,15 @@ export function createSolarPanel(fetch: Fetch, showForm?: ShowForm, log?: Log): 
       }
       if (pending) await pending
       if (!conditions) return { kind: 'markdown', content: t.unavailable }
+      const options = panelOptions(args.config)
+      // Only for a placement that draws the wind, so one that hides it never pulls the megabyte; the
+      // cache is shared, so the first placement that does show it fetches it for all of them. Not
+      // behind a failed hamqsl, even with older indices on screen: that failure is the sign of a slow
+      // link, and the megabyte is the most expensive thing the panel could put on it next.
+      const historyDue = (historySuccess === undefined || real - historySuccess >= 6 * HOUR) && (historyAttempt === undefined || real - historyAttempt >= 15 * 60000)
+      if (options.rows.wind && !failed && historyDue) fetchHistory(real)
       const place = operationLocation(args.operation)
-      return { kind: 'svgScene', scene: solarDocument(args.environment, conditions, feeds, now, fetched, failed, nearestStation(stations, place, now), panelOptions(args.config), operatingMHz(args.qso), place !== null) }
+      return { kind: 'svgScene', scene: solarDocument(args.environment, conditions, feeds, now, fetched, failed, nearestStation(stations, place, now), options, operatingMHz(args.qso), place !== null) }
     },
     // Scenes cannot open a URL themselves; the host's sheet does, from its link elements.
     async onEvent(args, ctx) {
