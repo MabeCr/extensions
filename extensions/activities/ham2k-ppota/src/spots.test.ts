@@ -7,7 +7,7 @@
 // with Ham2K's integration key as a Bearer token, and only a 201 is success.
 //
 // The registered hook carries the key that ships; the posting tests build
-// the same hook around a stand-in key, so they hold whether or not one has.
+// the same hook around a stand-in key, so no test ever posts with the real one.
 
 import { test } from "node:test"
 import assert from "node:assert/strict"
@@ -124,6 +124,10 @@ test("spotting is offered only with a key, and only where there is a PPOTA refer
   // A QSO carries the HUNTING type; the activation type there means nothing.
   assert.equal((await hook.isOtherSpotEnabled!({ qso: { refs: [{ type: "ppota", ref: "PPAR-0004" }] } }, ctx)).enabled, true)
   assert.equal((await hook.isOtherSpotEnabled!({ qso: { refs: [{ type: "ppotaActivation", ref: "PPAR-0004" }] } }, ctx)).enabled, false)
+
+  // The registered hook carries the key that ships, so it offers posting too.
+  const shipped = (await ppota.runHook("spots", "isSelfSpotEnabled", { operation: activation })) as { enabled: boolean }
+  assert.equal(shipped.enabled, true, "the bundle ships without PPOTA_API_KEY")
 
   const keyless = ppotaSpotsHook("")
   assert.equal((await keyless.isSelfSpotEnabled!({ operation: activation }, ctx)).enabled, false)

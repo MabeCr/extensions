@@ -58,7 +58,7 @@ const API_BASE = 'https://ppota.app/api/v1'
 /// permission. PPOTA asks that it not be shown to users, but every bundle is
 /// served to anyone who asks, so treat it as published: rotating it means a
 /// release. Empty, posting is not offered at all.
-const PPOTA_API_KEY = ''
+const PPOTA_API_KEY = 'ppota_uWqUoZdYCAI49achoXn6goBeTD_7xle-cDz06obuOaE'
 
 /// Live-typing reformatting. A reference is "PP" plus the station's ISO
 /// country, so an Argentine station typing "0004" gets "PPAR-0004"; a

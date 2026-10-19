@@ -49,8 +49,8 @@ sources, and two award programs:
   ppota.app's own rules and [API](https://ppota.app/api). Its ref types,
   `ppota` and `ppotaActivation`, are new and permanent in the same way.
   PPOTA issues its spot-posting key per integration, not per operator, so it
-  ships in the bundle as a constant (`PPOTA_API_KEY`), as WWFF's does; while
-  that is empty, the extension reads spots but offers no posting.
+  ships in the bundle as a constant (`PPOTA_API_KEY`), as WWFF's does. It is
+  Ham2K's key, issued by PPOTA's administrator; rotating it means a release.
 
 - **The state-park events** — `ham2k-txspota`, `ham2k-flspota`,
   `ham2k-gaspota`, `ham2k-ohspota` and `ham2k-wispota` — are one extension
