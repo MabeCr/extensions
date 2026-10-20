@@ -13,8 +13,9 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
-import { adifForExport, contestScorer, defineExtension, exportFilename, startMillisOf } from "@ham2k/extension-sdk"
+import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
+  ActivitySuggestion,
   ExportOption,
   ExportOptionsRequest,
   ExportRequest,
@@ -24,9 +25,21 @@ import type {
   LoggingControlDescriptor,
   Ref,
   RefLink,
+  SuggestArgs,
 } from "@ham2k/extension-sdk"
 
+import {
+  BAND_CLASSES,
+  OPERATOR_CLASSES,
+  OVERLAY_CLASSES,
+  POWER_CLASSES,
+  cabrilloCategories,
+  cabrilloLocation,
+  declaredClub,
+  declaredOperators,
+} from "./entry.ts"
 import { tFor } from "./i18n.ts"
+import { MODES, nearestMode, nextContestDate, relevanceFor } from "./schedule.ts"
 import { contestTitle, CQWPXScorer } from "./scorer.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
@@ -35,6 +48,11 @@ import manifest from "../manifest.json" with { type: "json" }
 /// stays what the app's own built-in wrote there whatever this package is
 /// called: the manifest key names the package, `TYPE` names the activation.
 const TYPE = 'cqwpx'
+
+/// What a search has to contain to offer these contests. Matched as "does the
+/// alias contain what was typed", so "cq" finds them and the date ranking
+/// decides which running comes first.
+const ALIASES = ['CQWPX', 'CQ WPX', 'WPX']
 
 function refOfType(container: Record<string, JSONValue>, type: string): Record<string, JSONValue> | undefined {
   return (((container.refs as Record<string, JSONValue>[] | undefined) ?? [])).find((r) => r?.type === type)
@@ -52,7 +70,69 @@ function serial(qso: Record<string, JSONValue>, field: string): string {
   return /^\d+$/.test(digits) ? String(parseInt(digits, 10)) : ''
 }
 
+/// The operator's name, email and club from their profile, for the Cabrillo
+/// header. All optional and free-form in the profile, so each may be ''. A
+/// host that cannot answer costs these lines, never the log itself.
+async function profileDetails(): Promise<{ name: string; email: string; club: string }> {
+  try {
+    const settings = (await host.getSettings()) as Record<string, JSONValue> | undefined
+    const line = (value: JSONValue | undefined) => str(value).replace(/\s+/g, ' ').trim()
+    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail), club: line(settings?.operatorClub) }
+  } catch (e) {
+    console.warn(`[cqwpx] profile settings unavailable, exporting without name, email and profile club:`, e)
+    return { name: '', email: '', club: '' }
+  }
+}
+
+/// One select per axis of the entry, "Not declared" first.
+function entrySelects(t: (key: string) => string) {
+  const select = (key: string, options: readonly string[]) => ({
+    type: 'field' as const,
+    fieldType: 'select' as const,
+    key,
+    label: t(`${key}Label`),
+    value: '',
+    options: [{ value: '', label: t('notDeclared') }, ...options.map((value) => ({ value, label: t(`${key}_${value}`) }))],
+  })
+  return [
+    select('operator', OPERATOR_CLASSES),
+    select('band', BAND_CLASSES),
+    select('power', POWER_CLASSES),
+    select('overlay', OVERLAY_CLASSES),
+  ]
+}
+
 const ActivityHook = {
+  /// Offered in the activity search by NAME and by NEARNESS — all three
+  /// runnings, each ranked by its own weekend, so in March SSB leads and in
+  /// May CW.
+  ///
+  /// Nothing is offered to an operation that already runs CQ WPX: as in CQ
+  /// WW, the mode lives on the ref as `mode`, not `ref`, so the picker's
+  /// duplicate guard would let a tapped suggestion REPLACE the configured ref.
+  async suggest({ operation, searchTerm }: SuggestArgs, ctx: HookContext): Promise<ActivitySuggestion[]> {
+    if (refOfType(operation ?? {}, TYPE)) return []
+    const t = tFor(ctx)
+    const term = (searchTerm ?? '').trim().toUpperCase()
+    if (term && !ALIASES.some((alias) => alias.includes(term))) return []
+
+    const now = Date.now()
+    return MODES.map((mode) => ({
+      type: TYPE,
+      mode,
+      // A suggestion is persisted VERBATIM and never runs through
+      // `decorateRef`, so everything the operation row reads has to be here,
+      // and the labels must match what `decorateRef` composes.
+      program: 'Contest',
+      // The date is what tells the runnings apart at a glance — the same
+      // `description • date` line the QSO parties show.
+      name: `${t('activityDescription')} • ${nextContestDate(now, mode)}`,
+      label: `CQ WPX ${mode}`,
+      shortLabel: `CQ WPX ${mode}`,
+      relevance: relevanceFor(now, mode),
+    }))
+  },
+
   async operationControls(
     _args: { operation: Record<string, JSONValue> },
     ctx: HookContext,
@@ -76,8 +156,38 @@ const ActivityHook = {
                 fieldType: 'radio',
                 key: 'mode',
                 label: t('modeLabel'),
+                // Seeds a new setup only; a configured ref keeps its own mode.
+                value: nearestMode(Date.now()),
                 // CQ WPX runs these as separate contests on separate weekends.
                 options: [{ value: 'CW', label: 'CW' }, { value: 'SSB', label: 'SSB' }, { value: 'RTTY', label: 'RTTY' }],
+              },
+              // For the Cabrillo LOCATION line the rules require of a US
+              // station (XI.C).
+              {
+                type: 'field',
+                fieldType: 'text',
+                key: 'location',
+                label: t('locationLabel'),
+                placeholder: t('locationPlaceholder'),
+                uppercase: true,
+              },
+              // The entry we are making, for the Cabrillo header. Each starts
+              // undeclared: see entry.ts.
+              ...entrySelects(t),
+              {
+                type: 'field',
+                fieldType: 'text',
+                key: 'operators',
+                label: t('operatorsLabel'),
+                placeholder: t('operatorsPlaceholder'),
+                uppercase: true,
+              },
+              {
+                type: 'field',
+                fieldType: 'text',
+                key: 'club',
+                label: t('clubLabel'),
+                placeholder: t('clubPlaceholder'),
               },
             ],
           },
@@ -291,12 +401,22 @@ const ExportHook = {
     const ourCall = str(operation.stationCall)
 
     if (args.exportType === `${TYPE}-cabrillo`) {
+      const opRef = refOfType(operation, TYPE)
+      const profile = await profileDetails()
       const content = qsonToCabrillo(args.qsos, {
         headers: [
           ['CONTEST', mode ? `CQ-WPX-${mode}` : 'CQ-WPX'],
           ['CALLSIGN', ourCall],
-          ['OPERATORS', str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          ['LOCATION', cabrilloLocation(ourCall, opRef?.location)],
+          ...cabrilloCategories(opRef),
+          // The calls listed at setup — required for a multi-operator entry —
+          // else the app's own operator call.
+          ['OPERATORS', declaredOperators(opRef) || str((operation.local as Record<string, JSONValue>)?.operatorCall)],
           ['GRID-LOCATOR', str(operation.grid)],
+          // The club typed at setup, else the profile's.
+          ['CLUB', declaredClub(opRef) || profile.club],
+          ['NAME', profile.name],
+          ['EMAIL', profile.email],
         ],
         qsoParts: (qso) => [
           ourCall || '-',

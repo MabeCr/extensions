@@ -387,7 +387,9 @@ describe('finding it in the activity search', () => {
     }
   })
 
-  test('the suggestion carries everything the operation row shows', async () => {
+  test('the suggestion carries everything the operation row shows', async (t) => {
+    // October 2026: the next running is next year's.
+    t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 9, 19) })
     // A suggestion is persisted VERBATIM and never runs through
     // `decorateRef`, so a missing field reads as a blank row.
     const [suggestion] = await suggest('field day')
@@ -400,9 +402,13 @@ describe('finding it in the activity search', () => {
     // depending on how it was added.
     assert.equal(suggestion.shortLabel, `FD ${suggestion.ref}`)
     // The row's second line says what the event IS — not a not-configured
-    // warning about something not yet added, and not the label again.
-    assert.ok(suggestion.name)
-    assert.ok(!String(suggestion.name).includes(String(suggestion.ref)))
+    // warning about something not yet added, and not the label again — and
+    // the day this running opens.
+    const [description, date] = String(suggestion.name).split(' • ')
+    assert.ok(description)
+    assert.ok(!description.includes(String(suggestion.ref)))
+    assert.equal(suggestion.ref, '2027')
+    assert.equal(date, '2027-06-26')
     assert.notEqual(suggestion.name, suggestion.label)
     assert.equal(typeof suggestion.relevance, 'number')
   })

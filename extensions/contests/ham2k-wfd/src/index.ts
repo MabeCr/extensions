@@ -37,7 +37,7 @@ import type {
 
 import { ALL_SECTIONS, CALL_AREA_FOR_SECTION, PREFIX_TO_LOCATION } from "./sections.ts"
 import { CLASS_REGEX, OBJECTIVE_KEYS, TYPE, WFDScorer, contestTitle, refOfType } from "./scorer.ts"
-import { nextRunningYear, relevanceFor } from "./schedule.ts"
+import { nextRunningYear, relevanceFor, winterFieldDayDate } from "./schedule.ts"
 import { tFor } from "./i18n.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
@@ -241,7 +241,9 @@ const ActivityHook = {
         // activity puts its reference's real name here (a park's name); an
         // event has no such name, so it describes itself instead.
         program: 'Contest',
-        name: t('activityDescription'),
+        // The day it opens, so the row says WHEN as well as what — the same
+        // `description • date` line the QSO parties show.
+        name: `${t('activityDescription')} • ${winterFieldDayDate(year)}`,
         label: `${t('activityLabel')} ${year}`,
         // Must match what `decorateRef` composes: the same running added by
         // tapping this suggestion and by the setup form has to read the same

@@ -122,3 +122,24 @@ test("the Cabrillo file comes out of the export hook", async () => {
   assert.equal(result.content.split('\n')[0].trim(), 'START-OF-LOG: 3.0')
   assert.equal(delegated.length, 0, 'a Cabrillo file is written here, not delegated')
 })
+
+test("the Cabrillo header carries LOCATION, the declared entry, operators and club", async () => {
+  const operation = {
+    uuid: 'op-1',
+    stationCall: 'N0DEV',
+    local: { operatorCall: 'N0DEV' },
+    refs: [{ type: 'cqwpx', mode: 'CW', location: 'mn', operator: 'MULTI-TWO', power: 'HIGH', operators: 'k1abc, w2def', club: 'Yankee Clipper Contest Club' }],
+  }
+  const result = (await contest.runHook('export', 'generateExport', { operation, qsos: QSOS, exportType: 'cqwpx-cabrillo' })) as { content: string }
+  assert.deepEqual(result.content.split('\n').filter((line) => /^(LOCATION|CATEGORY-|OPERATORS|CLUB)/.test(line)), [
+    'LOCATION: MN',
+    'CATEGORY-OPERATOR: MULTI-OP',
+    'CATEGORY-ASSISTED: ASSISTED',
+    'CATEGORY-BAND: ALL',
+    'CATEGORY-POWER: HIGH',
+    'CATEGORY-MODE: CW',
+    'CATEGORY-TRANSMITTER: TWO',
+    'OPERATORS: K1ABC W2DEF',
+    'CLUB: Yankee Clipper Contest Club',
+  ])
+})

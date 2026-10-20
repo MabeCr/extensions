@@ -72,6 +72,7 @@ test("the activity search offers all three runnings, the nearest first, labelled
   t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 9, 15) })
   const suggestions = (await cqww.runHook("activity", "suggest", { searchTerm: "cq" })) as {
     mode: string
+    name: string
     label: string
     shortLabel: string
     relevance: number
@@ -79,6 +80,10 @@ test("the activity search offers all three runnings, the nearest first, labelled
 
   const ranked = [...suggestions].sort((a, b) => b.relevance - a.relevance).map((s) => s.mode)
   assert.deepEqual(ranked, ["SSB", "CW", "RTTY"])
+
+  // Each names the weekend it runs — RTTY already past, so next year's.
+  const dates = Object.fromEntries(suggestions.map((s) => [s.mode, s.name.split(" • ")[1]]))
+  assert.deepEqual(dates, { SSB: "2026-10-24", CW: "2026-11-28", RTTY: "2027-09-25" })
 
   // A suggestion is saved verbatim; a label that differs from decorateRef's
   // would change the moment the operation is edited.

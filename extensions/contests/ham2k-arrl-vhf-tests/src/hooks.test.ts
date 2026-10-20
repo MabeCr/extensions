@@ -159,3 +159,27 @@ test("each contact is scored from the grid its own segment was operating from", 
   assert.equal(moved.q0.value, stayed.q0.value, 'before the move both runs are at FN32aa')
   assert.notEqual(moved.q10.value, stayed.q10.value, 'after it, EM12aa to FN42aa is not FN32aa to FN42aa')
 })
+
+test("each suggestion names the weekend its next running starts", async (t) => {
+  // New Year's Day: every running is this year's, on the dates the ARRL
+  // published for 2026.
+  t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 0, 1) })
+  const suggestions = (await vhf.runHook("activity", "suggest", {})) as { ref: string; name: string }[]
+  assert.deepEqual(Object.fromEntries(suggestions.map((s) => [s.ref, s.name])), {
+    "ARRL-VHF-JAN": "ARRL VHF January • 2026-01-17",
+    "ARRL-VHF-JUN": "ARRL VHF June • 2026-06-13",
+    "ARRL-VHF-SEP": "ARRL VHF September • 2026-09-12",
+    "ARRL-222": "ARRL 222 MHz and Up • 2026-08-01",
+    "ARRL-10G-AUG": "ARRL 10 GHz and Up - August • 2026-08-15",
+    "ARRL-10G-SEP": "ARRL 10 GHz and Up - September • 2026-09-19",
+  })
+
+  // A few days after the January weekend it is still that running; a week
+  // after, next year's.
+  const january = async () =>
+    ((await vhf.runHook("activity", "suggest", { searchTerm: "january" })) as { name: string }[])[0].name
+  t.mock.timers.setTime(Date.UTC(2026, 0, 22))
+  assert.equal(await january(), "ARRL VHF January • 2026-01-17")
+  t.mock.timers.setTime(Date.UTC(2026, 0, 24))
+  assert.equal(await january(), "ARRL VHF January • 2027-01-16")
+})

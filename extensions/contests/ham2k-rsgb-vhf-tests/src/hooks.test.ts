@@ -77,3 +77,19 @@ test('the contest ADIF is handed to the core writer alone, with the privacy choi
     assert.match(result.filename, /\.adi$/)
   }
 })
+
+test("each suggestion names the day its next running starts", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 9, 20) })
+  const names = async (searchTerm: string) =>
+    ((await rsgb.runHook('activity', 'suggest', { searchTerm })) as { ref: string; name: string }[])
+      .map((s) => s.name)
+
+  // A one-off from the RSGB calendar, and a monthly session from its rule —
+  // January's having passed, next year's.
+  assert.deepEqual(await names('marconi'), ['144MHz CW Marconi • 2026-11-07'])
+  assert.deepEqual(await names('january 144mhz ukac'), ['January 144MHz UKAC • 2027-01-05'])
+
+  // Past the calendar's last listed year, the name alone — never a stale date.
+  t.mock.timers.setTime(Date.UTC(2028, 0, 1))
+  assert.deepEqual(await names('marconi'), ['144MHz CW Marconi'])
+})

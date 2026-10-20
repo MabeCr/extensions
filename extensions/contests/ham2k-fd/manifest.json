@@ -2,7 +2,7 @@
   "key": "ham2k-fd",
   "name": "ARRL Field Day",
   "shortName": "FD",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "ARRL's annual operating event; late June",
   "category": "contest",
   "icon": "weather-sunny",

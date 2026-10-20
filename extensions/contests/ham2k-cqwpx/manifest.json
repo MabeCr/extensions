@@ -2,7 +2,7 @@
   "key": "ham2k-cqwpx",
   "name": "CQ WPX Contest",
   "shortName": "CQ WPX",
-  "version": "0.2.4",
+  "version": "0.2.6",
   "description": "Every callsign prefix is a multiplier; mid February (RTTY), late March (SSB) and late May (CW)",
   "category": "contest",
   "icon": "flag-checkered",

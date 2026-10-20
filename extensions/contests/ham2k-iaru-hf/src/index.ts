@@ -16,6 +16,7 @@ import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 import { adifForExport, annotateCallAgainstCountryFile, contestScorer, defineExtension, exportFilename, startMillisOf } from "@ham2k/extension-sdk"
 import type {
+  ActivitySuggestion,
   ExportOption,
   ExportOptionsRequest,
   ExportRequest,
@@ -25,9 +26,11 @@ import type {
   LoggingControlDescriptor,
   Ref,
   RefLink,
+  SuggestArgs,
 } from "@ham2k/extension-sdk"
 
 import { tFor } from "./i18n.ts"
+import { nextContestDate, relevanceFor } from "./schedule.ts"
 import { EXCHANGE_PATTERN, IARUHFScorer, contestTitle, normalizeZone, ourExchange } from "./scorer.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
@@ -36,6 +39,10 @@ import manifest from "../manifest.json" with { type: "json" }
 /// stays what the app's own built-in wrote there whatever this package is
 /// called: the manifest key names the package, `TYPE` names the activation.
 const TYPE = 'iaru-hf'
+
+/// What a search has to contain to offer this contest. Matched as "does the
+/// alias contain what was typed", so "iaru" or "championship" finds it.
+const ALIASES = ['IARU HF', 'IARU HF WORLD CHAMPIONSHIP', 'HF CHAMPIONSHIP', 'HF WORLD CHAMPIONSHIP']
 
 function refOfType(container: Record<string, JSONValue>, type: string): Record<string, JSONValue> | undefined {
   return (((container.refs as Record<string, JSONValue>[] | undefined) ?? [])).find((r) => r?.type === type)
@@ -58,6 +65,37 @@ function guessedZoneFor(their: Record<string, JSONValue>): string {
 }
 
 const ActivityHook = {
+  /// Offered in the activity search by NAME and by NEARNESS — one suggestion,
+  /// since the mode restriction is an entry category of one contest rather
+  /// than a separate running.
+  ///
+  /// Nothing is offered to an operation that already runs IARU HF: a
+  /// suggestion has no `ref` for the picker's duplicate guard to match, so a
+  /// tapped one would REPLACE the configured ref and lose its exchange.
+  async suggest({ operation, searchTerm }: SuggestArgs, ctx: HookContext): Promise<ActivitySuggestion[]> {
+    if (refOfType(operation ?? {}, TYPE)) return []
+    const t = tFor(ctx)
+    const term = (searchTerm ?? '').trim().toUpperCase()
+    if (term && !ALIASES.some((alias) => alias.includes(term))) return []
+
+    const now = Date.now()
+    return [
+      {
+        type: TYPE,
+        // A suggestion is persisted VERBATIM and never runs through
+        // `decorateRef`, so everything the operation row reads has to be here,
+        // and the labels must match what `decorateRef` composes for a Mixed
+        // entry.
+        program: 'Contest',
+        // The same `description • date` line the QSO parties show.
+        name: `${t('activityDescription')} • ${nextContestDate(now)}`,
+        label: 'IARU HF',
+        shortLabel: 'IARU HF',
+        relevance: relevanceFor(now),
+      },
+    ]
+  },
+
   async operationControls(
     _args: { operation: Record<string, JSONValue> },
     ctx: HookContext,

@@ -30,7 +30,7 @@ import type {
 } from "@ham2k/extension-sdk"
 
 import { tFor } from "./i18n.ts"
-import { MODES, nextRunningYear, relevanceFor } from "./schedule.ts"
+import { MODES, fieldDayDate, nextRunningYear, relevanceFor } from "./schedule.ts"
 import { R1FDScorer, TYPE, contestTitle, modeOfRef, refOfType, yearOfRef } from "./scorer.ts"
 import type { R1FdMode } from "./schedule.ts"
 
@@ -77,6 +77,17 @@ function runningLabel(t: (key: string, args?: Record<string, string>) => string,
   return [t(mode === 'CW' ? 'cwRunning' : 'ssbRunning'), year].filter((part) => part).join(' ')
 }
 
+/// The row's second line: what the event is, and the day this running opens —
+/// the same `description • date` line the QSO parties show. `suggest` and
+/// `decorateRef` both compose it here: a suggestion is persisted verbatim, so
+/// the same running has to read the same however it was added.
+function runningName(t: (key: string, args?: Record<string, string>) => string, refKey: string): string {
+  const mode = modeOfRef(refKey)
+  const year = yearOfRef(refKey)
+  if (!mode || !year) return t('activityDescription')
+  return `${t('activityDescription')} • ${fieldDayDate(Number(year), mode as R1FdMode)}`
+}
+
 const ActivityHook = {
   /// Offered in the activity search by NAME and by NEARNESS — both runnings,
   /// each ranked by its own date, so in August the SSB event leads and typing
@@ -98,7 +109,7 @@ const ActivityHook = {
         // A suggestion is persisted VERBATIM and never runs through
         // `decorateRef`, so everything the operation row reads has to be here.
         program: 'Contest',
-        name: t('activityDescription'),
+        name: runningName(t, key),
         label: `${t('activityLabel')} ${runningLabel(t, key)}`,
         shortLabel: `R1FD ${mode}`,
         relevance: relevanceFor(now, mode),
@@ -268,7 +279,7 @@ const RefHandler = {
     return {
       ...ref,
       program: 'Contest',
-      name: t('activityDescription'),
+      name: runningName(t, key),
       label: [t('activityLabel'), runningLabel(t, key)].filter((part) => part).join(' '),
       shortLabel: mode ? `R1FD ${mode}` : 'R1FD',
     }

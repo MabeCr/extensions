@@ -30,7 +30,7 @@ import type {
 } from "@ham2k/extension-sdk"
 
 import { tFor } from "./i18n.ts"
-import { nextRunningYear, relevanceFor } from "./schedule.ts"
+import { fieldDayDate, nextRunningYear, relevanceFor } from "./schedule.ts"
 import { NFDScorer, TYPE, contestTitle, nfdMode, refOfType } from "./scorer.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
@@ -117,7 +117,9 @@ const ActivityHook = {
         // A suggestion is persisted VERBATIM and never runs through
         // `decorateRef`, so everything the operation row reads has to be here.
         program: 'Contest',
-        name: t('activityDescription'),
+        // The day it opens, so the row says WHEN as well as what — the same
+        // `description • date` line the QSO parties show.
+        name: `${t('activityDescription')} • ${fieldDayDate(year)}`,
         label: `${t('activityLabel')} ${year}`,
         shortLabel: `NFD ${year}`,
         relevance: relevanceFor(now),

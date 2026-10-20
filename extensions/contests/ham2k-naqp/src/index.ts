@@ -15,6 +15,7 @@ import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 import { adifForExport, annotateCallAgainstCountryFile, contestScorer, defineExtension, exportFilename, startMillisOf } from "@ham2k/extension-sdk"
 import type {
+  ActivitySuggestion,
   ExportOption,
   ExportOptionsRequest,
   ExportRequest,
@@ -24,11 +25,13 @@ import type {
   LoggingControlDescriptor,
   Ref,
   RefLink,
+  SuggestArgs,
 } from "@ham2k/extension-sdk"
 
 import { tFor } from "./i18n.ts"
 import { firstName, guessedLocation, guessedName, normalizeLocation, ourExchange } from "./exchange.ts"
 import { LOCATION_PATTERN, VALID_LOCATIONS } from "./locations.ts"
+import { MODES, nearestMode, nextContestDate, relevanceFor } from "./schedule.ts"
 import { NAQPScorer, contestTitle } from "./scorer.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
@@ -37,6 +40,11 @@ import manifest from "../manifest.json" with { type: "json" }
 /// stays what the app's own built-in wrote there whatever this package is
 /// called: the manifest key names the package, `TYPE` names the activation.
 const TYPE = 'naqp'
+
+/// What a search has to contain to offer these contests. Matched as "does the
+/// alias contain what was typed", so "qso party" finds them among the state
+/// parties and the date ranking decides which mode comes first.
+const ALIASES = ['NAQP', 'NORTH AMERICAN QSO PARTY']
 
 function refOfType(container: Record<string, JSONValue>, type: string): Record<string, JSONValue> | undefined {
   return (((container.refs as Record<string, JSONValue>[] | undefined) ?? [])).find((r) => r?.type === type)
@@ -47,6 +55,37 @@ function str(value: JSONValue | undefined): string {
 }
 
 const ActivityHook = {
+  /// Offered in the activity search by NAME and by NEARNESS — all three
+  /// modes, each ranked by its own next running, so in January CW leads and
+  /// in February RTTY.
+  ///
+  /// Nothing is offered to an operation that already runs NAQP: as in CQ WW,
+  /// the mode lives on the ref as `mode`, not `ref`, so the picker's duplicate
+  /// guard would let a tapped suggestion REPLACE the configured ref and lose
+  /// the name and location set up on it.
+  async suggest({ operation, searchTerm }: SuggestArgs, ctx: HookContext): Promise<ActivitySuggestion[]> {
+    if (refOfType(operation ?? {}, TYPE)) return []
+    const t = tFor(ctx)
+    const term = (searchTerm ?? '').trim().toUpperCase()
+    if (term && !ALIASES.some((alias) => alias.includes(term))) return []
+
+    const now = Date.now()
+    return MODES.map((mode) => ({
+      type: TYPE,
+      mode,
+      // A suggestion is persisted VERBATIM and never runs through
+      // `decorateRef`, so everything the operation row reads has to be here,
+      // and the labels must match what `decorateRef` composes.
+      program: 'Contest',
+      // The date is what tells the runnings apart at a glance — the same
+      // `description • date` line the QSO parties show.
+      name: `${t('activityDescription')} • ${nextContestDate(now, mode)}`,
+      label: `NAQP ${mode}`,
+      shortLabel: `NAQP ${mode}`,
+      relevance: relevanceFor(now, mode),
+    }))
+  },
+
   async operationControls(
     _args: { operation: Record<string, JSONValue> },
     ctx: HookContext,
@@ -70,6 +109,8 @@ const ActivityHook = {
                 fieldType: 'radio',
                 key: 'mode',
                 label: t('modeLabel'),
+                // Seeds a new setup only; a configured ref keeps its own mode.
+                value: nearestMode(Date.now()),
                 // NAQP runs these as separate contests on separate weekends.
                 options: [{ value: 'CW', label: 'CW' }, { value: 'SSB', label: 'SSB' }, { value: 'RTTY', label: 'RTTY' }],
               },

@@ -34,7 +34,7 @@ import type {
   TitleSuggestion,
 } from "@ham2k/extension-sdk"
 
-import { EVENTS, eventFor, type VhfEvent } from "./events.ts"
+import { EVENTS, eventFor, nextStartDate, type VhfEvent } from "./events.ts"
 import { gridPatternFor, guessedGrid, trimmedGrid } from "./exchange.ts"
 import { tFor } from "./i18n.ts"
 import { ARRLVHFScorer, contestTitle } from "./scorer.ts"
@@ -63,6 +63,7 @@ const ActivityHook = {
   /// of enabling an extension and hunting through a dropdown (§5.6).
   async suggest({ searchTerm }: SuggestArgs, _ctx: HookContext): Promise<ActivitySuggestion[]> {
     const term = (searchTerm ?? '').trim().toUpperCase()
+    const now = Date.now()
     return EVENTS
       .filter((event) => !term
         || event.key.includes(term)
@@ -71,7 +72,11 @@ const ActivityHook = {
       .map((event) => ({
         type: TYPE,
         ref: event.key,
-        name: event.name,
+        // The date is what an operator scanning the list chooses by — the
+        // same `name • date` line the QSO parties show. Only here: the ref
+        // names the event, not a year's running, so `decorateRef` has no
+        // date to give it.
+        name: `${event.name} • ${nextStartDate(event, now)}`,
         program: 'Contest',
         label: event.name,
         shortLabel: event.short,

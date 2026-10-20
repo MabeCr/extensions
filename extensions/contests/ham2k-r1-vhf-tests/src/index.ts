@@ -33,7 +33,7 @@ import type {
 
 import { GRID_PATTERN, REG1TEST_BAND, guessedGrid, qsonToReg1test, refOfType, serial as serialFor, str, trimmedGrid } from "@ham2k/lib-vhf-contests"
 
-import { EVENTS, eventFor, type R1VhfEvent } from "./events.ts"
+import { EVENTS, eventFor, nextStartDate, type R1VhfEvent } from "./events.ts"
 import { tFor } from "./i18n.ts"
 import { R1VHFScorer, contestTitle } from "./scorer.ts"
 
@@ -55,6 +55,7 @@ function serial(qso: Record<string, JSONValue>, field: string): string {
 const ActivityHook = {
   async suggest({ searchTerm }: SuggestArgs, _ctx: HookContext): Promise<ActivitySuggestion[]> {
     const term = (searchTerm ?? '').trim().toUpperCase()
+    const now = Date.now()
     return EVENTS
       .filter((event) => !term
         || event.key.includes(term)
@@ -63,7 +64,11 @@ const ActivityHook = {
       .map((event) => ({
         type: TYPE,
         ref: event.key,
-        name: event.name,
+        // The date is what an operator scanning the list chooses by — the
+        // same `name • date` line the QSO parties show. Only here: the ref
+        // names the event, not a year's running, so `decorateRef` has no
+        // date to give it.
+        name: `${event.name} • ${nextStartDate(event, now)}`,
         program: 'Contest',
         label: event.name,
         shortLabel: event.short,
