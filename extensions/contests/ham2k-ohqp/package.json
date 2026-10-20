@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-ohqp",
-  "version": "0.2.27",
+  "version": "0.2.28",
   "private": true,
   "description": "Ham2K Logger extension: the Ohio QSO Party",
   "author": "Sebastian Delmont <sd@ham2k.com>",
