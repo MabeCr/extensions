@@ -277,14 +277,32 @@ test('a repeat on the same band, mode and county is a duplicate', () => {
   assert.equal(sheet.dupes, 1)
 })
 
-test('a county line that overlaps an earlier contact on ANY pairing is a repeat', () => {
-  // The safe reading of a rule the sponsors leave open. Requiring every pairing
-  // to overlap claims a contact a log checker may strike, and an over-claim in a
-  // submitted file is the worse of the two errors — so a station who moves onto
-  // a line that still includes the county we just worked them from gets no
-  // second contact.
-  const { scores } = run([qso({ location: 'ERI' }), qso({ location: 'ERI/CHA' })])
-  assert.equal(scores[1].dupe, true)
+test('a county line that repeats only SOME of its pairings counts the new ones', () => {
+  // Each pairing is its own line in the Cabrillo file, and a checker strikes
+  // only the line that repeats. Ours on the line: REN/ALB, then ALB/ALL — the
+  // ALB pairing is a dupe, the ALL one is a new contact.
+  const ours = run([qso({ location: 'ERI', mode: 'SSB' }), qso({ location: 'ERI', mode: 'SSB' })], {
+    ourLocation: ['REN/ALB', 'ALB/ALL'],
+  })
+  assert.equal(ours.scores[0].value, 1 * 2)
+  assert.equal(ours.scores[1].value, 1)
+  assert.equal(ours.scores[1].dupe, false)
+  assert.equal(ours.sheet.dupes, 0)
+  assert.equal(ours.sheet.activatedCounties.ALB, 1)
+  assert.equal(ours.sheet.activatedCounties.ALL, 1)
+
+  // Theirs on the line: ERI, then ERI/CHA — only the CHA pairing is new.
+  const theirs = run([qso({ location: 'ERI' }), qso({ location: 'ERI/CHA' })])
+  assert.equal(theirs.scores[1].value, 2)
+  assert.equal(theirs.scores[1].dupe, false)
+  assert.equal(theirs.sheet.counties.ERI, 1)
+  assert.equal(theirs.sheet.counties.CHA, 1)
+
+  // Every pairing repeated is still a duplicate.
+  const all = run([qso({ location: 'ERI/CHA' }), qso({ location: 'CHA' })])
+  assert.equal(all.scores[1].dupe, true)
+  assert.equal(all.scores[1].value, 0)
+
   // Neither county worked before, and it counts — both pairings.
   const fresh = run([qso({ location: 'ERI' }), qso({ location: 'ALB/CHA' })])
   assert.equal(fresh.scores[1].value, 2 * 2)

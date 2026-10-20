@@ -92,6 +92,19 @@ const DIVERGENCE_NOTES = {
 /// `qsoPartyHubName` names one page for both, which these six do not have: four
 /// of them take a spot on a page named one way and list spots on a page named
 /// another.
+/// The county ADIF's `CNTY` names each code by, for a party whose own units
+/// are not counties. polo's files have no such field, so it lives here: Hawaii
+/// is played in fourteen districts across the state's five counties.
+const ADIF_COUNTIES = {
+  HI: {
+    HIL: "Hawaii", KOH: "Hawaii", KON: "Hawaii", VOL: "Hawaii",
+    HON: "Honolulu", LHN: "Honolulu", PRL: "Honolulu", WHN: "Honolulu",
+    KAL: "Kalawao",
+    KAU: "Kauai", NII: "Kauai",
+    LNI: "Maui", MAU: "Maui", MOL: "Maui",
+  },
+}
+
 const HUB_PAGES = {
   CA: { table: "caqp", spot: "cqp" },
   FL: { table: "flqp", spot: "fqp" },
@@ -616,6 +629,12 @@ function emitParty(raw, key) {
   lines.push(`  counties,`)
   if (Object.keys(otherCounties).length > 0) lines.push(`  otherCounties,`)
   if (Object.keys(countySections).length > 0) lines.push(`  countySections,`)
+  if (ADIF_COUNTIES[key]) {
+    lines.push(`  // From scripts/convert-parties.mjs, which polo's files do not carry.`)
+    lines.push(`  adifCounties: {`)
+    for (const [code, county] of Object.entries(ADIF_COUNTIES[key])) lines.push(`    ${code}: ${quote(county)},`)
+    lines.push(`  },`)
+  }
   if (Object.keys(countyStates).length > 0) {
     lines.push(`  stateOfCounty: (county) => COUNTY_STATES[county.toUpperCase()],`)
   }

@@ -57,7 +57,9 @@ registerHooks({
 
 const { defineQsoParty } = await import("./index.ts")
 const { RESOLVED_MARKER } = await import("./exchange.ts")
-const { CA, NY, WI } = await import("./testFixtures.ts")
+const { adifCountyOf } = await import("./exports.ts")
+const { resolveParty } = await import("./party.ts")
+const { ACQP, CA, NEQP, NY, WI } = await import("./testFixtures.ts")
 
 const ctx = {} as never
 
@@ -339,6 +341,86 @@ test('a legacy contact that carries the party′s code, or app-polo′s serial n
   assert.deepEqual(fields.find((field) => field.name === 'SRX_STRING'), { name: 'SRX_STRING', value: '17 BUTT' })
 })
 
+
+test('a county line leaves one ADIF record per pairing, each naming its own two counties', async () => {
+  const records = await define(NY).adifFields.fieldCombinationsForOneQSO({
+    qso: contact('ERI/CHA'),
+    operation: operation(NY, 'ALB/REN'),
+  }, ctx)
+
+  const pick = (record: { name: string; value: string }[], name: string) =>
+    record.find((field) => field.name === name)?.value
+  assert.deepEqual(records.map((record) => [
+    pick(record, 'STX_STRING'), pick(record, 'MY_CNTY'), pick(record, 'SRX_STRING'), pick(record, 'CNTY'),
+  ]), [
+    ['ALB', 'NY,Albany', 'ERI', 'NY,Erie'],
+    ['ALB', 'NY,Albany', 'CHA', 'NY,Chautauqua'],
+    ['REN', 'NY,Rensselaer', 'ERI', 'NY,Erie'],
+    ['REN', 'NY,Rensselaer', 'CHA', 'NY,Chautauqua'],
+  ])
+  // The state beside each county, so a lookup's home state cannot contradict it.
+  assert.equal(pick(records[0], 'MY_STATE'), 'NY')
+  assert.equal(pick(records[0], 'STATE'), 'NY')
+  assert.ok(records.every((record) => pick(record, 'CONTEST_ID') === 'NY-QSO-PARTY'))
+})
+
+test('an end that is a state rather than a county writes no county', async () => {
+  const records = await define(NY).adifFields.fieldCombinationsForOneQSO({
+    qso: contact('PA'),
+    operation: operation(NY, 'ALB'),
+  }, ctx)
+
+  assert.equal(records.length, 1)
+  const names = records[0].map((field) => field.name)
+  assert.ok(names.includes('MY_CNTY'))
+  assert.ok(!names.includes('CNTY'))
+  assert.ok(!names.includes('STATE'))
+})
+
+test('a log that is not this party′s gets no ADIF records from it', async () => {
+  const records = await define(NY).adifFields.fieldCombinationsForOneQSO({
+    qso: contact('', NY, { refs: [] }),
+    operation: { uuid: 'op', stationCall: 'N0DEV', refs: [{ type: 'potaActivation', ref: 'US-1234' }] },
+  }, ctx)
+
+  assert.deepEqual(records, [])
+})
+
+test('an ADIF county is the state and the name, without County or Parish, St. and & spelled out', () => {
+  const ny = resolveParty({ ...NY, counties: { DEL: 'Delaware County', STL: 'St. Lawrence' } })
+  assert.deepEqual(adifCountyOf(ny, 'DEL'), { state: 'NY', county: 'Delaware' })
+  assert.deepEqual(adifCountyOf(ny, 'STL'), { state: 'NY', county: 'Saint Lawrence' })
+  const fl = resolveParty({ ...NY, state: 'FL', counties: { STJ: 'St Johns', STE: 'Stevens' } })
+  assert.deepEqual(adifCountyOf(fl, 'STJ'), { state: 'FL', county: 'Saint Johns' })
+  assert.deepEqual(adifCountyOf(fl, 'STE'), { state: 'FL', county: 'Stevens' })
+
+  const la = resolveParty({ ...NY, state: 'LA', counties: { ORL: 'Orleans Parish' } })
+  assert.deepEqual(adifCountyOf(la, 'ORL'), { state: 'LA', county: 'Orleans' })
+
+  // A party spanning several states names the state after the county.
+  const neqp = resolveParty({ ...NEQP, counties: { VTWAS: 'Washington County VT', MABAR: 'Barnstable' } })
+  assert.deepEqual(adifCountyOf(neqp, 'VTWAS'), { state: 'VT', county: 'Washington' })
+  assert.deepEqual(adifCountyOf(neqp, 'MABAR'), { state: 'MA', county: 'Barnstable' })
+  const mt = resolveParty({ ...NEQP, counties: { MTLEW: 'Lewis & Clark MT' } })
+  assert.deepEqual(adifCountyOf(mt, 'MTLEW'), { state: 'MT', county: 'Lewis and Clark' })
+
+  // Virginia's independent cities keep the "City" that tells them from the
+  // county of the same name.
+  const va = resolveParty({ ...NY, state: 'VA', counties: { RIX: 'Richmond (City)', RIC: 'Richmond County' } })
+  assert.deepEqual(adifCountyOf(va, 'RIX'), { state: 'VA', county: 'Richmond City' })
+  assert.deepEqual(adifCountyOf(va, 'RIC'), { state: 'VA', county: 'Richmond' })
+
+  // A party played in districts names the county each one lies in.
+  const hi = resolveParty({ ...NY, state: 'HI', counties: { LHN: 'Leeward' }, adifCounties: { LHN: 'Honolulu' } })
+  assert.deepEqual(adifCountyOf(hi, 'LHN'), { state: 'HI', county: 'Honolulu' })
+
+  // Not a county of the party's state, and not a US county at all.
+  const md = resolveParty({ ...NY, state: 'MD', counties: { WDC: 'Washington DC' } })
+  assert.equal(adifCountyOf(md, 'WDC'), undefined)
+  const acqp = resolveParty(ACQP)
+  assert.equal(adifCountyOf(acqp, Object.keys(acqp.counties)[0]), undefined)
+  assert.equal(adifCountyOf(ny, 'PA'), undefined)
+})
 
 test('party registrations keep settings separate and reflect available formats', async () => {
   const ny = await define(NY).export.getExportTypes!({}, ctx)

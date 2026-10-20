@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/lib-qso-party",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "The shared QSO-party engine: scoring, exchange handling and submittable files for state, provincial and regional QSO parties",
   "author": "Sebastian Delmont <sd@ham2k.com>",
   "license": "MIT",
