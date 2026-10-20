@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-wca",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "private": true,
   "description": "Ham2K Logger extension: World Castles Awards",
   "author": "Sebastian Delmont <sd@ham2k.com>",
@@ -22,7 +22,7 @@
     "and these are the ones it names."
   ],
   "devDependencies": {
-    "@ham2k/extension-sdk": "^0.12.0",
+    "@ham2k/extension-sdk": "^0.12.13",
     "@ham2k/extension-tools": "^0.13.0",
     "@ham2k/lib-callsigns": "^1.0.2",
     "@ham2k/lib-geo-tools": "^1.1.1",
