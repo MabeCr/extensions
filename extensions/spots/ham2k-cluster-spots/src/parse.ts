@@ -11,9 +11,14 @@
 //   DX de KM3T-#:    14021.0  OH2BH        CW 17 dB 25 WPM CQ             1234Z
 //
 // spotter, frequency in kHz, the spotted call, up to 30 characters of
-// comment, the UTC time, and sometimes the spotter's grid or state. Anything
-// else the node sends — prompts, announcements, talk, a command's reply — is
-// not a spot and reads as nothing.
+// comment, the UTC time, and sometimes the spotter's grid or state.
+//
+// They all list past spots (`SH/DX`) alike too, one line each, dated in full:
+//
+//    14074.0  K2ZJ        21-Oct-2026 1741Z  FT8 -14dB 2640Hz             <EA4HOS-1>
+//
+// Anything else the node sends — prompts, announcements, talk, another
+// command's reply — is not a spot and reads as nothing.
 
 import { entityPrefixForCall } from "@ham2k/extension-sdk"
 import type { JSONValue, Spot } from "@ham2k/extension-sdk"
@@ -32,6 +37,36 @@ export const SPOT_SOURCE = "cluster"
 /// another time (`QSX 1830Z`) cannot take from it: the up to two fields a
 /// node may add after the time (a grid, a state, both) are never one.
 const DX_DE = /^DX de\s+([^\s:]+):?\s*(\d+(?:\.\d+)?)\s+(\S+)\s+(.*?)\s*(\d{4})Z((?:\s+(?!\S*\d{4}Z)\S+){0,2})\s*$/i
+
+/// A line of `SH/DX`: frequency, call, date and time, comment, and the
+/// spotter in angle brackets. A full comment runs into the bracket (AR-Cluster)
+/// or is cut short of it (CC Cluster), so the spotter is what ends the line.
+const LISTED = /^(\d+(?:\.\d+)?)\s+(\S+)\s+(\d{1,2})-([A-Za-z]{3})-(\d{4})\s+(\d{4})Z(.*?)<([^<>\s]+)>$/
+
+const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+
+/// What a band mostly carries, for a frequency whose segment the band plan
+/// names no mode for — the US phone segment above 7.2 MHz most of all, but
+/// also 60 m, the 10 m beacon and satellite segments, and the edges of 6 m
+/// and 2 m. A spot with no mode is one the Spots panel hides as soon as its
+/// mode filter narrows to anything.
+const USUAL_MODES: Record<string, string> = {
+  "160m": "CW",
+  "80m": "SSB",
+  "60m": "SSB",
+  "40m": "SSB",
+  "30m": "CW",
+  "20m": "SSB",
+  "17m": "SSB",
+  "15m": "SSB",
+  "12m": "SSB",
+  "10m": "SSB",
+  "6m": "SSB",
+  "4m": "SSB",
+  "2m": "FM",
+  "1.25m": "FM",
+  "70cm": "FM",
+}
 
 /// Modes a spotter names in a comment, as words. Kept to what is actually
 /// written there, rather than every ADIF mode, because a short word like
@@ -89,6 +124,28 @@ export function spotTime(hhmm: string, arrivedAt: number): number {
   return time - arrivedAt > 30 * 60 * 1000 ? time - 24 * 60 * 60 * 1000 : time
 }
 
+/// The node programs this extension knows how to ask for everything.
+export type NodeProgram = "AR-Cluster" | "DXSpider" | "CC Cluster"
+
+/// Whether [text] is a node's command prompt to [call] — `KI2D de K3LR
+/// 21-Oct 1842Z arc6>` — the line every login and every command's reply ends
+/// on. Shown to the session's own call: a line that merely looks like one,
+/// quoted in talk, names someone else.
+export function isPromptFor(text: string, call: string): boolean {
+  const line = text.replace(/[\x00-\x1f\x7f]/g, " ").trim()
+  return line.toUpperCase().startsWith(`${call.toUpperCase()} DE `) && line.endsWith(">")
+}
+
+/// The program behind a node, from its prompt: `arc6>`, `dxspider >`,
+/// `CCC >`.
+export function nodeProgramFromPrompt(prompt: string): NodeProgram | undefined {
+  const line = prompt.replace(/[\x00-\x1f\x7f]/g, " ").trim()
+  if (/\barc\d*\s*>$/i.test(line)) return "AR-Cluster"
+  if (/\bdxspider\s*>$/i.test(line)) return "DXSpider"
+  if (/\bCCC\s*>$/.test(line)) return "CC Cluster"
+  return undefined
+}
+
 /// [text], one line from the node, as a spot, or undefined when it is not
 /// one. [arrivedAt] is when the app received it, which dates the spot's own
 /// `HHMMZ`.
@@ -96,30 +153,56 @@ export function parseSpotLine(text: string, arrivedAt: number): Spot | undefined
   // Nodes ring the bell on a spot of interest, and a line can arrive with
   // its carriage return still on.
   const line = text.replace(/[\x00-\x1f\x7f]/g, " ").trim()
-  const match = DX_DE.exec(line)
-  if (!match) return undefined
-  const [, spotter, freqText, callText, commentText, hhmm, trailing] = match
 
+  const announced = DX_DE.exec(line)
+  if (announced) {
+    const [, spotter, freqText, callText, commentText, hhmm, trailing] = announced
+    return spotOf({ spotter, freqText, callText, commentText, timeInMillis: spotTime(hhmm, arrivedAt), location: trailing.trim() })
+  }
+
+  const listed = LISTED.exec(line)
+  if (listed) {
+    const [, freqText, callText, day, month, year, hhmm, commentText, spotter] = listed
+    const monthIndex = MONTHS.indexOf(month.toUpperCase())
+    if (monthIndex < 0) return undefined
+    const timeInMillis = Date.UTC(Number(year), monthIndex, Number(day), Number(hhmm.slice(0, 2)), Number(hhmm.slice(2, 4)))
+    return spotOf({ spotter, freqText, callText, commentText, timeInMillis })
+  }
+
+  return undefined
+}
+
+function spotOf({ spotter, freqText, callText, commentText, timeInMillis, location }: {
+  spotter: string
+  freqText: string
+  callText: string
+  commentText: string
+  timeInMillis: number
+  location?: string
+}): Spot | undefined {
   const freq = Number(freqText)
   // A call the app itself would take, as a node relays the call field
   // unchecked (`TEST`, `?`, a frequency typed in the wrong place).
   const call = parseCallsign(callText.toUpperCase()).call
-  if (!(freq > 0) || !call) return undefined
+  if (!(freq > 0) || !call || Number.isNaN(timeInMillis)) return undefined
 
   const comment = commentText.trim()
   const band = bandForFrequency(freq)
   // The band plan only where the comment names no mode: a spot reading
-  // `FT8` on 14.080 is FT8 whatever the plan says belongs there. Without
-  // either, the spot has no mode, as the band plan says nothing above 10 GHz.
-  // The plan read is the spotted station's where it has one of its own.
-  const mode = modeFromComment(comment) ?? (modeForFrequency(freq, { entityPrefix: entityPrefixForCall(call) }) || undefined)
+  // `FT8` on 14.080 is FT8 whatever the plan says belongs there. The plan
+  // read is the spotted station's where it has one of its own; where it has
+  // nothing to say, the band's usual mode. Above the bands that have one
+  // (microwaves), the spot has no mode.
+  const mode =
+    modeFromComment(comment) ??
+    (modeForFrequency(freq, { entityPrefix: entityPrefixForCall(call) }) || undefined) ??
+    (band ? USUAL_MODES[band] : undefined)
 
   const sourceInfo: Record<string, JSONValue> = { spotter: spotter.toUpperCase() }
   if (comment) sourceInfo.comments = comment
   // A grid (DXSpider) or a US state (AR-Cluster, CC Cluster), depending on
-  // the node; kept as the node wrote it.
-  const extra = trailing.trim()
-  if (extra) sourceInfo.spotterLocation = extra
+  // the node; kept as the node wrote it. A listed spot has neither.
+  if (location) sourceInfo.spotterLocation = location
 
   return {
     their: { call },
@@ -127,7 +210,7 @@ export function parseSpotLine(text: string, arrivedAt: number): Spot | undefined
     band: band && band !== "other" ? band : undefined,
     mode,
     spot: {
-      timeInMillis: spotTime(hhmm, arrivedAt),
+      timeInMillis,
       source: SPOT_SOURCE,
       label: comment || `de ${spotter.toUpperCase()}`,
       sourceInfo,

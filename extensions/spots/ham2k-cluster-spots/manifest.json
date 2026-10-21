@@ -2,7 +2,7 @@
   "key": "ham2k-cluster-spots",
   "name": "Cluster Spots",
   "shortName": "Cluster",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "api": 10,
   "description": "Brings the DX cluster's spots into the Spots panel, read through the node picked in Settings",
   "category": "spots",
@@ -19,7 +19,7 @@
     "cluster",
     "spots"
   ],
-  "requiresClusterRead": true,
+  "requiresClusterCommand": true,
   "sharedDependencies": {
     "@ham2k/lib-callsigns": "^1.0.0",
     "@ham2k/lib-country-files": "^1.0.0",

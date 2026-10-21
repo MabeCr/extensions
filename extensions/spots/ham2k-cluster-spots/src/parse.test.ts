@@ -7,7 +7,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 
-import { modeFromComment, parseSpotLine, spotTime } from "./parse.ts"
+import { isPromptFor, modeFromComment, nodeProgramFromPrompt, parseSpotLine, spotTime } from "./parse.ts"
 
 const arrived = Date.UTC(2026, 9, 20, 12, 35, 10)
 
@@ -48,6 +48,25 @@ test("the comment's mode beats the band plan's", () => {
   assert.equal(modeFromComment("FM19 grid, CW"), "CW", "a grid starting with FM is not FM")
 })
 
+test("where the band plan names no mode, the band's usual one", () => {
+  assert.equal(parseSpotLine("DX de N2ABC:      7225.0  W1AW         59 in NJ                       1234Z", arrived)?.mode, "SSB", "the US phone segment above 7.2 MHz")
+  assert.equal(parseSpotLine("DX de 3V8LL:      1847.0  IZ1NER                                      1234Z", arrived)?.mode, "CW")
+  assert.equal(parseSpotLine("DX de N2ABC:      5357.0  K1ABC        ft8                            1234Z", arrived)?.mode, "FT8", "the comment still comes first")
+  assert.equal(parseSpotLine("DX de N2ABC:    146520.0  K1ABC        simplex                        1234Z", arrived)?.mode, "FM")
+})
+
+test("the node program, from the prompt the session's call is shown", () => {
+  assert.equal(nodeProgramFromPrompt("KI2D de K3LR 21-Oct 1842Z arc6>"), "AR-Cluster")
+  assert.equal(nodeProgramFromPrompt("KI2D de W3LPL 21-Oct-2026 1741Z dxspider >"), "DXSpider")
+  assert.equal(nodeProgramFromPrompt("KI2D de VE7CC-1 21-Oct-2026 1741Z   CCC >\r"), "CC Cluster")
+  assert.equal(nodeProgramFromPrompt("KI2D de MYNODE 21-Oct-2026 1741Z >"), undefined, "a program it does not know")
+
+  assert.equal(isPromptFor("KI2D de VE7CC-1 21-Oct-2026 1741Z   CCC >\r", "ki2d"), true)
+  assert.equal(isPromptFor("KI2D de MYNODE 21-Oct-2026 1741Z >", "KI2D"), true)
+  assert.equal(isPromptFor("N2ABC de K3LR 21-Oct 1842Z arc6>", "KI2D"), false, "someone else's, quoted")
+  assert.equal(isPromptFor("DX de W3LPL:     14025.0  JA1ABC       CW 599                         1234Z", "KI2D"), false)
+})
+
 test("a microwave spot whose frequency crowds the spotter's colon, and a call with a portable designator", () => {
   const spot = parseSpotLine("DX de G4ABC-12:10368100.0 f/ea8xyz/p   tnx QSO                        0915Z IO91", arrived)
   assert.equal(spot?.their.call, "F/EA8XYZ/P")
@@ -82,7 +101,9 @@ test("what the node says besides spots is not a spot", () => {
     "WWV de W0MU <12>:   SFI=150, A=5, K=1, No Storms -> No Storms",
     "WCY de DK0WCY-1 <12> : K=1 expK=2 A=5 R=100 SFI=150 SA=qui GMF=qui Au=no",
     "Hello Sebastian, this is K3LR in Pennsylvania",
-    "  14025.0 JA1ABC      20-Oct-2026 1234Z  CW 599                 <W3LPL>",
+    "  14025.0 JA1ABC      20-Oct-2026 1234Z  CW 599                 W3LPL",
+    "21-Oct-2026   12   121   8   2 No Storms -> Minor w/G1               <VE7CC>",
+    " 14074.0  K2ZJ        21-Foo-2026 1741Z  FT8 -14dB 2640Hz             <EA4HOS-1>",
     "DX de W3LPL:     14025.0  TEST         just checking                  1234Z",
     "DX de W3LPL:         0.0  JA1ABC       no frequency                   1234Z",
     "DX de W3LPL:     14025.0  A1           a prefix, not a call           1234Z",
@@ -91,6 +112,39 @@ test("what the node says besides spots is not a spot", () => {
   ]) {
     assert.equal(parseSpotLine(line, arrived), undefined, line)
   }
+})
+
+test("a spot listed by SH/DX, as DXSpider, AR-Cluster and CC Cluster each list one, dated in full", () => {
+  const dxspider = parseSpotLine("  28023.0 AD5QU       21-Oct-2026 1741Z A very good qso ARMAN 73      <LW5DD>", arrived)
+  assert.deepEqual(dxspider, {
+    their: { call: "AD5QU" },
+    freq: 28023,
+    band: "10m",
+    mode: "CW",
+    spot: {
+      timeInMillis: Date.UTC(2026, 9, 21, 17, 41),
+      source: "cluster",
+      label: "A very good qso ARMAN 73",
+      sourceInfo: { spotter: "LW5DD", comments: "A very good qso ARMAN 73" },
+    },
+  })
+
+  const arCluster = parseSpotLine(" 24891.0  S9R         21-Oct-2026 1741Z  QSX 24894.70 No RX, (led qrm?)<VU2TMP>", arrived)
+  assert.equal(arCluster?.their.call, "S9R")
+  assert.equal(arCluster?.spot.label, "QSX 24894.70 No RX, (led qrm?)", "a full comment runs into the spotter")
+  assert.equal(arCluster?.spot.sourceInfo?.spotter, "VU2TMP")
+
+  const ccCluster = parseSpotLine("  3573.0  DL1HTW      21-Oct-2026 1617Z  FT8 +06dB from JO51 1395H <SQ9KWY>\r", arrived)
+  assert.equal(ccCluster?.mode, "FT8")
+  assert.equal(ccCluster?.spot.timeInMillis, Date.UTC(2026, 9, 21, 16, 17))
+
+  const skimmer = parseSpotLine(" 14090.0  IK3UGK      21-Oct-2026 1741Z  RTTY 13 dB 45 BPS CQ         <CT1EYQ-#>", arrived)
+  assert.equal(skimmer?.mode, "RTTY")
+  assert.equal(skimmer?.spot.sourceInfo?.spotter, "CT1EYQ-#")
+
+  const bare = parseSpotLine(" 21246.0  EC6DX       21-Oct-2026 1739Z                               <KE2DC>", arrived)
+  assert.equal(bare?.spot.label, "de KE2DC")
+  assert.deepEqual(bare?.spot.sourceInfo, { spotter: "KE2DC" })
 })
 
 test("a spot's time is the day it arrived, or the day before across midnight", () => {

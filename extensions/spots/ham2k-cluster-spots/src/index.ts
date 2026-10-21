@@ -15,12 +15,23 @@
 // map) may be fighting for, so it is held only while the board is asking:
 // once nothing has fetched for a while, the subscription is let go and the
 // app closes the session when idle.
+//
+// The board is where the operator narrows spots down, by band, mode, age and
+// continent, so the node is asked for all of them: the first session as each
+// call on each node clears the filters the operator set there, and turns the
+// skimmers on. Those settings belong to the call on that node, so the
+// operator's other clients see everything from then on too.
+//
+// A node pushes only what is spotted from the login on, so each new session
+// then asks it for the spots before that (`SH/DX/100`). Its reply comes
+// through the same lines as the rest, in the node's listing format.
 
 import { defineExtension, host } from "@ham2k/extension-sdk"
-import type { ClusterHook, ClusterLine, Spot, SpotsHook } from "@ham2k/extension-sdk"
+import type { ClusterHook, ClusterLine, ClusterStatus, Spot, SpotsHook } from "@ham2k/extension-sdk"
 
 import manifest from "../manifest.json" with { type: "json" }
-import { parseSpotLine } from "./parse.ts"
+import { isPromptFor, nodeProgramFromPrompt, parseSpotLine } from "./parse.ts"
+import type { NodeProgram } from "./parse.ts"
 
 /// How long a spot stays on the board after the node announced it. A cluster
 /// spot is news rather than a schedule: a station spotted an hour ago has
@@ -36,6 +47,25 @@ const MAX_SPOTS = 2000
 /// board's two-minute refreshes, so a board that is merely slow keeps it.
 const RELEASE_AFTER_MILLIS = 10 * 60 * 1000
 
+/// What a new session asks the node for: its newest hundred spots. Every node
+/// in Settings takes this form; CC Cluster reads `SH/DX 100` as "on 100 kHz".
+const BACKFILL_COMMAND = "SH/DX/100"
+
+/// What each node program takes to send everything: no filter, and the
+/// skimmers' CW, RTTY, PSK and beacon spots. Not their FT8 and FT4, which
+/// would bury the rest under thousands of decodes an hour. CC Cluster's reset
+/// puts back its sysop's default band filter (no CW on 2 m and up, among
+/// others), so that is turned off after it.
+const SEND_EVERYTHING: Record<NodeProgram, string[]> = {
+  "AR-Cluster": ["SET DX FILTER"],
+  DXSpider: ["CLEAR/SPOTS ALL", "SET/SKIMMER CW RTTY PSK BEACON"],
+  "CC Cluster": ["SET/NOFILTER", "SET/FILTER DXBM/OFF", "SET/SKIMMER"],
+}
+
+/// How far back to look for the node's prompt, which a session's lines start
+/// with: its login ends on one.
+const PROMPT_LOOKBACK = 200
+
 /// The newest spot per station per band, keyed `CALL|band`. A station that
 /// moves within a band is where it was last spotted; one on two bands at once
 /// (a multi-op, a skimmer hearing both) is on both.
@@ -50,6 +80,19 @@ let cursor = 0
 
 let subscribed = false
 let releaseTimer: number | undefined
+
+/// The session already asked, as `CALL@host:port`. A session logged in as
+/// another operator, or to another node, is asked again.
+let startedFor: string | undefined
+
+/// The sessions whose filters this runtime has cleared, as `CALL@host:port`:
+/// the node keeps them cleared from then on, so a reconnect needs only the
+/// backfill. A new runtime clears them once more, in case the operator set
+/// one since.
+const cleared = new Set<string>()
+
+/// The program behind each node, as `host:port`, once a prompt has named it.
+const programs = new Map<string, NodeProgram>()
 
 function take(lines: ClusterLine[]) {
   for (const line of lines) {
@@ -75,7 +118,7 @@ function holdSession() {
     // Not awaited: connecting and logging in take up to ten seconds, which
     // is the whole of a spots hook's budget. The spots arrive on the next
     // refresh instead.
-    host.clusterSubscribe().catch(() => {
+    host.clusterSubscribe().then(startSession, () => {
       subscribed = false
     })
   }
@@ -83,10 +126,55 @@ function holdSession() {
   releaseTimer = host.setTimeout(releaseSession, RELEASE_AFTER_MILLIS)
 }
 
+/// Starts a session not started yet: everything the node has, and the spots
+/// from before the login. Not awaited either: the reply's lines reach `take`
+/// the way every line does, and a command that failed is retried at the next
+/// fetch.
+function startSession(status: ClusterStatus) {
+  if (status.state !== "connected" || !status.call) {
+    startedFor = undefined
+    return
+  }
+  const node = `${status.node.host}:${status.node.port}`
+  const session = `${status.call}@${node}`
+  if (!subscribed || session === startedFor) return
+  startedFor = session
+  sendEverything(session, status.call, node)
+    .then(() => send(BACKFILL_COMMAND))
+    .catch(() => {
+      if (startedFor === session) startedFor = undefined
+    })
+}
+
+async function sendEverything(session: string, call: string, node: string) {
+  if (cleared.has(session)) return
+  let program = programs.get(node)
+  if (!program) {
+    // The newest prompt only: one further back can be another node's, from
+    // before the operator picked this one.
+    const lines = await host.clusterLines({ limit: PROMPT_LOOKBACK })
+    let i = lines.length - 1
+    while (i >= 0 && !isPromptFor(lines[i].text, call)) i--
+    program = i >= 0 ? nodeProgramFromPrompt(lines[i].text) : undefined
+  }
+  // A node whose program is not one of these is only read, filters and all:
+  // a command one program takes may mean something else to another.
+  if (!program) return
+  programs.set(node, program)
+  for (const command of SEND_EVERYTHING[program]) await send(command)
+  cleared.add(session)
+}
+
+async function send(command: string) {
+  const reply = await host.clusterSend(command)
+  if (!reply.ok) throw new Error(reply.error ?? "failed")
+}
+
 function releaseSession() {
   releaseTimer = undefined
   if (!subscribed) return
   subscribed = false
+  startedFor = undefined
   host.clusterUnsubscribe().catch(() => {})
 }
 
@@ -106,6 +194,9 @@ const Spots: SpotsHook = {
     if (status.lastSeq < cursor) cursor = 0
 
     holdSession()
+    // A session that dropped and came back, or one already up when this
+    // subscribed, between two fetches.
+    startSession(status)
     // What the node sent since the last read — the scrollback on the first —
     // and anything a delivery to the hook below missed: a failed one is not
     // retried, but its lines stay readable here.

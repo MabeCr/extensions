@@ -115,16 +115,23 @@ checklist and a rate chart:
   80-column line shows only the comment's first 30 characters; a test
   operation's spot starts with `TESTING`. It reads nothing from the cluster;
   `ham2k-cluster-spots` does.
-- **`ham2k-cluster-spots`** reads that same connection (`requiresClusterRead`,
-  the least grant) and turns every `DX de` line the node sends into a spot on
-  the board, under the spot `source` `cluster`. DXSpider, AR-Cluster and CC
-  Cluster all announce a spot in the same 80-column line, so one parser reads
-  them all; the mode is the one the comment names, else the band plan's. It
-  keeps the newest spot per station per band for an hour. Reading needs the
-  session held, which a subscription does, and the session is the operator's
-  own login on that node — so it subscribes at the board's first fetch and
-  lets go ten minutes after its last, and the app closes the session when
-  idle.
+- **`ham2k-cluster-spots`** reads that same connection and turns every `DX de`
+  line the node sends into a spot on the board, under the spot `source`
+  `cluster`. The Spots panel is where spots are narrowed down, so it asks the
+  node for all of them: the first session as each call on an AR-Cluster,
+  DXSpider or CC Cluster node (told apart by its prompt) clears the filters
+  set there and turns on the CW, RTTY and PSK skimmers — which the operator's
+  other clients on that node then see too. A node pushes only what is spotted
+  after the login, so each new session then asks for its newest hundred spots
+  with `SH/DX/100`; the reply arrives with the other lines. Sending commands
+  takes `requiresClusterCommand`. DXSpider, AR-Cluster and CC Cluster all
+  announce a spot in the same 80-column line, and list them alike, so one
+  parser reads them all; the mode is the one the comment names, else the band
+  plan's, else the band's usual one. It keeps the newest spot per station per
+  band for an hour. Reading needs the session held, which a subscription does,
+  and the session is the operator's own login on that node — so it subscribes
+  at the board's first fetch and lets go ten minutes after its last, and the
+  app closes the session when idle.
 
 The SVG reference panels carry `ki2d-` keys and install from a file.
 See [dashboard development](extensions/dashboard/README.md) for building and
