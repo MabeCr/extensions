@@ -29,14 +29,14 @@ Discord channel webhooks.
 | `extensions/contests/` | `contest` | 69 | 14 ported built-ins, 1 new contest, 49 QSO party events, 5 park events |
 | `extensions/awards/` | `award` | 1 | 1 new award checklist |
 | `extensions/lookups/` | `lookup` | 5 | 5 ported built-ins |
-| `extensions/spots/` | `spots` | 6 | 1 ported built-in, 5 new spotting sources |
-| `extensions/dashboard/` | `dashboard` | 5 | 1 ported built-in, 1 new panel, 3 SVG reference panels |
+| `extensions/spots/` | `spots` | 5 | 1 ported built-in, 4 new spotting sources |
+| `extensions/dashboard/` | `dashboard` | 6 | 1 ported built-in, 2 new panels, 3 SVG reference panels |
 | **total** | | **106** | **39 ported, 64 new, 3 SVG reference panels** |
 
 The 39 are the app's own extensions, ported one for one. The 64 are new: a
 contest and events the app has never shipped separately, five state-park
-events, five spotting sources, two award programs, a Worked All States
-checklist and a rate chart:
+events, four spotting sources, two award programs, a Worked All States
+checklist, a rate chart and a band map:
 
 - **`ham2k-hota`** — [History on the Air](https://cqhota.app), historic sites
   over 200 years old, written for the catalog from cqhota.app's own

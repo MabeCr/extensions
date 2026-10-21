@@ -1,0 +1,23 @@
+{
+  "name": "@ham2k/ext-ki2d-band-map",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The spots on a band, laid out along its frequencies",
+  "author": "Sebastian Delmont <sd@ham2k.com>",
+  "license": "MPL-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test 'src/*.test.ts'",
+    "pack": "npm run build && h2kext-pack build"
+  },
+  "devDependencies": {
+    "@ham2k/extension-sdk": "^0.12.10",
+    "@ham2k/extension-tools": "^0.15.0",
+    "esbuild": "^0.25.5"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

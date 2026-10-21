@@ -29,7 +29,10 @@
 // A case may set `panel`, `config`, `operation`, `qso`, `qsos` (what
 // `ctx.getQsos` answers), `contacts` (a run of QSOs ending now, generated
 // fresh on each render: `{"minutes": 120, "rate": 60, "operators": ["KI2D"]}`), `readings` (the live radio values a scene with
-// `radio` is fed, as `{"radio.transmitting": 1, "radio.swr": 1.4}`), `app`
+// `radio` is fed, as `{"radio.transmitting": 1, "radio.swr": 1.4}`), `radio` (fields over the demo
+// radio's, as `{"frequencyHz": 7030000, "mode": "CW"}`), `spots` (what `ctx.getSpots` answers: a list
+// of `{"call", "freq" (kHz), "mode", "age" (minutes), "worked", "isSelf", "notices"}`, or
+// `{"generate": 40, "band": "20m", "seed": 1}` for a made-up crowd), `app`
 // (the app's brightness), `locale`, `width`, `height` and `label`. SIZES (`360x520,220x150`) and LOCALES (`en,es`) in the
 // environment replace the default grid.
 
@@ -41,6 +44,8 @@ import { createServer } from "node:http"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { createContext, runInContext } from "node:vm"
+
+import { bandForFrequency } from "@ham2k/lib-operation-data"
 
 const [input, port = "4417"] = process.argv.slice(2)
 if (!input) {
@@ -93,11 +98,21 @@ async function loadExtension() {
   }
   const panels = [], store = new Map(), unsupported = new Set()
   // One connected radio, so radio panels have something to show; what a panel sets, it reads back.
-  const radio = {
+  const demoRadio = {
     id: "demo", name: "Demo radio", status: "connected", stale: false, problem: null, frequencyHz: 14074000, mode: "USB",
     powerWatts: 100, maxWatts: 100, transmitting: false, meters: { signalDbm: -85, supplyVolts: 13.8 }, canTune: true,
     tuner: "bypassed", canStartTune: true, passband: { lowHz: 100, highHz: 2800 }, antennas: null, modes: ["LSB", "USB", "CW", "AM", "FM"], keying: null, lastTransmission: null,
   }
+  // Each case has a radio of its own, so one case tuning does not move another's.
+  const radios = new Map()
+  let radio = demoRadio, current = {}
+  const useRadio = c => {
+    if (!radios.has(c.index)) radios.set(c.index, { ...structuredClone(demoRadio), ...c.radio })
+    radio = radios.get(c.index)
+    current = c
+  }
+  // How many panel events are running: as the host, `suggestQso` answers only from inside one.
+  const events = { running: 0 }
   let sheets = []
   const hostCall = async (method, params = {}) => {
     switch (method) {
@@ -114,6 +129,16 @@ async function loadExtension() {
       case "setRadioConnection": case "setRadioSpectrum": case "sendRadioCw": case "playRadioVoice": case "setRadioPtt": case "stopRadioTransmit":
         return { accepted: true, state: radio }
       case "showMessage": sheets.push({ title: params.title, text: params.text }); return null
+      // As the host: a radio command, and an answer to a click. The case's `operation.uuid` is the
+      // operation in front; a case without one has none open, and the panel's fallback runs.
+      case "suggestQso": {
+        if (!definition.requiresRadioWrite && !definition.requiresRadioRaw) throw new Error("suggestQso blocked: the manifest does not declare requiresRadioWrite")
+        if (!events.running) throw new Error("suggestQso blocked: called outside the panel's onEvent")
+        const front = current.operation?.uuid
+        const accepted = typeof front === "string" && (params.operationUuid == null || params.operationUuid === front)
+        console.log(`HOST suggestQso ${JSON.stringify(params)} → accepted: ${accepted}`)
+        return { accepted }
+      }
       default:
         if (!unsupported.has(method)) { unsupported.add(method); console.log(`HOST ${method} is not stood in for here; answering {}`) }
         return {}
@@ -137,7 +162,7 @@ async function loadExtension() {
     },
   }
   runInContext(await readFile(join(ext, "build/index.js"), "utf8"), createContext(sandbox))
-  return { definition, panels, takeSheets: () => { const shown = sheets; sheets = []; return shown } }
+  return { definition, panels, useRadio, events, takeSheets: () => { const shown = sheets; sheets = []; return shown } }
 }
 
 async function readCases() {
@@ -171,6 +196,42 @@ function contactRun({ minutes = 120, rate = 60, operators = [] }, now) {
   return qsos
 }
 
+/// A made-up crowd on a band, the same on every render: CW at the bottom, FT8 and FT4 bunched, phone above.
+function generatedSpots({ generate = 30, band = "20m", seed = 1 }) {
+  let state = seed
+  const random = () => (state = (state * 1103515245 + 12345) % 2147483648) / 2147483648
+  const edges = { "160m": 1800, "80m": 3500, "40m": 7000, "30m": 10100, "20m": 14000, "17m": 18068, "15m": 21000, "12m": 24890, "10m": 28000, "6m": 50000 }
+  const base = edges[band] ?? 14000
+  const prefixes = ["K", "W", "N", "AA", "KD", "VE", "G", "DL", "F", "EA", "JA", "VK", "PY", "LU", "I", "OH", "SP", "ZS"]
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  return Array.from({ length: generate }, (_, i) => {
+    const call = `${prefixes[Math.floor(random() * prefixes.length)]}${1 + Math.floor(random() * 9)}${Array.from({ length: 1 + Math.floor(random() * 3) }, () => letters[Math.floor(random() * 26)]).join("")}`
+    const kind = random()
+    const [mode, freq] = kind < 0.4 ? ["CW", base + 2 + random() * 60] : kind < 0.6 ? ["FT8", base + 74 + random() * 3] : kind < 0.65 ? ["FT4", base + 80 + random() * 3] : ["SSB", base + 150 + random() * 190]
+    const park = random() < 0.6, emoji = random() < 0.12 ? "⭐" : undefined
+    return {
+      call, freq: Math.round(freq * 10) / 10, mode, age: Math.floor(random() * 30), worked: random() < 0.2, notices: random() < 0.15 ? ["newDXCC"] : [],
+      display: { icon: park ? "pine-tree" : "radio-tower", ...(park ? { iconColor: "#2e7d32" } : {}), ...(emoji ? { emoji } : {}) },
+    }
+  })
+}
+
+/// What `ctx.getSpots` answers for a case: its spots as the host holds them, narrowed by the options.
+function boardFor(c, now, options = {}) {
+  const listed = Array.isArray(c.spots) ? c.spots : c.spots ? generatedSpots(c.spots) : []
+  const bands = [options.band ?? []].flat(), modes = [options.mode ?? []].flat()
+  return listed
+    .map(s => ({
+      their: { call: s.call }, freq: s.freq, band: bandForFrequency(s.freq), mode: s.mode, hookKey: s.source ?? "pota",
+      spot: { timeInMillis: now - (s.age ?? 0) * 60000, source: s.source ?? "pota" },
+      annotations: { worked: !!s.worked, isSelf: !!s.isSelf, notices: s.notices ?? [] },
+      display: s.display ?? { icon: "radio-tower" },
+    }))
+    .filter(s => (!bands.length || bands.includes(s.band)) && (!modes.length || modes.includes(s.mode)))
+    .filter(s => options.maxAgeMinutes == null || now - s.spot.timeInMillis <= options.maxAgeMinutes * 60000)
+    .sort((a, b) => b.spot.timeInMillis - a.spot.timeInMillis)
+}
+
 function argsFor(c, index, panelKey) {
   const now = Date.now(), environment = {
     version: 1, width: c.width, height: c.height, safeInsets: { left: 0, top: 0, right: 0, bottom: 0 },
@@ -178,7 +239,8 @@ function argsFor(c, index, panelKey) {
   }
   const qsos = c.contacts ? contactRun(c.contacts, now) : c.qsos ?? []
   const args = { environment, clock: { nowMillis: now, realNowMillis: now }, instanceId: `case-${index}`, panelKey, operation: c.operation ?? {}, qso: c.qso, qsoCount: qsos.length, config: c.config ?? {}, reason: "preview" }
-  const ctx = { online: true, locale: c.locale, distanceUnits: "kilometers", getQsos: async () => qsos }
+  const ctx = { online: true, locale: c.locale, distanceUnits: "kilometers", getQsos: async () => qsos, getSpots: async options => boardFor(c, now, options) }
+  loaded.useRadio({ ...c, index })
   return { args, ctx }
 }
 
@@ -193,6 +255,9 @@ async function renderCase(c, index) {
         const result = await hook.render({ ...args, panelKey: descriptor.key }, ctx)
         // The host feeds a scene that asks for the radio its live readings, with no render between.
         if (result?.scene?.radio) Object.assign(result.scene.values, { ...radioReadings, ...c.readings })
+        // The host refuses a scene past these, so the preview shows the refusal rather than the scene.
+        const over = [["layers", 512], ["controls", 256]].find(([part, most]) => (result?.scene?.[part]?.length ?? 0) > most)
+        if (over) throw new Error(`${result.scene[over[0]].length} ${over[0]}, past the host's ${over[1]}`)
         entries.push({ ...c, index, hook: key, panel: descriptor.key, result })
       } catch (error) {
         entries.push({ ...c, index, hook: key, panel: descriptor.key, error: String(error?.stack ?? error) })
@@ -236,14 +301,21 @@ async function sendEvent({ index, hook, panel, controlId, action, phase = "activ
   const owner = loaded.panels.find(p => p.key === hook && p.hook.onEvent)
   if (!c || !owner) return { sheets: [], entries: [] }
   const { args, ctx } = argsFor(c, index, panel)
-  let values = {}
+  let values = {}, failure
+  loaded.events.running++
   try {
-    values = (await owner.hook.onEvent({ ...args, event: { controlId, action, phase, sequence: Date.now(), value, text } }, ctx))?.values ?? {}
+    const answer = await owner.hook.onEvent({ ...args, event: { controlId, action, phase, sequence: Date.now(), value, text } }, ctx)
+    // As the host: an answer with neither is a hook that forgot to return, not an accepted change.
+    if (answer?.values == null && answer?.strings == null) throw new Error("A panel event result needs values or strings")
+    values = answer.values ?? {}
   } catch (error) {
+    failure = String(error?.message ?? error)
     console.log(`ERROR onEvent ${action}: ${error?.stack ?? error}`)
+  } finally {
+    loaded.events.running--
   }
   await new Promise(done => setTimeout(done, 50)) // a sheet opened without awaiting lands on the next turn
-  return { values, sheets: loaded.takeSheets(), entries: await renderCase(c, index) }
+  return { values, error: failure, sheets: loaded.takeSheets(), entries: await renderCase(c, index) }
 }
 
 createServer(async (req, res) => {
