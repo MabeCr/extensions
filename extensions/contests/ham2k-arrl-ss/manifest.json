@@ -2,12 +2,12 @@
   "key": "ham2k-arrl-ss",
   "name": "ARRL November Sweepstakes",
   "shortName": "ARRL SS",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Work every ARRL and RAC section from the US and Canada: serial, precedence, check and section; first full weekend of November (CW) and third (Phone)",
   "category": "contest",
   "icon": "broom",
   "accentColor": "#00539F",
-  "api": 1,
+  "api": 11,
   "keywords": [
     "contest",
     "arrl",
@@ -34,6 +34,7 @@
   "hooks": [
     "activity",
     "adifFields",
+    "dataFile",
     "export",
     "ref:arrl-ss",
     "scoring"

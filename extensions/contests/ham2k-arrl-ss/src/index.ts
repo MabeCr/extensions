@@ -15,6 +15,7 @@ import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
+  DataFileDefinition,
   ExportOption,
   ExportOptionsRequest,
   ExportRequest,
@@ -33,6 +34,7 @@ import type { SSMode } from "./schedule.ts"
 import { SSScorer, TYPE, contestTitle } from "./scorer.ts"
 import { ALL_SECTIONS } from "./sections.ts"
 import { normalizeSection, preferredSections } from "./exchange.ts"
+import { HISTORY_STEMS, historyFor, loadHistory, parseHistory, removeHistory } from "./history.ts"
 import {
   CHECK_PATTERN,
   ENTRY_CLASSES,
@@ -260,10 +262,19 @@ const ActivityHook = {
   ): Promise<LoggingControlDescriptor[]> {
     // Off-contest, contribute nothing. The core already refuses a primary field
     // to an activity the operation isn't running; this saves the work.
-    if (!refOfType(args.operation, TYPE)) return []
+    const opRef = refOfType(args.operation, TYPE)
+    if (!opRef) return []
 
     const t = tFor(ctx)
     const their = (args.qso?.their as Record<string, JSONValue>) ?? {}
+    // The check and section this station sent before, from N1MM's call
+    // history, written in as a guess: the core fills a field with it only while
+    // the field is empty or still holds an earlier guess, so what the operator
+    // copies always stands.
+    const history = historyFor(str(their.call), opRef.mode)
+    const historySection = history?.section ?? ''
+    const historyCheck = history?.check ?? ''
+    const preferred = preferredSections(their)
     const control = (key: string, label: string, order: number) => ({
       key: `arrl-ss/${key}`,
       label: t(label),
@@ -274,8 +285,8 @@ const ActivityHook = {
 
     return [
       { ...control('ourSerial', 'ourSerialLabel', 10), input: { kind: 'serial', refType: TYPE, field: 'ourSerial', sequence: { key: 'serial' } } },
-      // No placeholders on theirs: there is nothing to guess about a number,
-      // precedence or check another station is about to send.
+      // No guesses for their serial or precedence: there is nothing to go on
+      // for a number or an entry class another station is about to send.
       { ...control('theirSerial', 'theirSerialLabel', 20), input: { kind: 'text', refType: TYPE, field: 'theirSerial', numeric: true, maxLength: 5 } },
       {
         ...control('theirPrecedence', 'precedenceLabel', 30),
@@ -283,7 +294,15 @@ const ActivityHook = {
       },
       {
         ...control('theirCheck', 'checkLabel', 40),
-        input: { kind: 'text', refType: TYPE, field: 'theirCheck', numeric: true, maxLength: 2, pattern: CHECK_PATTERN },
+        input: {
+          kind: 'text',
+          refType: TYPE,
+          field: 'theirCheck',
+          numeric: true,
+          maxLength: 2,
+          pattern: CHECK_PATTERN,
+          ...(historyCheck ? { suggestedValue: historyCheck } : {}),
+        },
       },
       {
         ...control('theirSection', 'sectionLabel', 50),
@@ -292,9 +311,10 @@ const ActivityHook = {
           refType: TYPE,
           field: 'theirSection',
           options: SECTION_OPTIONS,
-          preferredCodes: preferredSections(their),
+          preferredCodes: historySection ? [historySection, ...preferred.filter((code) => code !== historySection)] : preferred,
           uppercase: true,
           minCharsForSuggestions: 1,
+          ...(historySection ? { suggestedValue: historySection } : {}),
         },
       },
     ] as LoggingControlDescriptor[]
@@ -505,9 +525,34 @@ const ExportHook = {
   },
 }
 
+/// N1MM's call history file for one weekend, by the stem its updates share.
+/// Kept a week: the contributor updates it around each running, and a stale
+/// copy only costs a suggestion.
+function historyDataFile(mode: SSMode): DataFileDefinition {
+  return {
+    key: `${manifest.key}-${HISTORY_STEMS[mode].toLowerCase()}`,
+    name: (_args: Record<string, never>, ctx: HookContext) => {
+      const t = tFor(ctx)
+      return t('historyFileName', { mode: t(`mode_${mode}`) })
+    },
+    description: (_args: Record<string, never>, ctx: HookContext) => tFor(ctx)('historyFileDescription'),
+    url: `n1mm-history:${HISTORY_STEMS[mode]}`,
+    maxAgeInDays: 7,
+    fetchType: 'raw',
+    category: 'ss',
+    rawToJSONData: async ({ body }) => parseHistory(body),
+    onLoadRawData: (data) => loadHistory(mode, data),
+    onRemoveRawData: async () => removeHistory(mode),
+  }
+}
+
 defineExtension({
   ...manifest,
   onActivation({ registerHook }) {
+    for (const mode of MODES) {
+      const file = historyDataFile(mode)
+      registerHook('dataFile', { hook: file, key: file.key })
+    }
     registerHook('activity', { hook: ActivityHook, key: manifest.key })
     registerHook(`ref:${TYPE}`, { hook: RefHandler, key: manifest.key })
     registerHook('adifFields', { hook: AdifFieldsHook, key: manifest.key })

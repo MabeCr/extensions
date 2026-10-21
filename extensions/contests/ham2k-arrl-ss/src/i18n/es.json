@@ -43,5 +43,7 @@
   "offTimesNone": "**Pausas:** ninguna todavía (30 minutos o más sin contactos)",
   "sectionsWorked": "**Secciones:** {{worked}} de {{total}}",
   "sectionsMissing": "**Faltan:** {{list}}",
-  "cleanSweep": "**¡Clean Sweep!** Las {{total}} secciones"
+  "cleanSweep": "**¡Clean Sweep!** Las {{total}} secciones",
+  "historyFileName": "Historial de N1MM: SS {{mode}}",
+  "historyFileDescription": "El check y la sección que cada estación envió en Sweepstakes anteriores, del archivo de historial de N1MM Logger+, sugeridos al registrar. Registra lo que copies."
 }
