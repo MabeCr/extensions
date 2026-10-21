@@ -1,0 +1,27 @@
+{
+  "name": "@ham2k/ext-cluster-spots",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ham2K Logger extension: spots read from the DX cluster",
+  "author": "Sebastian Delmont <sd@ham2k.com>",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --import ../../../scripts/sdk-node-resolve.mjs --experimental-strip-types --test 'src/**/*.test.ts'",
+    "typecheck": "tsc --noEmit",
+    "pack": "npm run build && h2kext-pack build --force-name"
+  },
+  "//devDependencies": [
+    "The cluster host calls arrived in SDK 0.12.12 (extension API 10), and",
+    "extension-tools 0.13.0 is the first packer that takes an API 10 manifest."
+  ],
+  "devDependencies": {
+    "@ham2k/extension-sdk": "^0.12.12",
+    "@ham2k/extension-tools": "^0.13.0",
+    "esbuild": "^0.25.5"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

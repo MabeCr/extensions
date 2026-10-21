@@ -1,0 +1,47 @@
+{
+  "key": "ham2k-cluster-spots",
+  "name": "Cluster Spots",
+  "shortName": "Cluster",
+  "version": "0.1.0",
+  "api": 10,
+  "description": "Brings the DX cluster's spots into the Spots panel, read through the node picked in Settings",
+  "category": "spots",
+  "icon": "access-point",
+  "keywords": [
+    "spots",
+    "dx cluster",
+    "dxspider",
+    "ar-cluster",
+    "cc cluster",
+    "telnet"
+  ],
+  "hooks": [
+    "cluster",
+    "spots"
+  ],
+  "requiresClusterRead": true,
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  },
+  "translations": {
+    "es": {
+      "name": "Spots del Cluster",
+      "description": "Trae los spots del DX cluster al panel de Spots, leídos del nodo elegido en Ajustes",
+      "keywords": [
+        "spots",
+        "dx cluster",
+        "dxspider",
+        "ar-cluster",
+        "cc cluster",
+        "telnet"
+      ]
+    }
+  }
+}
