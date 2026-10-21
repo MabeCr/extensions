@@ -124,6 +124,18 @@ export function spotTime(hhmm: string, arrivedAt: number): number {
   return time - arrivedAt > 30 * 60 * 1000 ? time - 24 * 60 * 60 * 1000 : time
 }
 
+/// Whether [spot] is a station signing off: spotted by itself, under any SSID
+/// or portable form of its call (`KI2D-7` spotting `KI2D/P`), with `QRT` in
+/// the comment. Anyone else's `QRT` is hearsay, and a station often goes on
+/// after one.
+export function isSignOff(spot: Spot): boolean {
+  const info = spot.spot.sourceInfo ?? {}
+  const comment = typeof info.comments === "string" ? info.comments : ""
+  if (!/\bQRT\b/i.test(comment)) return false
+  const spotter = parseCallsign(String(info.spotter ?? "")).baseCall
+  return !!spotter && spotter === parseCallsign(spot.their.call).baseCall
+}
+
 /// The node programs this extension knows how to ask for everything.
 export type NodeProgram = "AR-Cluster" | "DXSpider" | "CC Cluster"
 

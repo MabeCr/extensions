@@ -150,12 +150,45 @@ test("the board lists it under its own name, not the poster's", () => {
   assert.equal(spots?.sourceName, "Cluster Spots")
 })
 
-test("a station keeps its newest spot per band: a move within the band replaces it, another band adds one", async () => {
+test("a station keeps its newest spot per band and mode: a move within them replaces it, another band or mode adds one", async () => {
   arrive(dxLine("OH2BH", 14030, "CW QSY"))
   arrive(dxLine("OH2BH", 7010, "CW"))
+  arrive(dxLine("OH2BH", 14250, "SSB"))
   status = { ...status, lastSeq: seq }
   const oh2bh = (await board()).filter((spot) => spot.their.call === "OH2BH")
-  assert.deepEqual(calls(oh2bh).sort(), ["OH2BH 14030", "OH2BH 7010"])
+  assert.deepEqual(calls(oh2bh).sort(), ["OH2BH 14030", "OH2BH 14250", "OH2BH 7010"])
+})
+
+function selfLine(call: string, spotter: string, freq: number, comment: string, minutesAgo = 0): string {
+  return dxLine(call, freq, comment, minutesAgo).replace("DX de W3LPL:", `DX de ${spotter}:`)
+}
+
+test("a station's own QRT takes its spot off the board, on that band and mode only", async () => {
+  arrive(dxLine("K2POTA", 14062, "CW POTA US-1234", 5))
+  arrive(dxLine("K2POTA", 14285, "SSB POTA US-1234", 5))
+  arrive(selfLine("K2POTA", "K2POTA-7", 14285, "POTA US-1234 qrt tnx"))
+  status = { ...status, lastSeq: seq }
+  assert.deepEqual(calls((await board()).filter((spot) => spot.their.call === "K2POTA")), ["K2POTA 14062"])
+})
+
+test("someone else's QRT is hearsay, and a station back after its QRT is back", async () => {
+  arrive(dxLine("K3OTHR", 7255, "SSB", 5))
+  arrive(dxLine("K3OTHR", 7255, "QRT?"))
+  status = { ...status, lastSeq: seq }
+  assert.equal((await board()).filter((spot) => spot.their.call === "K3OTHR").length, 1)
+
+  arrive(selfLine("K4BACK/P", "K4BACK", 21300, "QRT", 3))
+  arrive(dxLine("K4BACK/P", 21300, "SSB QRV again"))
+  status = { ...status, lastSeq: seq }
+  assert.equal((await board()).filter((spot) => spot.their.call === "K4BACK/P").length, 1)
+})
+
+test("an older spot listed after a QRT does not bring the station back", async () => {
+  const qrt = listedLine("K5GONE", 7030, "QRT", 2)
+  arrive(qrt.text.replace("<K1TTT>", "<K5GONE>"))
+  arrive(listedLine("K5GONE", 7030, "CW 20 dB", 10).text)
+  status = { ...status, lastSeq: seq }
+  assert.equal((await board()).some((spot) => spot.their.call === "K5GONE"), false)
 })
 
 test("a spot older than an hour leaves the board", async () => {

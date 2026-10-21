@@ -1,10 +1,10 @@
 // Copyright ©️ 2026 Sebastian Delmont <sd@ham2k.com>
 // SPDX-License-Identifier: MIT
 //
-// The extension through its HOOKS, against a stand-in host whose cluster
-// records each spot posted and answers as the test says: what a spot's
-// comment carries, when the Cluster icon is offered, and how the node's
-// answer reaches the operator.
+// Posting through the HOOKS, against a stand-in host whose cluster records
+// each spot posted and answers as the test says: what a spot's comment
+// carries, when the Cluster icon is offered, and how the node's answer
+// reaches the operator.
 
 import { test } from "node:test"
 import assert from "node:assert/strict"
@@ -34,10 +34,6 @@ function reset(next: Record<string, unknown> = { ok: true, lines: [] }) {
 
 const pota = { type: "potaActivation", ref: "US-1234", shortLabel: "POTA US-1234" }
 const nyqp = { type: "ny-qso-party", ref: "NY", location: "SUL/DEL" }
-
-test("it reads no spots: reading the cluster is another extension's job", async () => {
-  assert.deepEqual(await ext.runHook("spots", "fetchSpots", {}), [])
-})
 
 test("a spot's comment names every activity, contests first, then the operator's words", async () => {
   assert.deepEqual(activityWords({ refs: [pota, nyqp] }), ["NYQP SUL/DEL", "POTA US-1234"])

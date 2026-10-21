@@ -106,18 +106,16 @@ checklist and a rate chart:
   spot-discord names, lowercased, with PoLo's `qCode` and `qRest` working
   too — besides the app's `op`; the app's template editor
   does not know `spot` yet, so its preview shows those blank.
-- **`ki2d-cluster-spotter`** posts self-spots, and spots of stations worked,
-  to the DX cluster network, through the one telnet connection the app holds
-  to the node picked in Settings › DX Cluster (extension API 10,
-  `requiresClusterSpot`). Posting once, to one node, is the whole job: the
-  nodes forward each spot to one another. The comment names every activity,
-  contests first (`NYQP SUL/DEL - POTA US-1234`), because a reader's
-  80-column line shows only the comment's first 30 characters; a test
-  operation's spot starts with `TESTING`. It reads nothing from the cluster;
-  `ham2k-cluster-spots` does.
-- **`ham2k-cluster-spots`** reads that same connection and turns every `DX de`
-  line the node sends into a spot on the board, under the spot `source`
-  `cluster`. The Spots panel is where spots are narrowed down, so it asks the
+- **`ham2k-cluster-spots`** reads the one telnet connection the app holds to
+  the node picked in Settings › DX Cluster (extension API 10), and turns every
+  `DX de` line the node sends into a spot on the board, under the spot
+  `source` `cluster`. It posts the other way too: self-spots, and spots of
+  stations worked, go to that one node, which forwards each to the rest of the
+  network. A posted spot's comment names every activity, contests first (`NYQP
+  SUL/DEL - POTA US-1234`), because a reader's 80-column line shows only the
+  comment's first 30 characters; a test operation's spot starts with
+  `TESTING`. It replaces `ki2d-cluster-spotter`, now retired, which only
+  posted. The Spots panel is where spots are narrowed down, so it asks the
   node for all of them: the first session as each call on an AR-Cluster,
   DXSpider or CC Cluster node (told apart by its prompt) clears the filters
   set there and turns on the CW, RTTY and PSK skimmers — which the operator's
@@ -128,10 +126,12 @@ checklist and a rate chart:
   announce a spot in the same 80-column line, and list them alike, so one
   parser reads them all; the mode is the one the comment names, else the band
   plan's, else the band's usual one. It keeps the newest spot per station per
-  band for an hour. Reading needs the session held, which a subscription does,
-  and the session is the operator's own login on that node — so it subscribes
-  at the board's first fetch and lets go ten minutes after its last, and the
-  app closes the session when idle.
+  band and mode for an hour, and drops it once the station spots itself (under
+  any SSID or portable form of its call) with `QRT` in the comment. Reading
+  needs the session held, which a subscription does, and the session is the
+  operator's own login on that node — so it subscribes at the board's first
+  fetch and lets go ten minutes after its last, and the app closes the session
+  when idle.
 
 The SVG reference panels carry `ki2d-` keys and install from a file.
 See [dashboard development](extensions/dashboard/README.md) for building and

@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: MIT
 //
 // DX cluster spots: every `DX de` line the node sends, as a spot on the
-// operator's board. The app holds the one connection to the node picked in
-// Settings (its docs/design/cluster.md), logged in as the operator; this
-// extension only reads it, and posting is `ki2d-cluster-spotter`'s job.
+// operator's board, and the operator's own spots posted the other way. The app
+// holds the one connection to the node picked in Settings (its
+// docs/design/cluster.md), logged in as the operator.
 //
 // The node pushes spots as they happen, and the board asks for them every two
 // minutes, so the lines are kept here in between: the newest spot of each
-// station on each band, for as long as a spot is worth showing.
+// station on each band in each mode, for as long as a spot is worth showing,
+// and none once the station has spotted itself QRT there.
 //
 // Reading needs the session held open, which a subscription does. The session
 // is the operator's own login, which their other cluster client (N1MM, a band
@@ -25,13 +26,18 @@
 // A node pushes only what is spotted from the login on, so each new session
 // then asks it for the spots before that (`SH/DX/100`). Its reply comes
 // through the same lines as the rest, in the node's listing format.
+//
+// Posting — a self-spot, or a spot of a station just worked — goes out once,
+// to that one node, which forwards it to the rest of the network.
 
 import { defineExtension, host } from "@ham2k/extension-sdk"
-import type { ClusterHook, ClusterLine, ClusterStatus, Spot, SpotsHook } from "@ham2k/extension-sdk"
+import type { ClusterHook, ClusterLine, ClusterReply, ClusterStatus, HookContext, PostOtherSpotRequest, PostResult, PostSelfSpotRequest, Spot, SpotEligibility, SpotsHook } from "@ham2k/extension-sdk"
 
 import manifest from "../manifest.json" with { type: "json" }
-import { isPromptFor, nodeProgramFromPrompt, parseSpotLine } from "./parse.ts"
+import { tFor } from "./i18n.ts"
+import { isPromptFor, isSignOff, nodeProgramFromPrompt, parseSpotLine } from "./parse.ts"
 import type { NodeProgram } from "./parse.ts"
+import { firstCall, isTestCall, spotComment, type Json } from "./spotText.ts"
 
 /// How long a spot stays on the board after the node announced it. A cluster
 /// spot is news rather than a schedule: a station spotted an hour ago has
@@ -66,9 +72,12 @@ const SEND_EVERYTHING: Record<NodeProgram, string[]> = {
 /// with: its login ends on one.
 const PROMPT_LOOKBACK = 200
 
-/// The newest spot per station per band, keyed `CALL|band`. A station that
-/// moves within a band is where it was last spotted; one on two bands at once
-/// (a multi-op, a skimmer hearing both) is on both.
+/// The newest spot per station per band and mode, keyed `CALL|band|mode`. A
+/// station that moves within a band is where it was last spotted; one on two
+/// bands at once (a multi-op, a skimmer hearing both), or in two modes on one
+/// (CW at the bottom, SSB up top), is on both. A station's own QRT is held
+/// like any spot, so an older one arriving after it (a backfill lists newest
+/// first) cannot take its place, but the board is never shown it.
 const held = new Map<string, Spot>()
 
 /// The newest line read back on a fetch, by the `seq` the app numbers them
@@ -98,7 +107,7 @@ function take(lines: ClusterLine[]) {
   for (const line of lines) {
     const spot = parseSpotLine(line.text, line.at)
     if (!spot) continue
-    const key = `${spot.their.call}|${spot.band ?? ""}`
+    const key = `${spot.their.call}|${spot.band ?? ""}|${spot.mode ?? ""}`
     const previous = held.get(key)
     if (!previous || spot.spot.timeInMillis >= previous.spot.timeInMillis) held.set(key, spot)
   }
@@ -108,7 +117,10 @@ function current(now: number): Spot[] {
   for (const [key, spot] of held) {
     if (now - spot.spot.timeInMillis > MAX_AGE_MILLIS) held.delete(key)
   }
-  return [...held.values()].sort((a, b) => b.spot.timeInMillis - a.spot.timeInMillis).slice(0, MAX_SPOTS)
+  return [...held.values()]
+    .filter((spot) => !isSignOff(spot))
+    .sort((a, b) => b.spot.timeInMillis - a.spot.timeInMillis)
+    .slice(0, MAX_SPOTS)
 }
 
 /// Subscribes if need be, and puts off letting go.
@@ -170,6 +182,22 @@ async function send(command: string) {
   if (!reply.ok) throw new Error(reply.error ?? "failed")
 }
 
+/// The host's error codes that have words of their own; anything else falls
+/// back to what the node said, then to the code itself.
+const known = new Set(["unsupported", "noCall", "connectFailed", "needsPassword", "loginFailed", "disconnected", "timeout", "tooSoon", "invalidCall", "invalidFrequency"])
+
+function resultOf(reply: ClusterReply, ctx: HookContext): PostResult {
+  if (reply.ok) return { ok: true }
+  const t = tFor(ctx), error = reply.error ?? ""
+  const message = error === "refused" && reply.message ? t("refused", { message: reply.message }) : known.has(error) ? t(error) : (reply.message ?? (error || t("notPosted")))
+  return { ok: false, message }
+}
+
+async function clusterAvailable(): Promise<boolean> {
+  const status = await host.clusterStatus()
+  return status.error !== "unsupported"
+}
+
 function releaseSession() {
   releaseTimer = undefined
   if (!subscribed) return
@@ -179,9 +207,9 @@ function releaseSession() {
 }
 
 const Spots: SpotsHook = {
-  // Not "DX Cluster", which `ki2d-cluster-spotter` already answers as: the
-  // Spots panel lists every source by this name, and two alike would leave
-  // the operator guessing which one brings spots.
+  // Not "DX Cluster", which the retired `ki2d-cluster-spotter` answers as
+  // wherever it is still installed: the Spots panel lists every source by
+  // this name, and two alike would leave the operator guessing which is which.
   sourceName: "Cluster Spots",
 
   async fetchSpots(): Promise<Spot[]> {
@@ -204,6 +232,27 @@ const Spots: SpotsHook = {
     take(lines)
     if (lines.length) cursor = lines[lines.length - 1].seq
     return current(Date.now())
+  },
+
+  async isSelfSpotEnabled({ operation }): Promise<SpotEligibility> {
+    if (!firstCall(operation.stationCall)) return { enabled: false }
+    return (await clusterAvailable()) ? { enabled: true, icon: manifest.icon } : { enabled: false }
+  },
+
+  async isOtherSpotEnabled({ qso }): Promise<SpotEligibility> {
+    const their = (qso.their ?? {}) as Json
+    if (!their.call || !qso.freq) return { enabled: false }
+    return (await clusterAvailable()) ? { enabled: true, icon: manifest.icon } : { enabled: false }
+  },
+
+  async postSelfSpot({ operation, freq, comment }: PostSelfSpotRequest, ctx): Promise<PostResult> {
+    const call = firstCall(operation.stationCall)
+    return resultOf(await host.clusterPostSpot({ freq, call, comment: spotComment(operation, comment, isTestCall(call)) }), ctx)
+  },
+
+  async postOtherSpot({ qso, comment }: PostOtherSpotRequest, ctx): Promise<PostResult> {
+    const their = (qso.their ?? {}) as Json
+    return resultOf(await host.clusterPostSpot({ freq: Number(qso.freq), call: firstCall(their.call), comment: spotComment(qso, comment) }), ctx)
   },
 }
 
