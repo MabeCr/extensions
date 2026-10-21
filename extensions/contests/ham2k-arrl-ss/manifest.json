@@ -1,0 +1,62 @@
+{
+  "key": "ham2k-arrl-ss",
+  "name": "ARRL November Sweepstakes",
+  "shortName": "ARRL SS",
+  "version": "0.1.0",
+  "description": "Work every ARRL and RAC section from the US and Canada: serial, precedence, check and section; first full weekend of November (CW) and third (Phone)",
+  "category": "contest",
+  "icon": "broom",
+  "accentColor": "#00539F",
+  "api": 1,
+  "keywords": [
+    "contest",
+    "arrl",
+    "sweepstakes",
+    "ss",
+    "section",
+    "cabrillo",
+    "clean sweep"
+  ],
+  "relevance": {
+    "countries": [
+      "us",
+      "ca"
+    ],
+    "dates": [
+      "2026-11-07",
+      "2026-11-21",
+      "2027-11-06",
+      "2027-11-20",
+      "2028-11-04",
+      "2028-11-18"
+    ]
+  },
+  "hooks": [
+    "activity",
+    "adifFields",
+    "export",
+    "ref:arrl-ss",
+    "scoring"
+  ],
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "@ham2k/lib-qson-cabrillo": "^1.2.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  },
+  "translations": {
+    "es": {
+      "name": "ARRL November Sweepstakes",
+      "description": "Trabaja todas las secciones ARRL y RAC desde EE. UU. y Canadá: número de serie, precedencia, check y sección; primer fin de semana completo de noviembre (CW) y tercero (fonía)",
+      "keywords": [
+        "concurso",
+        "sección"
+      ]
+    }
+  }
+}

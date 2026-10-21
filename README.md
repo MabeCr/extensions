@@ -21,20 +21,22 @@ Discord channel webhooks.
 
 ## What is here
 
-101 extensions, grouped by the manifest's own `category`:
+106 extensions, grouped by the manifest's own `category`:
 
 | directory | manifest `category` | n | of which |
 |---|---|--:|---|
 | `extensions/activities/` | `activity` | 20 | 18 ported built-ins, 2 new programs |
-| `extensions/contests/` | `contest` | 68 | 14 ported built-ins, 49 QSO party events, 5 park events |
+| `extensions/contests/` | `contest` | 69 | 14 ported built-ins, 1 new contest, 49 QSO party events, 5 park events |
+| `extensions/awards/` | `award` | 1 | 1 new award checklist |
 | `extensions/lookups/` | `lookup` | 5 | 5 ported built-ins |
 | `extensions/spots/` | `spots` | 6 | 1 ported built-in, 5 new spotting sources |
-| `extensions/dashboard/` | `dashboard` | 4 | 1 ported built-in, 3 SVG reference panels |
-| **total** | | **101** | **39 ported, 59 new, 3 SVG reference panels** |
+| `extensions/dashboard/` | `dashboard` | 5 | 1 ported built-in, 1 new panel, 3 SVG reference panels |
+| **total** | | **106** | **39 ported, 64 new, 3 SVG reference panels** |
 
-The 39 are the app's own extensions, ported one for one. The 59 are new: events
-the app has never shipped separately, five state-park events, three spotting
-sources, and two award programs:
+The 39 are the app's own extensions, ported one for one. The 64 are new: a
+contest and events the app has never shipped separately, five state-park
+events, five spotting sources, two award programs, a Worked All States
+checklist and a rate chart:
 
 - **`ham2k-hota`** — [History on the Air](https://cqhota.app), historic sites
   over 200 years old, written for the catalog from cqhota.app's own
@@ -71,6 +73,13 @@ sources, and two award programs:
   qualified `ref:stateparks/<key>` and answers it as it stands, the way the QSO
   parties answer `ref:qp/<code>`. Wisconsin answers `wipota`, the type it
   stored under its first name, `ham2k-wipota`.
+
+- **`ham2k-arrl-ss`** — the [ARRL November Sweepstakes](https://www.arrl.org/sweepstakes),
+  which the app has never had, written for the catalog from the ARRL's rules
+  and Cabrillo templates. Its ref type, `arrl-ss`, is new and permanent in the
+  same way as HOTA's. Each weekend's dates are computed (`src/schedule.ts`), so
+  only the manifest's `relevance.dates` need moving each year, and a test
+  checks them against the schedule.
 
 - **`ki2d-qso-party-spots`** reads the [QSO Party Hub](http://qsopartyhub.com)
   and the [QSO Party APRS Tracker](https://mobiletracker.stateqso.com) for
