@@ -23,7 +23,7 @@
   ],
   "devDependencies": {
     "@ham2k/extension-sdk": "^0.12.13",
-    "@ham2k/extension-tools": "^0.13.0",
+    "@ham2k/extension-tools": "^0.14.0",
     "@ham2k/lib-callsigns": "^1.0.2",
     "@ham2k/lib-geo-tools": "^1.1.1",
     "esbuild": "^0.25.5"
