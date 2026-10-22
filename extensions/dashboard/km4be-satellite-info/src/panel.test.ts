@@ -33,12 +33,17 @@ async function panel(options: { device?: { latitude: number; longitude: number }
   forgetAll()
   const id = ++panes
   const storage = new Map<string, unknown>()
+  const settings = new Map<string, unknown>()
   const fetched: string[] = []
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
       getLocation: () => options.device ?? null,
       kvGet: (params) => storage.get(String(params.key)) ?? null,
       kvSet: (params) => void storage.set(String(params.key), params.value),
+      getSettings: () => ({ extensions: { ["extension_km4be-satellite-info"]: Object.fromEntries(settings) } }),
+      setSettings: (params) => {
+        for (const [k, v] of Object.entries(params.values as Record<string, unknown>)) settings.set(k, v)
+      },
       fetch: (params) => {
         const url = String(params.url)
         fetched.push(url)
@@ -61,6 +66,7 @@ async function panel(options: { device?: { latitude: number; longitude: number }
   })
   return {
     storage,
+    settings,
     fetched,
     render: async (config: Record<string, unknown>, at: number) =>
       (await ext.runHook("panel", "render", args(config, at), { ctx })) as { kind: string; scene: Scene },
@@ -127,7 +133,7 @@ test("a star follows a satellite for good, and Favorites then shows only its pas
   assert.equal(star.icon, "star-outline")
 
   const patch = await p.event(cfg, t0, star.id, "star")
-  assert.deepEqual(p.storage.get("favorites"), [name])
+  assert.deepEqual(p.settings.get("favorites"), [name])
   assert.ok(rowTexts(patch.strings).every((r) => r.startsWith(name)))
   assert.match(patch.strings.hint, /^Orbits from CelesTrak/)
 
@@ -145,7 +151,7 @@ test("a star follows a satellite for good, and Favorites then shows only its pas
   // Unfollowing removes it.
   const filled = all.scene.controls.find((c) => c.id.startsWith(`star:${name}:`))!
   await p.event(cfg, t0, filled.id, "star")
-  assert.deepEqual(p.storage.get("favorites"), [])
+  assert.deepEqual(p.settings.get("favorites"), [])
 })
 
 test("paging moves through the passes and stops at the ends, and the buttons say so", async () => {

@@ -121,8 +121,9 @@ async function panel(favorites: string[] = []) {
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
       getLocation: () => null,
-      kvGet: (params) => (params.key === "favorites" && favorites.length ? favorites : null),
+      kvGet: () => null,
       kvSet: () => undefined,
+      getSettings: () => ({ extensions: favorites.length ? { "extension_km4be-satellite-info": { favorites } } : {} }),
       fetch: (params) => {
         const url = String(params.url)
         return url === LIST_URL

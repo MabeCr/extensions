@@ -11,7 +11,7 @@ import { findPasses, satrecFromOmm } from "./orbit.ts"
 import { linksFor, radioLines, RADIO_LINES } from "./radio.ts"
 import { forgetAll } from "./memory.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
-import { passOfOpen, openId } from "./scene.ts"
+import { passOfOpen, openId, rowOpenId } from "./scene.ts"
 import { compassLayers, skySvg, skyTrack, skyXY } from "./sky.ts"
 
 // No corrections: these tests are about the maths and the page, not about what we know of each bird.
@@ -132,6 +132,7 @@ test("open controls name their pass, whatever the satellite is called", () => {
   assert.deepEqual(passOfOpen(openId("X:Y", 99, 0)), { name: "X:Y", los: 99 })
   assert.equal(passOfOpen("star:AO-7:1"), null)
   assert.equal(passOfOpen(openId("", 0, 3)), null)
+  assert.deepEqual(passOfOpen(rowOpenId("X:Y", 99, 4)), { name: "X:Y", los: 99 })
 })
 
 // --- through the panel -------------------------------------------------------
@@ -181,6 +182,28 @@ async function panel(shown: unknown[] = []) {
       },
   }
 }
+
+test("the whole row is a button that opens its pass, as the chevron at its end does", async () => {
+  const p = await panel()
+  const list = await p.render(t0)
+  const rows = (list.controls as (Control & { kind?: string; label?: string; event?: string })[]).filter((c) => /^open:.*:row\d$/.test(c.id))
+  assert.equal(rows.length, 5)
+  const shown = rows.filter((c) => c.opacity !== 0)
+  assert.ok(shown.length > 0)
+  shown.forEach((c, i) => {
+    assert.equal(c.kind, "nativeButton")
+    assert.equal(c.event, "open")
+    assert.equal(c.label, list.strings[`row${i}`], "the button shows the row's text")
+    const chevron = list.controls.find((o) => o.id === c.id.replace(/row(\d)$/, "$1"))
+    assert.ok(chevron, "the chevron stays, as the cue that the row opens")
+    assert.deepEqual(passOfOpen(c.id), passOfOpen(chevron!.id))
+  })
+
+  assert.deepEqual(await p.event(t0, shown[0].id, "open"), { values: { utc: 0 } })
+  const sky = await p.render(t0)
+  assert.equal(sky.strings.tab, "sky")
+  assert.equal(sky.strings.title.split(" · ")[0], list.strings.row0.split(/ +/)[0])
+})
 
 test("tapping a row opens its pass: the Sky page, then Radio, then back to the list", async () => {
   const shown: unknown[] = []

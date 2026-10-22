@@ -96,8 +96,10 @@ export function satelliteOfStar(id: string): string | null {
 
 export const OPEN_PREFIX = "open:"
 
-/// Row `i`'s open-details control id: the pass it opens is named in it, as the star's satellite is.
-export const openId = (name: string, los: number, i: number): string => `${OPEN_PREFIX}${name}:${los}:${i}`
+/// Row `i`'s open-details control ids: the pass it opens is named in them, as the star's satellite is.
+/// The row's text and the chevron at its end both open it, so each has its own `slot`.
+export const openId = (name: string, los: number, slot: number | string): string => `${OPEN_PREFIX}${name}:${los}:${slot}`
+export const rowOpenId = (name: string, los: number, i: number): string => openId(name, los, `row${i}`)
 
 /// The pass an open control belongs to, or null when `id` is not one.
 export function passOfOpen(id: string): { name: string; los: number } | null {
@@ -110,7 +112,8 @@ export function passOfOpen(id: string): { name: string; los: number } | null {
 
 export const rowKey = (i: number): string => `row${i}`
 
-/// What the scene's text controls and choices hold.
+/// What the scene's text controls and choices hold. A row's text is shown as its button's label;
+/// `row0`… keep it too, as the text of the page's rows.
 export function stringsOf(m: Model): Record<string, string> {
   const strings: Record<string, string> = { mode: m.mode, header: m.header, hint: m.hint, range: m.range, columns: m.columns, legend: m.legend }
   slots(m).forEach((row, i) => {
@@ -159,7 +162,16 @@ export function buildScene(m: Model): PanelScene {
         // A blank slot keeps its place in the layout but takes no taps and is not read out.
         ...(blank ? { opacity: 0, disabled: true } : {}),
       },
-      { id: rowKey(i), kind: "nativeText", label: blank ? "No pass" : `Pass ${i + 1}`, value: rowKey(i), style: "mono" },
+      // The row's text is a button, so a tap anywhere on it opens the pass. A button binds no
+      // value, so its text is its label, which the render after every event brings up to date.
+      {
+        id: rowOpenId(row.name, row.los, i),
+        kind: "nativeButton",
+        label: blank ? "No pass" : row.text,
+        variant: "text",
+        event: "open",
+        ...(blank ? { opacity: 0, disabled: true } : {}),
+      },
       {
         id: openId(row.name, row.los, i),
         kind: "nativeButton",
@@ -187,7 +199,7 @@ export function buildScene(m: Model): PanelScene {
     // Indented past the star button and its gap, to stand over the text of the rows.
     { control: "columns", padding: [d.button + d.rowGap, 0, d.button + d.rowGap, 0] },
     ...rows.map((row, i): PanelSceneLayoutNode => ({
-      row: [{ control: starId(row.name, i), width: d.button }, { control: rowKey(i), flex: 1 }, { control: openId(row.name, row.los, i), width: d.button }],
+      row: [{ control: starId(row.name, i), width: d.button }, { control: rowOpenId(row.name, row.los, i), flex: 1 }, { control: openId(row.name, row.los, i), width: d.button }],
       spacing: d.rowGap,
       crossAxisAlignment: "center",
       ...(d.rowHeight ? { height: d.rowHeight } : {}),
