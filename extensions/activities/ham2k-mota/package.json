@@ -24,7 +24,7 @@
   ],
   "devDependencies": {
     "@ham2k/extension-sdk": "^0.12.13",
-    "@ham2k/extension-tools": "^0.14.0",
+    "@ham2k/extension-tools": "^0.15.0",
     "@ham2k/lib-callsigns": "^1.0.2",
     "@ham2k/lib-country-files": "^1.0.202605301",
     "@ham2k/lib-dxcc-data": "^1.0.1",
