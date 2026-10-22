@@ -14,6 +14,7 @@
 import type { PanelScene, PanelSceneControl, PanelSceneLayoutNode } from "@ham2k/extension-sdk"
 
 import type { DetailModel } from "./detail.ts"
+import type { Report } from "./report.ts"
 
 export const PAGE_SIZE = 5
 
@@ -245,28 +246,37 @@ export function detailStrings(d: DetailModel): Record<string, string> {
 
 export const detailValues = (d: DetailModel): Record<string, number> => ({ utc: d.utc ? 1 : 0 })
 
+/// The top of a pass's page, the same on all of its tabs: back, the title, the tabs and the UTC switch.
+function detailHead(compact: boolean): { controls: PanelSceneControl[]; head: PanelSceneLayoutNode[] } {
+  const dense = densityOf(compact)
+  return {
+    controls: [
+      { id: "back", kind: "nativeButton", label: "Back to the passes", icon: "arrow-left", variant: "text", event: "back" },
+      { id: "title", kind: "nativeText", label: "Pass", value: "title", style: "title" },
+      {
+        id: "tab",
+        kind: "nativeSegmented",
+        label: "Page",
+        value: "tab",
+        event: "tab",
+        options: [
+          { label: "Sky", value: "sky" },
+          { label: "Radio", value: "radio" },
+          { label: "Report", value: "report" },
+        ],
+      },
+      { id: "utc", kind: "nativeSwitch", label: "UTC", value: "utc", event: "utc" },
+    ],
+    head: [
+      { row: [{ control: "back", width: dense.button }, { control: "title", flex: 1 }], spacing: dense.rowGap, crossAxisAlignment: "center" },
+      { row: [{ control: "tab", flex: 1 }, { control: "utc" }], spacing: dense.gap, crossAxisAlignment: "center" },
+    ],
+  }
+}
+
 export function buildDetailScene(d: DetailModel): PanelScene {
-  const controls: PanelSceneControl[] = [
-    { id: "back", kind: "nativeButton", label: "Back to the passes", icon: "arrow-left", variant: "text", event: "back" },
-    { id: "title", kind: "nativeText", label: "Pass", value: "title", style: "title" },
-    {
-      id: "tab",
-      kind: "nativeSegmented",
-      label: "Page",
-      value: "tab",
-      event: "tab",
-      options: [
-        { label: "Sky", value: "sky" },
-        { label: "Radio", value: "radio" },
-      ],
-    },
-    { id: "utc", kind: "nativeSwitch", label: "UTC", value: "utc", event: "utc" },
-  ]
+  const { controls, head } = detailHead(d.compact)
   const dense = densityOf(d.compact)
-  const head: PanelSceneLayoutNode[] = [
-    { row: [{ control: "back", width: dense.button }, { control: "title", flex: 1 }], spacing: dense.rowGap, crossAxisAlignment: "center" },
-    { row: [{ control: "tab", flex: 1 }, { control: "utc" }], spacing: dense.gap, crossAxisAlignment: "center" },
-  ]
 
   if (d.tab === "sky") {
     d.times.forEach((_, i) => controls.push({ id: timeKey(i), kind: "nativeText", label: ["Rise", "Peak", "Set"][i] ?? "Time", value: timeKey(i), style: "mono" }))
@@ -308,6 +318,90 @@ export function buildDetailScene(d: DetailModel): PanelScene {
       ],
       padding: dense.padding,
       spacing: d.compact ? dense.rowGap : 4,
+      crossAxisAlignment: "stretch",
+    },
+  }
+}
+
+// --- Telling AMSAT what was heard ----------------------------------------------
+
+export interface ReportModel {
+  title: string
+  utc: boolean
+  compact: boolean
+  /// The transponders AMSAT's form offers for this satellite, as the form names them.
+  variants: { label: string; value: string }[]
+  variant: string
+  /// The kind of report chosen, or empty.
+  kind: string
+  call: string
+  grid: string
+  /// What is about to be sent, or why it cannot be.
+  summary: string
+  /// What happened to the last report, or empty.
+  message: string
+  /// Whether the report can be sent now.
+  ready: boolean
+  /// Whether the operator has asked to send and been asked to be sure.
+  confirming: boolean
+  /// What would be sent, when it can be.
+  report: Report | null
+}
+
+export const reportStrings = (r: ReportModel): Record<string, string> => ({
+  title: r.title,
+  tab: "report",
+  variant: r.variant,
+  kind: r.kind,
+  call: r.call,
+  grid: r.grid,
+  summary: r.summary,
+  message: r.message,
+})
+
+export const reportValues = (r: ReportModel): Record<string, number> => ({ utc: r.utc ? 1 : 0 })
+
+export function buildReportScene(r: ReportModel): PanelScene {
+  const { controls, head } = detailHead(r.compact)
+  const dense = densityOf(r.compact)
+  controls.push(
+    { id: "variant", kind: "nativeDropdown", label: "Transponder", value: "variant", event: "variant", options: r.variants },
+    {
+      id: "kind",
+      kind: "nativeSegmented",
+      label: "What you heard",
+      value: "kind",
+      event: "kind",
+      options: [
+        { label: "Heard", value: "heard" },
+        { label: "Telemetry", value: "telemetry" },
+        { label: "Not heard", value: "notHeard" },
+      ],
+    },
+    { id: "call", kind: "nativeTextField", label: "Your callsign", value: "call", event: "call", placeholder: "Callsign" },
+    { id: "grid", kind: "nativeTextField", label: "Your grid square (optional)", value: "grid", event: "grid", placeholder: "Grid square, optional" },
+    { id: "summary", kind: "nativeText", label: "What will be sent", value: "summary" },
+    { id: "message", kind: "nativeText", label: "Result", value: "message" },
+  )
+  const buttons: PanelSceneLayoutNode[] = r.confirming
+    ? (controls.push(
+        { id: "confirm", kind: "nativeButton", label: "Yes, send it", icon: "send", variant: "filled", event: "confirm" },
+        { id: "cancel", kind: "nativeButton", label: "Cancel", variant: "text", event: "cancel" },
+      ),
+      [{ row: [{ control: "cancel", flex: 1 }, { control: "confirm", flex: 1 }], spacing: dense.gap, crossAxisAlignment: "center" }])
+    : (controls.push({ id: "send", kind: "nativeButton", label: "Send to AMSAT", icon: "send", variant: "filled", event: "send", disabled: !r.ready }), [{ control: "send" }])
+  return {
+    version: 1,
+    width: 360,
+    height: 480,
+    values: reportValues(r),
+    strings: reportStrings(r),
+    layers: [],
+    controls,
+    layout: {
+      column: [...head, { control: "variant" }, { control: "kind" }, { control: "call" }, { control: "grid" }, { control: "summary" }, { control: "message" }, { spacer: 1 }, ...buttons],
+      padding: dense.padding,
+      spacing: dense.gap,
       crossAxisAlignment: "stretch",
     },
   }

@@ -202,6 +202,13 @@ export async function loadCatalog(ctx: HookContext, now: number): Promise<Catalo
   return catalog
 }
 
+/// Makes the copy of AMSAT's reports out of date, so the next read fetches them again: after an operator
+/// has sent one, so that it shows up in the marks as soon as AMSAT has it.
+export function expireStatus(): void {
+  for (const [key, copy] of memory) if (key.startsWith("status-")) memory.set(key, { ...copy, at: 0 })
+  failedAt.clear()
+}
+
 /// AMSAT's report summary for the last `hours`, kept ten minutes, and the last good copy if the
 /// fetch fails; empty when there is none at all. Reports come in a few an hour, so the panel's
 /// minute-by-minute redraws have no business asking for them that often.

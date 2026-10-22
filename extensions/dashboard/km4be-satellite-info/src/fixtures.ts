@@ -35,3 +35,17 @@ export const SUMMARY = {
   ],
   meta: { hours: 24, count: 8 },
 }
+
+/// The form's satellite menu, as amsat.org/status/ serves it (cut down).
+export const FORM = `<form method="post" action="submit.php">
+<select name="SatName">
+  <option value="">Select Satellite</option>
+        <option value="AO-123_[FM]">AO-123 [FM]</option>
+        <option value="AO-7_[U/v]">AO-7 [U/v]</option>
+        <option value="AO-7_[V/a]">AO-7 [V/a]</option>
+        <option value="FO-29_[V/u]">FO-29 [V/u]</option>
+        <option value="ISS_[FM]">ISS [FM]</option>
+        <option value="ISS_[SSTV]">ISS [SSTV]</option>
+        <option value="ISS_[UHF Digi]">ISS [UHF Digi]</option>
+</select>
+<select name="SatYear"><option value="2026" selected>2026</option></select>`

@@ -59,7 +59,7 @@ export function parseSummary(raw: unknown): StatusRow[] {
 /// Whether a variant is the one a satellite's own frequencies are for: an FM satellite's
 /// FM transponder, a linear one's linear. `ISS [SSTV]` being heard says nothing about
 /// whether the ISS FM repeater is on.
-function relevant(variant: string, modulation: string): boolean {
+export function isOwnVariant(variant: string, modulation: string): boolean {
   const v = variant.toLowerCase()
   if (modulation === "fm") return v === "fm"
   if (modulation === "linear") return /^[a-z]\/[a-z]$/.test(v) || v === "nb" || v === "wb"
@@ -73,7 +73,7 @@ function relevant(variant: string, modulation: string): boolean {
 export function statusFor(rows: StatusRow[], satellite: Pick<Satellite, "name" | "modulation" | "info">): Status | null {
   const names = (satellite.info.amsat ?? [satellite.name]).map((n) => n.toLowerCase())
   const named = rows.filter((r) => names.includes(r.satellite.toLowerCase()))
-  const own = named.filter((r) => relevant(r.variant, satellite.modulation))
+  const own = named.filter((r) => isOwnVariant(r.variant, satellite.modulation))
   const used = own.length ? own : named
   if (!used.length) return null
 
