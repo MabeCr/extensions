@@ -17,7 +17,8 @@ import type { DetailModel } from "./detail.ts"
 
 export const PAGE_SIZE = 5
 
-export type Mode = "favorites" | "all"
+import type { Mode } from "./favorites.ts"
+export type { Mode }
 
 /// The spacing of a scene, in logical pixels. The comfortable one is what the panel has always had
 /// and is what a desktop pane gets. The compact one is for a small pane, where every row of the
@@ -138,8 +139,8 @@ export function buildScene(m: Model): PanelScene {
       value: "mode",
       event: "mode",
       options: [
-        { label: "Favorites", value: "favorites" },
         { label: "All", value: "all" },
+        { label: "Favorites", value: "favorites" },
       ],
     },
     { id: "utc", kind: "nativeSwitch", label: "UTC", value: "utc", event: "utc" },

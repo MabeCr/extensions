@@ -1,8 +1,9 @@
 // Copyright ©️ 2026 km4be
 // SPDX-License-Identifier: MIT
 //
-// The satellites the operator follows, kept on the device so they outlast a
-// restart. Names are the catalog's own (`AO-7`), shared by every pane.
+// The satellites the operator follows, and whether the list shows All or only
+// Favorites, kept on the device so they outlast a restart. Names are the catalog's
+// own (`AO-7`), shared by every pane.
 //
 // They live in the extension's own settings group (`host.setSettings`), the one
 // durable store an extension has: `host.kvSet` is in memory only, so a list kept
@@ -14,10 +15,14 @@ import manifest from "../manifest.json" with { type: "json" }
 import { onForget } from "./memory.ts"
 
 const KEY = "favorites"
+const MODE_KEY = "mode"
 
-/// The list as last read or written: the settings are read once, and this copy is the
-/// answer after that, since nothing else writes it.
-let known: string[] | undefined
+/// Which satellites a list shows: every one, or only those followed.
+export type Mode = "favorites" | "all"
+
+/// What is kept, as last read or written: the settings are read once, and this copy is the
+/// answer after that, since nothing else writes them.
+let known: { favorites: string[]; mode: Mode } | undefined
 onForget(() => {
   known = undefined
 })
@@ -29,19 +34,41 @@ async function ownSettings(): Promise<Record<string, unknown> | undefined> {
   return extensions?.[`extension_${manifest.key}`] as Record<string, unknown> | undefined
 }
 
-export async function loadFavorites(): Promise<string[]> {
+async function load(): Promise<{ favorites: string[]; mode: Mode }> {
   if (known) return known
-  const stored = (await ownSettings())?.[KEY]
-  known = Array.isArray(stored) ? stored.filter((n): n is string => typeof n === "string") : []
+  const own = await ownSettings()
+  const stored = own?.[KEY]
+  known = {
+    favorites: Array.isArray(stored) ? stored.filter((n): n is string => typeof n === "string") : [],
+    // All unless the operator has chosen Favorites: that is what a new install starts on.
+    mode: own?.[MODE_KEY] === "favorites" ? "favorites" : "all",
+  }
   return known
+}
+
+export async function loadFavorites(): Promise<string[]> {
+  return (await load()).favorites
+}
+
+/// Which view the operator last chose, `all` when they never have.
+export async function loadMode(): Promise<Mode> {
+  return (await load()).mode
+}
+
+/// Remembers the view, for the next time the app is opened.
+export async function saveMode(mode: Mode): Promise<void> {
+  const current = await load()
+  if (current.mode === mode) return
+  known = { ...current, mode }
+  await host.setSettings({ [MODE_KEY]: mode })
 }
 
 /// Adds or removes `name`, and answers with the list as it now stands.
 export async function setFavorite(name: string, on: boolean): Promise<string[]> {
-  const current = await loadFavorites()
+  const { favorites: current, mode } = await load()
   const next = on ? (current.includes(name) ? current : [...current, name]) : current.filter((n) => n !== name)
   if (next.length !== current.length) {
-    known = next
+    known = { favorites: next, mode }
     await host.setSettings({ [KEY]: next })
   }
   return next

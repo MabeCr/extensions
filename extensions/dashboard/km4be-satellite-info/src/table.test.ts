@@ -123,7 +123,7 @@ async function panel(favorites: string[] = []) {
       getLocation: () => null,
       kvGet: () => null,
       kvSet: () => undefined,
-      getSettings: () => ({ extensions: favorites.length ? { "extension_km4be-satellite-info": { favorites } } : {} }),
+      getSettings: () => ({ extensions: favorites.length ? { "extension_km4be-satellite-info": { favorites, mode: "favorites" } } : {} }),
       fetch: (params) => {
         const url = String(params.url)
         return url === LIST_URL

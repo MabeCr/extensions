@@ -22,7 +22,7 @@ import { loadCatalog, loadStatus } from "./data.ts"
 import type { Satellite } from "./data.ts"
 import { buildDetail, themeOf } from "./detail.ts"
 import type { DetailModel, Tab } from "./detail.ts"
-import { loadFavorites, setFavorite } from "./favorites.ts"
+import { loadFavorites, loadMode, saveMode, setFavorite } from "./favorites.ts"
 import { findPlace } from "./location.ts"
 import type { Place } from "./location.ts"
 import { clock, minElevation, passCells, table, upcomingPasses } from "./passes.ts"
@@ -37,7 +37,8 @@ const REFRESH_SECONDS = 60
 
 interface PaneState {
   view: "list" | "detail"
-  mode: Mode
+  /// Not known until the stored choice has been read, which the first view of the pane does.
+  mode?: Mode
   page: number
   utc: boolean
   /// The pass the detail view shows: its satellite and when it ends.
@@ -49,7 +50,7 @@ const panes = new Map<string, PaneState>()
 const paneState = (args: PanelRenderArgs): PaneState => {
   const id = args.instanceId ?? args.panelKey
   let state = panes.get(id)
-  if (!state) panes.set(id, (state = { view: "list", mode: "favorites", page: 0, utc: args.config?.utc === true }))
+  if (!state) panes.set(id, (state = { view: "list", page: 0, utc: args.config?.utc === true }))
   return state
 }
 
@@ -62,7 +63,7 @@ const empty = (header: string, state: PaneState, compact = false): Model => ({
   header,
   compact,
   hint: "",
-  mode: state.mode,
+  mode: state.mode ?? "all",
   utc: state.utc,
   page: 0,
   pageCount: 1,
@@ -105,9 +106,9 @@ const glyphFor = (r: Ready, satellite: Satellite): string => {
 }
 
 function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, compact: boolean): Model {
-  // With nobody followed, Favorites would be an empty page; show everything and say how to change that.
+  const mode = state.mode ?? "all"
   const followed = r.favorites.length > 0
-  const showing = state.mode === "all" || !followed ? r.passes : r.passes.filter((p) => r.favorites.includes(p.satellite.name))
+  const showing = mode === "all" ? r.passes : r.passes.filter((p) => r.favorites.includes(p.satellite.name))
   const pageCount = Math.max(1, Math.ceil(showing.length / PAGE_SIZE))
   state.page = Math.min(Math.max(0, state.page), pageCount - 1)
   const first = state.page * PAGE_SIZE
@@ -127,20 +128,15 @@ function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, co
   }))
 
   const tracked = r.satellites.filter((s) => s.omm).length
+  // Favorites with nobody followed is an empty page, so it says how to fill it, rather than showing everything.
   let hint = `No passes of ${r.minEl}° or more in the next 24 hours.`
-  if (showing.length) {
-    hint =
-      state.mode === "favorites" && !followed
-        ? compact
-          ? "No favorites yet: all are shown. Tap a star."
-          : "No favorites yet, so every satellite is shown. Tap a star to follow one."
-        : `Orbits from CelesTrak, ${clock(r.elementsAt, now, state.utc)}.`
-  }
+  if (mode === "favorites" && !followed) hint = compact ? "Add favorites on All, with a star, to see them here." : "Add some favorites to see them here: tap a star on the All page."
+  else if (showing.length) hint = `Orbits from CelesTrak, ${clock(r.elementsAt, now, state.utc)}.`
 
   return {
     header: `${r.place.grid} · min ${r.minEl}° · ${tracked} of ${r.satellites.length} satellites tracked`,
     hint,
-    mode: state.mode,
+    mode,
     utc: state.utc,
     page: state.page,
     pageCount,
@@ -159,6 +155,8 @@ type View = { kind: "list"; model: Model } | { kind: "detail"; model: DetailMode
 async function snapshot(args: PanelRenderArgs, ctx: HookContext): Promise<View> {
   const state = paneState(args)
   const now = nowMillis(args)
+  // A pane opens on what the operator last chose, All if they never have.
+  if (state.mode === undefined) state.mode = await loadMode()
   const ready = await gather(args, ctx)
   if (typeof ready === "string") return { kind: "list", model: empty(ready, state, isCompact(args.config, args.environment)) }
 
@@ -290,6 +288,7 @@ export const PassesPanel: PanelHook = {
     if (event.action === "mode" && (event.text === "favorites" || event.text === "all")) {
       state.mode = event.text
       state.page = 0
+      await saveMode(event.text)
     }
     if (event.action === "utc" && event.value !== undefined) state.utc = event.value === 1
     if (event.action === "prev") state.page -= 1
