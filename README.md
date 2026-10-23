@@ -13,11 +13,13 @@ Three kinds of thing live here. The **QSO parties**: the app carries one `qp`
 extension holding all fifty, and this repository publishes them **one event per
 extension**, so an operator installs the Texas QSO Party and gets the Texas QSO
 Party. **Catalog copies of the app's own built-ins**, so that each can ship
-and update without an app release — see **Porting a built-in**. And **three spotting
-sources the app never shipped**, under the `ki2d-` callsign prefix a third
-party's extension takes: the QSO Party Hub and APRS Tracker feeds that
-app-polo's `qp` extension carried inside it, an APRS position beacon, and
-Discord channel webhooks.
+and update without an app release — see **Porting a built-in**. And
+**extensions the app never shipped**: new activity programs, contests and
+state-park events, the DX cluster's spots, dashboard panels, and three
+spotting sources under the `ki2d-` callsign prefix a third party's extension
+takes — the QSO Party Hub and APRS Tracker feeds that app-polo's `qp`
+extension carried inside it, an APRS position beacon, and Discord channel
+webhooks.
 
 ## What is here
 
@@ -206,7 +208,7 @@ saying publishes to `stable`.
     own files. Edit a fixture and re-run the generator; never edit a module.
     Its `./identities` export is the slim view of all fifty — name, ref type,
     states, the APRS token and the tracker and hub pages, no counties — for
-    the two spotting extensions that need every party at once, plus the two
+    the three spotting extensions that need every party at once, plus the two
     readers they share: which party an operation is in (its own ref type, or
     the bundled `qp` pair by longest prefix) and which counties its ref names.
   - `@ham2k/lib-vhf-contests` — what the IARU R1 and RSGB VHF+ contest
@@ -291,7 +293,7 @@ What each category actually is, with the worked example to read first:
 | `activity` | `activity` (from `referenceActivity`), `ref:<type>` per reference it publishes a control for, `export`/`adifFields` (`activityExportHook`, `huntingExportHook`), usually `dataFile`, `spots`, `scoring`, `adifImport` | `activities/ham2k-pota` |
 | `contest` | `activity`, one `ref:<type>`, `scoring` (`contestScorer`), `export` + `adifFields` — Cabrillo through `@ham2k/lib-qson-cabrillo` | `contests/ham2k-cqww`, or `contests/ham2k-txqp` for a generated event |
 | `lookup` | `lookup`, or `recentContextLookup` for one that only reads what the app already has; plus `account` for a service with a login, `dataFile` for one with a downloadable list, `settingsPanel`, `command`, `callNotes` | `lookups/ham2k-call-history` (one hook), `lookups/ham2k-qrz` (an account and a network service) |
-| `spots` | `spots`, plus `account` where the service wants a login | `spots/ham2k-parksnpeaks` |
+| `spots` | `spots`, plus `account` where the service wants a login, and `cluster` for one reading the DX cluster's lines as they arrive | `spots/ham2k-parksnpeaks`, or `spots/ham2k-cluster-spots` for the cluster |
 | `dashboard` | `panel` — a pane the operator adds to a dock, with per-pane config the host persists | `dashboard/ham2k-custom-text` |
 
 Then: `npm install` (a new workspace has to reach the root lock), `npm test`,
@@ -545,9 +547,13 @@ below.
 
 ## Bundle sizes, and why they are what they are
 
-Built as they are today, unminified, through the same preset the app's own
-extensions use. The last column is what the app ships those same extensions as,
-in `app/assets/extensions/*.js`:
+Measured on 2026-09-08, against extension SDK 0.2.0, unminified, through the
+same preset the app's own extensions use. The last column is what the app
+shipped those same extensions as then, in `app/assets/extensions/*.js`. The
+ported built-ins numbered 40 then: `stateparks` has since been split into the
+Texas, Florida, Georgia and Ohio events, which are new rather than ported, and
+the SDK each bundle carries a slice of has grown since. Treat the numbers as the shape of
+the cost, not as today's bytes:
 
 | category | n | `index.js` | `.h2kext` | the app's own |
 |---|--:|---:|---:|---:|

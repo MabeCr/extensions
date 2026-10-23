@@ -1,7 +1,8 @@
 # Dashboard extensions
 
-`ham2k-custom-text` provides the text panel. The SVG reference panels
-live here rather than being bundled into HaLo:
+`ham2k-custom-text` provides the text panel. The `ki2d-` panels live here
+rather than being bundled into HaLo — three SVG reference panels, and a rate
+chart and a band map drawn as the app's native panel scenes:
 
 - `ki2d-weather-panel`: forecast, hourly inspection and weather icons.
 - `ki2d-solar-panel`: solar conditions, propagation, MUF and foF2 from the
