@@ -16,8 +16,8 @@
     "@ham2k/lib-panel-themes": "^0.1.0"
   },
   "devDependencies": {
-    "@ham2k/extension-sdk": "^0.12.0",
-    "@ham2k/extension-tools": "^0.15.0",
+    "@ham2k/extension-sdk": "^1.12.0",
+    "@ham2k/extension-tools": "^1.12.0",
     "esbuild": "^0.25.5",
     "@ham2k/lib-geo-tools": "^1.0.0"
   },

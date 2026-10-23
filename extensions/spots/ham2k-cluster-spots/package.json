@@ -24,8 +24,8 @@
     "extension-tools 0.13.0 is the first packer that takes an API 10 manifest."
   ],
   "devDependencies": {
-    "@ham2k/extension-sdk": "^0.12.12",
-    "@ham2k/extension-tools": "^0.15.0",
+    "@ham2k/extension-sdk": "^1.12.0",
+    "@ham2k/extension-tools": "^1.12.0",
     "esbuild": "^0.25.5"
   },
   "engines": {
