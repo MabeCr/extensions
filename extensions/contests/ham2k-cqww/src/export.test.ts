@@ -173,4 +173,10 @@ test("the Cabrillo header carries the declared entry and our LOCATION", async ()
   // Hawaii is in the US: its ARRL section, as typed, never DX.
   assert.deepEqual(await header({ uuid: 'op-5', stationCall: 'KH6ABC', refs: [{ type: 'cqww', mode: 'CW', qth: 'pac' }] }), ['LOCATION: PAC', 'CATEGORY-MODE: CW'])
   assert.deepEqual(await header({ uuid: 'op-6', stationCall: 'KH6ABC', refs: [{ type: 'cqww', mode: 'CW' }] }), ['CATEGORY-MODE: CW'])
+  // A Canadian area in the rules' spelling goes out as the sponsor's
+  // location list spells it, Labrador as part of NL.
+  assert.deepEqual(await header({ uuid: 'op-7', stationCall: 'VE8ABC', refs: [{ type: 'cqww', mode: 'CW', qth: 'nwt' }] }), ['LOCATION: NT', 'CATEGORY-MODE: CW'])
+  assert.deepEqual(await header({ uuid: 'op-8', stationCall: 'VY2ABC', refs: [{ type: 'cqww', mode: 'CW', qth: 'PEI' }] }), ['LOCATION: PE', 'CATEGORY-MODE: CW'])
+  assert.deepEqual(await header({ uuid: 'op-9', stationCall: 'VO1ABC', refs: [{ type: 'cqww', mode: 'CW', qth: 'NF' }] }), ['LOCATION: NL', 'CATEGORY-MODE: CW'])
+  assert.deepEqual(await header({ uuid: 'op-10', stationCall: 'VO2ABC', refs: [{ type: 'cqww', mode: 'CW' }] }), ['LOCATION: NL', 'CATEGORY-MODE: CW'])
 })

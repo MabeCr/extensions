@@ -81,15 +81,22 @@ export function guessedQth(their: Record<string, JSONValue>): string {
 /// and the Virgin Islands included — where everyone else puts `DX`.
 const HAS_A_SECTION = ['K', 'VE', 'KL', 'KH6', 'KP4', 'KP2']
 
+/// The rules' spellings of the Canadian call areas the sponsor's list of
+/// accepted locations spells differently. That list has no Labrador of its
+/// own: it is part of NL.
+const LOCATION_ALIASES: Record<string, string> = { NWT: 'NT', NF: 'NL', LB: 'NL', PEI: 'PE' }
+
 /// The Cabrillo LOCATION for [call]: what was typed at setup, as typed — the
 /// sponsor also accepts an ARRL section here, which the exchange's QTH does
 /// not — else a Canadian call area, else `DX` for a station outside the US
 /// and Canada. Blank for a US station that set none: claiming `DX` for it
-/// would be wrong, and the line is better left out.
+/// would be wrong, and the line is better left out. A Canadian area is
+/// spelled as the sponsor's location list spells it.
 export function cabrilloLocation(call: string, typed: JSONValue | undefined): string {
   const own = str(typed).toUpperCase().replace(/[^A-Z]/g, '')
-  if (own) return own
+  if (own) return LOCATION_ALIASES[own] ?? own
   if (!call) return ''
   const entity = str(annotateCallAgainstCountryFile(call, { wae: true }).entityPrefix)
-  return HAS_A_SECTION.includes(entity) ? guessedQth({ call }) : 'DX'
+  const location = HAS_A_SECTION.includes(entity) ? guessedQth({ call }) : 'DX'
+  return LOCATION_ALIASES[location] ?? location
 }
