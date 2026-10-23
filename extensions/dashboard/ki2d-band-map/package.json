@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-ki2d-band-map",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "The spots on a band, laid out along its frequencies",
   "author": "Sebastian Delmont <sd@ham2k.com>",

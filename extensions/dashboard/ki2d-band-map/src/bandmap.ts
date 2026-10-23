@@ -5,8 +5,7 @@
 // to top, as a vertical panadapter does), horizontal in a wide one. Where the radio's scope is on
 // the band shown, the line spans the scope's window instead of the band, and the host draws the
 // panadapter behind the labels.
-import type { HookContext, PanelEnvironment, PanelHook, PanelRadioResult, PanelRadioSet, PanelRadioSpectrumSet, PanelRadioState, PanelScene } from '@ham2k/extension-sdk'
-import type { DisplayedSpot, Scene, SceneControl as Control, SceneLayer as Layer, SuggestedQso } from './sdkGap.ts'
+import type { BoardSpot, HookContext, PanelEnvironment, PanelHook, PanelRadioResult, PanelRadioSet, PanelRadioSpectrumSet, PanelRadioState, PanelScene, PanelSceneControl as Control, PanelSceneLayer as Layer, SuggestedQso } from '@ham2k/extension-sdk'
 import { bandEdges, bandForKHz, bands, radioModeFor } from './bands.ts'
 import { freqParts, hzDigitsNeeded, type FreqParts } from './frequency.ts'
 import { columns, lanes, tickStep } from './layout.ts'
@@ -61,7 +60,7 @@ export type MapSpot = {
 }
 
 
-export function mapSpots(board: DisplayedSpot[], nowMillis: number, [lo, hi]: [number, number]): MapSpot[] {
+export function mapSpots(board: BoardSpot[], nowMillis: number, [lo, hi]: [number, number]): MapSpot[] {
   const seen = new Set<string>()
   const spots: MapSpot[] = []
   for (const s of board) {
@@ -122,7 +121,7 @@ export type MapView = {
   scroll?: { factor: number; offset?: number; follow: boolean; centerOn?: number; stretch: { min: number; max: number } }
 }
 
-export function bandMapScene(e: PanelEnvironment, view: MapView, t: typeof en): { scene: Scene; placed: Placed[]; offset?: number; centerKHz?: number } {
+export function bandMapScene(e: PanelEnvironment, view: MapView, t: typeof en): { scene: PanelScene; placed: Placed[]; offset?: number; centerKHz?: number } {
   const c = e.colors
   const paneWidth = Math.max(1, Math.min(8192, e.width)), paneHeight = Math.max(1, Math.min(8192, e.height))
   const vertical = paneHeight > paneWidth
@@ -463,8 +462,7 @@ export function createBandMap(host: BandMapHost): PanelHook {
       if (scroll) Object.assign(viewOf(key), { offset, center: centerKHz, radioKHz, recenter: undefined })
       placements.set(key, { placed, scoped: !!scope, zoom, operationUuid: typeof args.operation.uuid === 'string' ? args.operation.uuid : undefined })
       if (placements.size > 64) placements.delete(placements.keys().next().value!)
-      // An API 12 scene, which the published SDK's `PanelScene` does not describe yet (sdkGap.ts).
-      return { kind: 'scene', title: t.mapTitle(band), scene: scene as unknown as PanelScene }
+      return { kind: 'scene', title: t.mapTitle(band), scene }
     },
     async onEvent(args) {
       const { event } = args

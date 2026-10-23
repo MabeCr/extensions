@@ -3,7 +3,6 @@
 import { defineExtension, host } from '@ham2k/extension-sdk'
 import manifest from '../manifest.json'
 import { createBandMap } from './bandmap.ts'
-import { suggestQsoThrough } from './sdkGap.ts'
-defineExtension({ ...manifest, onActivation({ registerHook, hostCall }) {
-  registerHook('panel', { key: manifest.key, hook: createBandMap({ ...host, suggestQso: suggestQsoThrough(hostCall) }) })
+defineExtension({ ...manifest, onActivation({ registerHook }) {
+  registerHook('panel', { key: manifest.key, hook: createBandMap(host) })
 } })
