@@ -258,7 +258,7 @@ extensions/<category>/<key>/
 ```
 
 Copy them from the nearest sibling rather than typing them; only `manifest.json`
-and `src/` differ between two extensions in the same category. Three rules bind
+and `src/` differ between two extensions in the same category. Four rules bind
 everywhere, and `bundles.test.ts` enforces each:
 
 - **The directory is the category and the key.** `activity` lives in
@@ -273,6 +273,16 @@ everywhere, and `bundles.test.ts` enforces each:
   see step 7 of **Porting a built-in** for why.
 - **Every registration key is `manifest.key` or `` `${manifest.key}-…` ``**, and
   written as `manifest.key` rather than a literal so it cannot drift.
+- **All of an extension's settings are one panel, in the Settings section that
+  fits its main purpose** — `activities`, `hunting`, `contests`, `lookups`,
+  `spotting` or `dashboard`, or where it tunes something the app already has,
+  `logging`, `radio` (CAT Control), `map` or `exports`. The manifest declares
+  it (`"settings": { "section": "activities" }`), which is what the catalog
+  reviews and the app places the panel by, and the panel names it again with
+  `sidebar: false`, for an app older than the manifest field. A category of
+  its own, a sidebar entry or Common Preferences rows each take an admin's
+  review on the catalog; see the app's `docs/extensions/settings.md`, *Where
+  an extension's settings go*.
 
 What each category actually is, with the worked example to read first:
 

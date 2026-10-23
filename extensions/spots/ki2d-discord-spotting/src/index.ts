@@ -36,11 +36,6 @@ import manifest from "../manifest.json" with { type: "json" }
 /// same answer as sent.
 type SkippablePostResult = PostResult & { skipped?: boolean }
 
-/// `section` is newer than the SDK this builds against: an app that has it
-/// shows the panel as one row in its Spotting section, one that predates it
-/// as a section of its own.
-type PlacedPanelDescriptor = SettingsPanelDescriptor & { section?: string }
-
 /// `itemSwitch` is newer than the SDK this builds against: an app that has it
 /// puts each channel's on/off switch on its row. One that predates it shows
 /// none, and every channel stays on.
@@ -144,8 +139,10 @@ const URL_FIELD = /^webhooks\[\d+\]\.url$/
 const SettingsPanel: DynamicSettingsPanel = {
   kind: 'dynamic',
 
-  async getPanels(_args: Record<string, never>, ctx: HookContext): Promise<PlacedPanelDescriptor[]> {
-    return [{ key: manifest.key, title: tFor(ctx)('settingsTitle'), icon: manifest.icon, section: 'spotting' }]
+  // One row in Settings' Spotting section, as the manifest's `settings`
+  // declares; an app older than `section` shows it as a section of its own.
+  async getPanels(_args: Record<string, never>, ctx: HookContext): Promise<SettingsPanelDescriptor[]> {
+    return [{ key: manifest.key, title: tFor(ctx)('settingsTitle'), icon: manifest.icon, sidebar: false, section: 'spotting' }]
   },
 
   async getDefinition(_args: { panelKey: string }, ctx: HookContext): Promise<FormDefinition> {

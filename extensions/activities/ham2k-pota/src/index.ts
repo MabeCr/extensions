@@ -706,13 +706,14 @@ function simplifyStates(locationDesc: string): string {
   return states.length > 1 ? `${oneState}+${states.length - 1}` : (oneState ?? '')
 }
 
-/// Exists only to carry the developer switch to the test servers: out of the
-/// sidebar, its one field `devMode`, and targeted at the Developer panel.
+/// Exists only to carry the developer switch to the test servers: a row in
+/// Settings' Activities section (as the manifest's `settings` declares), its
+/// one field `devMode`, and targeted at the Developer panel.
 const SettingsPanel: DynamicSettingsPanel = {
   kind: 'dynamic',
 
   async getPanels(_args: Record<string, never>, _ctx: HookContext): Promise<SettingsPanelDescriptor[]> {
-    return [{ key: manifest.key, title: manifest.shortName, icon: manifest.icon, sidebar: false }]
+    return [{ key: manifest.key, title: manifest.shortName, icon: manifest.icon, sidebar: false, section: 'activities' }]
   },
 
   async getDefinition(_args: { panelKey: string }, ctx: HookContext): Promise<FormDefinition> {

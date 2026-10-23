@@ -2,7 +2,7 @@
   "key": "ki2d-discord-spotting",
   "name": "KI2D’s Discord Spotting",
   "shortName": "Discord",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "api": 1,
   "description": "Self-spots go to your Discord channels too — one webhook per channel, each with its own message template",
   "category": "spots",
@@ -21,6 +21,9 @@
     "settingsPanel",
     "spots"
   ],
+  "settings": {
+    "section": "spotting"
+  },
   "domains": [
     "discord.com",
     "ptb.discord.com",

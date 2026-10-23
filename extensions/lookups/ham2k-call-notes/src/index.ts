@@ -254,12 +254,13 @@ const ExpandCommand = {
 const SettingsPanel: DynamicSettingsPanel = {
   kind: 'dynamic',
 
-  // Declares the title upfront (and keeps this panel out of the app's
-  // top-level settings nav — it's reached from the Data Files screen
-  // instead) without waiting on getDefinition, which the host would
-  // otherwise have to fetch just to know what to call the panel/row.
+  // Declares the title upfront without waiting on getDefinition, which the
+  // host would otherwise have to fetch just to know what to call the
+  // panel/row. A row in Settings' Lookups section (as the manifest's
+  // `settings` declares) and one in the Data Files screen, and no sidebar
+  // entry.
   async getPanels(_args: Record<string, never>, ctx: HookContext): Promise<SettingsPanelDescriptor[]> {
-    return [{ key: manifest.key, title: tFor(ctx)('settingsTitle'), sidebar: false, dataFilesSection: true }]
+    return [{ key: manifest.key, title: tFor(ctx)('settingsTitle'), sidebar: false, dataFilesSection: true, section: 'lookups' }]
   },
 
   async getDefinition(_args: { panelKey: string }, ctx: HookContext): Promise<FormDefinition> {
