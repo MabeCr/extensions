@@ -1,0 +1,42 @@
+{
+  "key": "ham2k-dxcc",
+  "name": "DXCC",
+  "shortName": "DXCC",
+  "version": "0.1.0",
+  "description": "Chase ARRL's DXCC: the entities you have worked, confirmed and had credited, in each mode and on each band, and your DXCC Challenge total",
+  "category": "award",
+  "icon": "earth",
+  "accentColor": "#2e7d32",
+  "api": 9,
+  "keywords": [
+    "dxcc",
+    "dx",
+    "entities",
+    "atno",
+    "challenge",
+    "award",
+    "arrl"
+  ],
+  "hooks": [
+    "chasing"
+  ],
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  },
+  "translations": {
+    "es": {
+      "description": "Persigue el DXCC de ARRL: las entidades trabajadas, confirmadas y acreditadas, en cada modo y en cada banda, y tu total del DXCC Challenge",
+      "keywords": [
+        "entidades",
+        "diploma"
+      ]
+    }
+  }
+}

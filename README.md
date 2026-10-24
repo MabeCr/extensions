@@ -23,22 +23,22 @@ webhooks.
 
 ## What is here
 
-106 extensions, grouped by the manifest's own `category`:
+107 extensions, grouped by the manifest's own `category`:
 
 | directory | manifest `category` | n | of which |
 |---|---|--:|---|
 | `extensions/activities/` | `activity` | 20 | 18 ported built-ins, 2 new programs |
 | `extensions/contests/` | `contest` | 69 | 14 ported built-ins, 1 new contest, 49 QSO party events, 5 park events |
-| `extensions/awards/` | `award` | 1 | 1 new award checklist |
+| `extensions/awards/` | `award` | 2 | 2 new award checklists |
 | `extensions/lookups/` | `lookup` | 5 | 5 ported built-ins |
 | `extensions/spots/` | `spots` | 5 | 1 ported built-in, 4 new spotting sources |
 | `extensions/dashboard/` | `dashboard` | 6 | 1 ported built-in, 2 new panels, 3 SVG reference panels |
-| **total** | | **106** | **39 ported, 64 new, 3 SVG reference panels** |
+| **total** | | **107** | **39 ported, 65 new, 3 SVG reference panels** |
 
-The 39 are the app's own extensions, ported one for one. The 64 are new: a
+The 39 are the app's own extensions, ported one for one. The 65 are new: a
 contest and events the app has never shipped separately, five state-park
-events, four spotting sources, two award programs, a Worked All States
-checklist, a rate chart and a band map:
+events, four spotting sources, two award programs, Worked All States and
+DXCC checklists, a rate chart and a band map:
 
 - **`ham2k-hota`** — [History on the Air](https://cqhota.app), historic sites
   over 200 years old, written for the catalog from cqhota.app's own
@@ -82,6 +82,19 @@ checklist, a rate chart and a band map:
   same way as HOTA's. Each weekend's dates are computed (`src/schedule.ts`), so
   only the manifest's `relevance.dates` need moving each year, and a test
   checks them against the schedule.
+
+- **`ham2k-dxcc`** — ARRL's [DXCC](https://www.arrl.org/dxcc) as a chasing
+  program: Mixed ("DXCC ATNO"), the three mode groups ("DXCC in CW") and
+  every band ("DXCC in 80m"). The DXCC Challenge is a second tally over the
+  same checklist, the band slots on 160–6m without 60m. It is meant to
+  replace the app's core `dxcc` program, which still runs beside it until the
+  app retires it. It keeps that program's holders (`KI2D@291`, the call
+  worked from one entity), and reads credit from `credits.dxcc`, the key the
+  ADIF import writes: that is log data, and does not follow the program key.
+  The program words its own notices (`program.notices`, `modeLabels`, from
+  its i18n catalogs), which the published SDK does not type yet
+  (`src/sdkGap.ts`); an app that does not read them words the verdicts its
+  own way ("New DXCC mode").
 
 - **`ki2d-qso-party-spots`** reads the [QSO Party Hub](http://qsopartyhub.com)
   and the [QSO Party APRS Tracker](https://mobiletracker.stateqso.com) for
