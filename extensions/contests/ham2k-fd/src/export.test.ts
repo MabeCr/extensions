@@ -112,3 +112,21 @@ test("an exportType it never offered is declined, not delegated", async () => {
   assert.equal(result.content, '')
   assert.equal(delegated.length, 0)
 })
+
+test("the Cabrillo header lists the operators declared at setup, else the app's operator", async () => {
+  const cabrillo = async (operation: Record<string, unknown>) =>
+    ((await contest.runHook('export', 'generateExport', { operation, qsos: QSOS, exportType: 'fd-cabrillo' })) as { content: string }).content
+  const ref = { type: 'fd', ref: '2026', ourClass: '2A', ourSection: 'ENY' }
+
+  const group = await cabrillo({
+    ...OPERATION,
+    local: { operatorCall: 'N0DEV' },
+    refs: [{ ...ref, operators: 'k1abc, w2def', club: '  Hudson   Valley Field Day Group ' }],
+  })
+  assert.ok(group.includes('\nOPERATORS: K1ABC W2DEF\n'))
+  assert.ok(group.includes('\nCLUB: Hudson Valley Field Day Group\n'))
+
+  const solo = await cabrillo({ ...OPERATION, local: { operatorCall: 'N0DEV' }, refs: [ref] })
+  assert.ok(solo.includes('\nOPERATORS: N0DEV\n'))
+  assert.ok(!solo.includes('\nCLUB:'))
+})

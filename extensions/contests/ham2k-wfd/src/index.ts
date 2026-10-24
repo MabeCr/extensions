@@ -3,8 +3,9 @@
 //
 // Winter Field Day — the exchange, the setup, and the one export.
 //
-// ADIF alone, unlike `fd`: the organizers ask entrants not to submit
-// Cabrillo, so there is no Cabrillo option to offer.
+// ADIF alone, unlike `fd`: the organizers' upload form asks for every entry
+// detail itself and ignores the Cabrillo header, so a log needs only the
+// QSOs, and the ADIF export already carries the class and section.
 //
 // A near-duplicate of `fd` by choice, not by accident: see `scorer.ts`.
 //
@@ -407,8 +408,8 @@ const ExportHook = {
   },
 
   async generateExport(args: ExportRequest, _ctx: HookContext): Promise<ExportResult> {
-    // ADIF only: Winter Field Day asks entrants NOT to submit Cabrillo, so
-    // offering it by default would hand over a file the organizers reject.
+    // ADIF only: Winter Field Day takes a Cabrillo file too, but reads only
+    // its QSO lines, which the ADIF export carries in full.
     if (args.exportType !== `${TYPE}-adif`) {
       return { filename: '', mimeType: '', content: '' }
     }

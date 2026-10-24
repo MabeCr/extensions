@@ -14,7 +14,7 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
-import { adifForExport, annotateCallAgainstCountryFile, contestScorer, defineExtension, exportFilename, startMillisOf } from "@ham2k/extension-sdk"
+import { adifForExport, annotateCallAgainstCountryFile, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
   ExportOption,
@@ -30,8 +30,10 @@ import type {
 } from "@ham2k/extension-sdk"
 
 import { tFor } from "./i18n.ts"
+import { cabrilloLocation, normalizeSection } from "./location.ts"
 import { nextContestDate, relevanceFor } from "./schedule.ts"
 import { EXCHANGE_PATTERN, IARUHFScorer, contestTitle, normalizeZone, ourExchange } from "./scorer.ts"
+import { OPERATOR_CLASSES, OVERLAY_CLASSES, POWER_CLASSES, cabrilloCategories, declaredClub, declaredOperators } from "./entry.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
 
@@ -62,6 +64,53 @@ function guessedZoneFor(their: Record<string, JSONValue>): string {
     normalizeZone(guess.ituZone) ||
     (call ? normalizeZone(annotateCallAgainstCountryFile(call).ituZone) : '')
   )
+}
+
+/// Our section from the operator's profile, for the setup form's `value`.
+/// STICKY ON FAILURE, as in `arrl-ss`: the form re-applies a field's value
+/// whenever it is rebuilt, so a host that answers once and then fails must not
+/// blank the field in front of the operator.
+let lastKnownSection = ''
+
+async function ourSectionDefault(): Promise<string> {
+  try {
+    const settings = (await host.getSettings()) as Record<string, JSONValue> | undefined
+    lastKnownSection = normalizeSection(settings?.operatorSection)
+  } catch (e) {
+    console.warn(`[iaru-hf] profile settings unavailable, keeping the last section read:`, e)
+  }
+  return lastKnownSection
+}
+
+/// The operator's name, email and club from their profile, for the Cabrillo
+/// header. All optional and free-form in the profile, so each may be ''. A
+/// host that cannot answer costs these lines, never the log itself.
+async function profileDetails(): Promise<{ name: string; email: string; club: string }> {
+  try {
+    const settings = (await host.getSettings()) as Record<string, JSONValue> | undefined
+    const line = (value: JSONValue | undefined) => str(value).replace(/\s+/g, ' ').trim()
+    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail), club: line(settings?.operatorClub) }
+  } catch (e) {
+    console.warn(`[iaru-hf] profile settings unavailable, exporting without name, email and profile club:`, e)
+    return { name: '', email: '', club: '' }
+  }
+}
+
+/// One select per axis of the entry, "Not declared" first.
+function entrySelects(t: (key: string) => string) {
+  const select = (key: string, options: readonly string[]) => ({
+    type: 'field' as const,
+    fieldType: 'select' as const,
+    key,
+    label: t(`${key}Label`),
+    value: '',
+    options: [{ value: '', label: t('notDeclared') }, ...options.map((value) => ({ value, label: t(`${key}_${value}`) }))],
+  })
+  return [
+    select('operator', OPERATOR_CLASSES),
+    select('power', POWER_CLASSES),
+    select('overlay', OVERLAY_CLASSES),
+  ]
 }
 
 const ActivityHook = {
@@ -177,6 +226,35 @@ const ActivityHook = {
                   { value: 'R3', label: 'R3' },
                 ],
                 visibleWhen: { field: 'stationType', equals: 'official' },
+              },
+              // The entry we are making, for the Cabrillo header, alongside
+              // the mode restriction and station type above. Each starts
+              // undeclared: see entry.ts.
+              ...entrySelects(t),
+              // For the Cabrillo LOCATION, US and Canadian stations only.
+              {
+                type: 'field',
+                fieldType: 'text',
+                key: 'section',
+                label: t('ourSectionLabel'),
+                placeholder: t('ourSectionPlaceholder'),
+                uppercase: true,
+                value: await ourSectionDefault(),
+              },
+              {
+                type: 'field',
+                fieldType: 'text',
+                key: 'operators',
+                label: t('operatorsLabel'),
+                placeholder: t('operatorsPlaceholder'),
+                uppercase: true,
+              },
+              {
+                type: 'field',
+                fieldType: 'text',
+                key: 'club',
+                label: t('clubLabel'),
+                placeholder: t('clubPlaceholder'),
               },
               // Markdown rather than a `link` element: a link renders dead from a
               // setup form, which has no link handler wired to it.
@@ -408,12 +486,22 @@ const ExportHook = {
     const sent = ourExchange(operation, opRef)
 
     if (args.exportType === `${TYPE}-cabrillo`) {
+      const profile = await profileDetails()
       const content = qsonToCabrillo(args.qsos, {
         headers: [
           ['CONTEST', 'IARU-HF'],
           ['CALLSIGN', ourCall],
-          ['OPERATORS', str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          // The calls listed at setup — required for a multi-operator entry —
+          // else the app's own operator call.
+          ['OPERATORS', declaredOperators(opRef) || str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          // Our section, or DX: see location.ts.
+          ['LOCATION', cabrilloLocation(ourCall, opRef)],
+          ...cabrilloCategories(opRef),
           ['GRID-LOCATOR', str(operation.grid)],
+          // The club typed at setup, else the profile's.
+          ['CLUB', declaredClub(opRef) || profile.club],
+          ['NAME', profile.name],
+          ['EMAIL', profile.email],
         ],
         qsoParts: (qso) => [
           ourCall || '-',

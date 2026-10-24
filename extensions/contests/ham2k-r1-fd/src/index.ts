@@ -12,7 +12,7 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
-import { adifForExport, contestScorer, defineExtension, exportFilename, startMillisOf } from "@ham2k/extension-sdk"
+import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
   ExportOption,
@@ -57,6 +57,35 @@ function serial(qso: Record<string, JSONValue>, field: string): string {
   if (typeof value === 'number') return String(value)
   const digits = str(value)
   return /^\d+$/.test(digits) ? String(parseInt(digits, 10)) : ''
+}
+
+/// `OPERATORS`: the calls typed at setup, uppercased and space-separated, with
+/// an `@station` kept as written. A club, special or short call has to list
+/// every operator in the log, and a multi-operator entry must use a club call.
+/// Empty when nothing was typed, so the caller can fall back to the app's
+/// operator call.
+function declaredOperators(ref: Record<string, JSONValue> | undefined): string {
+  const typed = typeof ref?.operators === 'string' ? ref.operators : ''
+  return typed.toUpperCase().split(/[\s,;]+/).filter((call) => call).join(' ')
+}
+
+/// `CLUB`: the club name as typed, on one line.
+function declaredClub(ref: Record<string, JSONValue> | undefined): string {
+  return typeof ref?.club === 'string' ? ref.club.replace(/\s+/g, ' ').trim() : ''
+}
+
+/// The operator's name, email and club from their profile, for the Cabrillo
+/// header. All optional and free-form in the profile, so each may be ''. A
+/// host that cannot answer costs these lines, never the log itself.
+async function profileDetails(): Promise<{ name: string; email: string; club: string }> {
+  try {
+    const settings = (await host.getSettings()) as Record<string, JSONValue> | undefined
+    const line = (value: JSONValue | undefined) => str(value).replace(/\s+/g, ' ').trim()
+    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail), club: line(settings?.operatorClub) }
+  } catch (e) {
+    console.warn(`[r1-fd] profile settings unavailable, exporting without name, email and profile club:`, e)
+    return { name: '', email: '', club: '' }
+  }
 }
 
 /// The next running of [mode] as a ref key, "SSB-2026".
@@ -161,7 +190,7 @@ const ActivityHook = {
         type: 'field',
         fieldType: 'select',
         key: 'ourOperators',
-        label: t('operatorsLabel'),
+        label: t('operatorClassLabel'),
         options: [
           { value: 'SINGLE-OP', label: t('operatorsSingle') },
           { value: 'MULTI-OP', label: t('operatorsMulti') },
@@ -183,6 +212,21 @@ const ActivityHook = {
         fieldType: 'checkbox',
         key: 'ourAssisted',
         label: t('assistedLabel'),
+      },
+      {
+        type: 'field',
+        fieldType: 'text',
+        key: 'operators',
+        label: t('operatorsLabel'),
+        placeholder: t('operatorsPlaceholder'),
+        uppercase: true,
+      },
+      {
+        type: 'field',
+        fieldType: 'text',
+        key: 'club',
+        label: t('clubLabel'),
+        placeholder: t('clubPlaceholder'),
       },
       { type: 'markdown', text: t('rulesLink', { url: RULES_URL }) },
     ]
@@ -395,6 +439,7 @@ const ExportHook = {
       // The CATEGORY block the DARC's sample logs show; the checker reads the
       // entry class from these lines, not from a claimed-category name.
       const mode = modeOfRef(str(opRef?.ref))
+      const profile = await profileDetails()
       const content = qsonToCabrillo(args.qsos, {
         headers: [
           ['CONTEST', contestIdFor(operation)],
@@ -404,8 +449,13 @@ const ExportHook = {
           ['CATEGORY-POWER', str(opRef?.ourPower)],
           ['CATEGORY-ASSISTED', opRef?.ourAssisted === true ? 'ASSISTED' : 'NON-ASSISTED'],
           ['CATEGORY-MODE', mode],
-          ['OPERATORS', str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          // The calls listed at setup, else the app's own operator call.
+          ['OPERATORS', declaredOperators(opRef) || str((operation.local as Record<string, JSONValue>)?.operatorCall)],
           ['GRID-LOCATOR', str(operation.grid)],
+          // The club typed at setup, else the profile's.
+          ['CLUB', declaredClub(opRef) || profile.club],
+          ['NAME', profile.name],
+          ['EMAIL', profile.email],
         ],
         qsoParts: (qso) => [
           ourCall || '-',

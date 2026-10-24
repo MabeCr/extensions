@@ -13,7 +13,7 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
-import { adifForExport, annotateCallAgainstCountryFile, contestScorer, defineExtension, exportFilename, startMillisOf } from "@ham2k/extension-sdk"
+import { adifForExport, annotateCallAgainstCountryFile, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
   ExportOption,
@@ -29,6 +29,7 @@ import type {
 } from "@ham2k/extension-sdk"
 
 import { tFor } from "./i18n.ts"
+import { OPERATOR_CLASSES, POWER_CLASSES, cabrilloCategories, declaredOperators } from "./entry.ts"
 import { firstName, guessedLocation, guessedName, normalizeLocation, ourExchange } from "./exchange.ts"
 import { LOCATION_PATTERN, VALID_LOCATIONS } from "./locations.ts"
 import { MODES, nearestMode, nextContestDate, relevanceFor } from "./schedule.ts"
@@ -52,6 +53,33 @@ function refOfType(container: Record<string, JSONValue>, type: string): Record<s
 
 function str(value: JSONValue | undefined): string {
   return typeof value === 'string' ? value : ''
+}
+
+/// The operator's name and email from their profile, for the Cabrillo header.
+/// Both optional and free-form in the profile, so each may be ''. A host that
+/// cannot answer costs these lines, never the log itself.
+async function profileDetails(): Promise<{ name: string; email: string }> {
+  try {
+    const settings = (await host.getSettings()) as Record<string, JSONValue> | undefined
+    const line = (value: JSONValue | undefined) => str(value).replace(/\s+/g, ' ').trim()
+    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail) }
+  } catch (e) {
+    console.warn(`[naqp] profile settings unavailable, exporting without profile name and email:`, e)
+    return { name: '', email: '' }
+  }
+}
+
+/// One select per axis of the entry, "Not declared" first.
+function entrySelects(t: (key: string) => string) {
+  const select = (key: string, options: readonly string[]) => ({
+    type: 'field' as const,
+    fieldType: 'select' as const,
+    key,
+    label: t(`${key}Label`),
+    value: '',
+    options: [{ value: '', label: t('notDeclared') }, ...options.map((value) => ({ value, label: t(`${key}_${value}`) }))],
+  })
+  return [select('operator', OPERATOR_CLASSES), select('power', POWER_CLASSES)]
 }
 
 const ActivityHook = {
@@ -132,6 +160,17 @@ const ActivityHook = {
                 key: 'ourLocation',
                 label: t('ourLocationLabel'),
                 placeholder: t('ourLocationPlaceholder'),
+                uppercase: true,
+              },
+              // The entry we are making, for the Cabrillo header. Each starts
+              // undeclared: see entry.ts.
+              ...entrySelects(t),
+              {
+                type: 'field',
+                fieldType: 'text',
+                key: 'operators',
+                label: t('operatorsLabel'),
+                placeholder: t('operatorsPlaceholder'),
                 uppercase: true,
               },
               { type: 'markdown', text: t('rulesLink') },
@@ -386,14 +425,20 @@ const ExportHook = {
     const ours = ourExchange(opRef)
 
     if (args.exportType === `${TYPE}-cabrillo`) {
+      const profile = await profileDetails()
       const content = qsonToCabrillo(args.qsos, {
         headers: [
           ['CONTEST', mode ? `NAQP-${mode}` : 'NAQP'],
           ['CALLSIGN', ourCall],
-          ['NAME', ours.name],
+          // The calls listed at setup, else the app's own operator call.
+          ['OPERATORS', declaredOperators(opRef) || str((operation.local as Record<string, JSONValue>)?.operatorCall)],
           ['LOCATION', ours.location],
-          ['OPERATORS', str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          ...cabrilloCategories(opRef),
           ['GRID-LOCATOR', str(operation.grid)],
+          // The sponsor's template has the operator's full name here, which
+          // the profile holds; the name we send stands in without one.
+          ['NAME', profile.name || ours.name],
+          ['EMAIL', profile.email],
         ],
         qsoParts: (qso) => {
           const qsoRef = refOfType(qso, TYPE)

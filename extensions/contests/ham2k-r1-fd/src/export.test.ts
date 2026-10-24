@@ -122,3 +122,22 @@ test("the Cabrillo file comes out of the export hook", async () => {
   assert.equal(result.content.split('\n')[0].trim(), 'START-OF-LOG: 3.0')
   assert.equal(delegated.length, 0, 'a Cabrillo file is written here, not delegated')
 })
+
+test("the Cabrillo header lists the operators declared at setup, else the app's operator", async () => {
+  const cabrillo = async (operation: Record<string, unknown>) =>
+    ((await contest.runHook('export', 'generateExport', { operation, qsos: QSOS, exportType: 'r1-fd-cabrillo' })) as { content: string }).content
+  const ref = { type: 'r1-fd', ref: 'CW-2026', ourStationType: 'PORTABLE', ourOperators: 'MULTI-OP' }
+
+  const multi = await cabrillo({
+    ...OPERATION,
+    local: { operatorCall: 'N0DEV' },
+    refs: [{ ...ref, operators: 'df9lj, dk2oy', club: '  Bavarian   Contest Club ' }],
+  })
+  assert.ok(multi.includes('\nOPERATORS: DF9LJ DK2OY\n'))
+  assert.ok(multi.includes('\nCLUB: Bavarian Contest Club\n'))
+  assert.ok(multi.includes('\nCATEGORY-OPERATOR: MULTI-OP\n'))
+
+  const solo = await cabrillo({ ...OPERATION, local: { operatorCall: 'N0DEV' }, refs: [ref] })
+  assert.ok(solo.includes('\nOPERATORS: N0DEV\n'))
+  assert.ok(!solo.includes('\nCLUB:'))
+})

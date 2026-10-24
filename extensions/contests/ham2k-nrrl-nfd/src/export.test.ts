@@ -122,3 +122,43 @@ test("the Cabrillo file comes out of the export hook", async () => {
   assert.equal(result.content.split('\n')[0].trim(), 'START-OF-LOG: 3.0')
   assert.equal(delegated.length, 0, 'a Cabrillo file is written here, not delegated')
 })
+
+test("the contest goes by the name NRRL's own N1MM guide writes, in the Cabrillo log, the ADIF and the file name", async () => {
+  const cabrillo = (await contest.runHook('export', 'generateExport', { operation: OPERATION, qsos: QSOS, exportType: 'nrrl-nfd-cabrillo' })) as { content: string; filename: string }
+  assert.ok(cabrillo.content.split('\n').includes('CONTEST: NRRL-FIELDDAY'))
+  assert.ok(cabrillo.content.split('\n').includes('LOCATION: DX'))
+  assert.match(cabrillo.filename, /NRRL-FIELDDAY/)
+  const fields = (await contest.runHook('adifFields', 'fieldsForOneQSO', { qso: QSOS[0], operation: OPERATION })) as { name: string; value: string }[]
+  assert.equal(fields.find((f) => f.name === 'CONTEST_ID')?.value, 'NRRL-FIELDDAY')
+})
+
+test("the Cabrillo header lists the operators declared at setup, else the app's operator", async () => {
+  const cabrillo = async (operation: Record<string, unknown>) =>
+    ((await contest.runHook('export', 'generateExport', { operation, qsos: QSOS, exportType: 'nrrl-nfd-cabrillo' })) as { content: string }).content
+  const ref = { type: 'nrrl-nfd', ref: '2026', ourClass: 'A2', ourShelter: 'C' }
+
+  const multi = await cabrillo({
+    ...OPERATION,
+    local: { operatorCall: 'N0DEV' },
+    refs: [{ ...ref, operators: 'la1abc, la2def', club: '  LA4O   Fieldday-gruppa ' }],
+  })
+  assert.ok(multi.includes('\nOPERATORS: LA1ABC LA2DEF\n'))
+  assert.ok(multi.includes('\nCLUB: LA4O Fieldday-gruppa\n'))
+
+  const solo = await cabrillo({ ...OPERATION, local: { operatorCall: 'N0DEV' }, refs: [ref] })
+  assert.ok(solo.includes('\nOPERATORS: N0DEV\n'))
+  assert.ok(!solo.includes('\nCLUB:'))
+})
+
+test("the class becomes the operator and power categories, and the full designation the soapbox", async () => {
+  const categories = async (ourClass: string) => {
+    const operation = { ...OPERATION, refs: [{ type: 'nrrl-nfd', ref: '2026', ourClass, ourShelter: 'A' }] }
+    const content = ((await contest.runHook('export', 'generateExport', { operation, qsos: QSOS, exportType: 'nrrl-nfd-cabrillo' })) as { content: string }).content
+    return content.split('\n').filter((line) => /^(CATEGORY-(OPERATOR|POWER|STATION)|SOAPBOX):/.test(line))
+  }
+  // The letter is how many operators, the digit the power bracket.
+  assert.deepEqual(await categories('A1'), ['CATEGORY-OPERATOR: MULTI-OP', 'CATEGORY-POWER: HIGH', 'CATEGORY-STATION: PORTABLE', 'SOAPBOX: NFD class A1A'])
+  assert.deepEqual(await categories('B3'), ['CATEGORY-OPERATOR: SINGLE-OP', 'CATEGORY-POWER: QRP', 'CATEGORY-STATION: PORTABLE', 'SOAPBOX: NFD class B3A'])
+  // No class chosen claims nothing but the portable station every entry is.
+  assert.deepEqual(await categories(''), ['CATEGORY-STATION: PORTABLE'])
+})

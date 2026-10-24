@@ -122,3 +122,41 @@ test("the Cabrillo file comes out of the export hook", async () => {
   assert.equal(result.content.split('\n')[0].trim(), 'START-OF-LOG: 3.0')
   assert.equal(delegated.length, 0, 'a Cabrillo file is written here, not delegated')
 })
+
+test("the Cabrillo header carries the declared entry and its operators", async () => {
+  const exported = async (ref: Record<string, unknown>, local: Record<string, unknown> = {}) =>
+    ((await contest.runHook('export', 'generateExport', {
+      operation: { uuid: 'op-2', stationCall: 'N0DEV', local, refs: [{ type: 'arrl-dx', mode: 'Phone', exchange: 'MA', ...ref }] },
+      qsos: QSOS,
+      exportType: 'arrl-dx-cabrillo',
+    })) as { content: string }).content
+  const header = (content: string) => content.split('\n').filter((line) => /^(OPERATORS|CATEGORY-|CLUB)/.test(line))
+
+  const multi = await exported({ operator: 'MULTI-TWO', operators: 'n0dev, k1abc w2def', club: 'Yankee Clipper Contest Club' }, { operatorCall: 'N0DEV' })
+  assert.deepEqual(header(multi), [
+    'OPERATORS: N0DEV K1ABC W2DEF',
+    'CATEGORY-OPERATOR: MULTI-OP',
+    'CATEGORY-ASSISTED: ASSISTED',
+    'CATEGORY-BAND: ALL',
+    'CATEGORY-POWER: HIGH',
+    'CATEGORY-MODE: SSB',
+    'CATEGORY-TRANSMITTER: TWO',
+    'CLUB: Yankee Clipper Contest Club',
+  ])
+
+  // Nothing declared claims nothing, and the app's operator call stands in.
+  assert.deepEqual(header(await exported({}, { operatorCall: 'N0DEV' })), ['OPERATORS: N0DEV', 'CATEGORY-MODE: SSB'])
+})
+
+test("the setup form asks the entry, each axis undeclared to begin with", async () => {
+  const controls = (await contest.runHook('activity', 'operationControls', { operation: { stationCall: 'N0DEV', refs: [] } })) as {
+    input: { form: { elements: { key?: string; value?: unknown; options?: { value: string }[] }[] } }
+  }[]
+  const elements = controls[0].input.form.elements
+  assert.deepEqual(elements.map((e) => e.key), ['mode', 'stationType', 'exchange', 'operator', 'band', 'power', 'section', 'operators', 'club'])
+  for (const key of ['operator', 'band', 'power']) {
+    const select = elements.find((e) => e.key === key)
+    assert.equal(select?.value, '')
+    assert.equal(select?.options?.[0].value, '')
+  }
+})
