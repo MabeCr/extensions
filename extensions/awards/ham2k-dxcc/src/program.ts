@@ -17,10 +17,18 @@ import { DXCC_BY_CODE } from "@ham2k/lib-dxcc-data"
 import { fmtInteger } from "@ham2k/lib-format-tools"
 import { ADIF_MODES_AND_SUBMODES, superModeForMode } from "@ham2k/lib-operation-data"
 import { entityForCall } from "@ham2k/extension-sdk"
-import type { ChasingHook, ClaimSlot, ClaimsTally, HookContext, JSONValue, QsoClaim } from "@ham2k/extension-sdk"
+import type {
+  ChasingHook,
+  ChasingNoticeLabels,
+  ChasingProgram,
+  ClaimSlot,
+  ClaimsTally,
+  HookContext,
+  JSONValue,
+  QsoClaim,
+} from "@ham2k/extension-sdk"
 
 import { catalogs, tFor } from "./i18n.ts"
-import type { ChaseNoticeLabels, ChasingProgramWithNotices } from "./sdkGap.ts"
 
 /// The key DXCC credit is stored under on a contact (`qso.credits.dxcc`).
 const CREDITS_KEY = "dxcc"
@@ -192,14 +200,14 @@ function summarizeClaims({ slots }: { slots: ClaimSlot[] }, ctx: Pick<HookContex
 
 /// A notice's words, from a locale's catalog (./i18n/<locale>.json), so a
 /// translator finds them beside the extension's other strings.
-function noticeLabels(catalog: Record<string, string>): ChaseNoticeLabels {
+function noticeLabels(catalog: Record<string, string>): ChasingNoticeLabels {
   return {
     notices: { newRef: catalog.noticeNewRef, newMode: catalog.noticeNewMode, newBand: catalog.noticeNewBand },
     modeLabels: Object.fromEntries(Object.values(AWARD_MODES).map((mode) => [mode, catalog[`mode${mode}`]])),
   }
 }
 
-const program: ChasingProgramWithNotices = {
+const program: ChasingProgram = {
   label: "DXCC",
   icon: "earth",
   color: "#2e7d32",

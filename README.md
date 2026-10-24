@@ -86,15 +86,13 @@ DXCC checklists, a rate chart and a band map:
 - **`ham2k-dxcc`** — ARRL's [DXCC](https://www.arrl.org/dxcc) as a chasing
   program: Mixed ("DXCC ATNO"), the three mode groups ("DXCC in CW") and
   every band ("DXCC in 80m"). The DXCC Challenge is a second tally over the
-  same checklist, the band slots on 160–6m without 60m. It is meant to
-  replace the app's core `dxcc` program, which still runs beside it until the
-  app retires it. It keeps that program's holders (`KI2D@291`, the call
+  same checklist, the band slots on 160–6m without 60m. It replaced the app's
+  core `dxcc` program, and the app ships it pre-loaded, switched on. It keeps that program's holders (`KI2D@291`, the call
   worked from one entity), and reads credit from `credits.dxcc`, the key the
   ADIF import writes: that is log data, and does not follow the program key.
   The program words its own notices (`program.notices`, `modeLabels`, from
-  its i18n catalogs), which the published SDK does not type yet
-  (`src/sdkGap.ts`); an app that does not read them words the verdicts its
-  own way ("New DXCC mode").
+  its i18n catalogs; SDK 1.12.2 types them); an app that does not read them
+  words the verdicts its own way ("New DXCC mode").
 
 - **`ki2d-qso-party-spots`** reads the [QSO Party Hub](http://qsopartyhub.com)
   and the [QSO Party APRS Tracker](https://mobiletracker.stateqso.com) for

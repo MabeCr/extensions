@@ -12,7 +12,6 @@ import assert from "node:assert/strict"
 import type { ClaimSlot, JSONValue, QsoClaim } from "@ham2k/extension-sdk"
 
 import { dxccProgram } from "./program.ts"
-import type { ChasingProgramWithNotices } from "./sdkGap.ts"
 
 const ctx = { locale: "en" } as Parameters<typeof dxccProgram.summarizeClaims>[1]
 
@@ -25,7 +24,7 @@ function claims(...qsos: Record<string, JSONValue>[]): Record<string, QsoClaim[]
 }
 
 test("the program describes itself as data, and words its own notices", () => {
-  const program = dxccProgram.program as ChasingProgramWithNotices
+  const program = dxccProgram.program
   assert.equal(program.label, "DXCC")
   assert.equal(program.editions, "lifetime")
   assert.deepEqual(program.supersedes, ["newDXCC"])

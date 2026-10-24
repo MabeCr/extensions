@@ -146,8 +146,8 @@ done
   version with different bytes is refused, so every fix that will be
   published needs a new version — in BOTH `manifest.json` and `package.json`,
   then `npm install --package-lock-only` to carry it into the lockfile.
-- **the pre-loaded set** — `ham2k-pota`, `ham2k-sota`, `ham2k-wwff` and the
-  five lookups — also ships packaged inside the app
+- **the pre-loaded set** — `ham2k-pota`, `ham2k-sota`, `ham2k-wwff`,
+  `ham2k-dxcc` and the five lookups — also ships packaged inside the app
   (`app/assets/preloaded-extensions/`). Publishing one of those is only half
   the release; the app's copy needs re-packing, which is app-repo work.
 - **merge-time hazards**: generated files. `packages/qso-parties/src/parties/*.ts`
