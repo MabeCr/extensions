@@ -43,31 +43,36 @@ export function lanes(spans: [number, number][], count: number, gap: number): (n
 
 /** The step between the scale's labels: the finest that keeps them `spacing` apart over `length`. */
 export function tickStep(spanKHz: number, length: number, spacing: number): number {
-  const steps = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000]
+  const steps = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000]
   return steps.find(step => (length * step) / spanKHz >= spacing) ?? steps[steps.length - 1]
 }
 
 /**
- * `stack`, over `count` side-by-side columns, nearest first: each label takes the nearest column
- * with room for it right at its point, so a lone label stays beside the line and only a crowd
- * spreads outward. One with no room anywhere goes to the column holding fewest, to be stacked.
- * Labels claim their columns in `priority` order (indices into `desired`), first nearest.
+ * `stack`, over `count` side-by-side columns, keeping the order of `desired` (ascending) down the
+ * whole map: each label sits at least `size / count` below the one before, in the nearest column
+ * clear of those above it — so a lone label stays beside the line, and a crowd steps outward and
+ * back, reading in order across the columns. One of the last `count` labels' columns is always
+ * clear. The caller keeps the crowd small enough to fit: `size + (n − 1) · size / count` tall.
  */
-export function columns(desired: number[], count: number, size: number, min: number, max: number, priority = desired.map((_, i) => i)): { column: number; top: number }[] {
-  const claimed = lanes(priority.map(i => [desired[i] - size / 2, desired[i] + size / 2]), count, 0)
-  const chosen: (number | null)[] = []
-  priority.forEach((i, k) => { chosen[i] = claimed[k] })
-  const load = Array.from({ length: count }, (_, column) => chosen.filter(c => c === column).length)
-  const assigned = chosen.map(c => {
-    if (c != null) return c
-    const column = load.indexOf(Math.min(...load))
-    load[column]++
-    return column
+export function columns(desired: number[], count: number, size: number, min: number, max: number): { column: number; top: number }[] {
+  const pitch = size / count
+  // Stacked at the pitch, a label's box is its top `pitch`: centred on the same point, it shifts by the rest.
+  const tops = stack(desired.map(d => d - (size - pitch) / 2), pitch, min, max - (size - pitch))
+  const clearBelow = Array.from({ length: count }, () => -Infinity)
+  const placed = tops.map(top => {
+    const column = Math.max(0, clearBelow.findIndex(bottom => bottom <= top + 1e-6))
+    clearBelow[column] = top + size
+    return { column, top }
   })
-  const placed: { column: number; top: number }[] = []
-  for (let column = 0; column < count; column++) {
-    const mine = desired.map((d, i) => [d, i] as const).filter(([, i]) => assigned[i] === column)
-    stack(mine.map(([d]) => d), size, min, max).forEach((top, k) => { placed[mine[k][1]] = { column, top } })
+  // Then each label back onto its own point wherever that keeps the order and its column clear:
+  // the stacking spaces labels in other columns apart that need not be. Twice, as one moved can
+  // make room for another.
+  for (let pass = 0; pass < 2; pass++) {
+    placed.forEach((p, i) => {
+      const top = desired[i] - size / 2
+      if (top <= (placed[i - 1]?.top ?? -Infinity) || top >= (placed[i + 1]?.top ?? Infinity) || top < min || top > max - size) return
+      if (placed.every((q, j) => j === i || q.column !== p.column || q.top + size <= top + 1e-6 || q.top >= top + size - 1e-6)) p.top = top
+    })
   }
   return placed
 }

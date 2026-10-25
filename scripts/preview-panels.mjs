@@ -197,7 +197,8 @@ function contactRun({ minutes = 120, rate = 60, operators = [] }, now) {
 }
 
 /// A made-up crowd on a band, the same on every render: CW at the bottom, FT8 and FT4 bunched, phone above.
-function generatedSpots({ generate = 30, band = "20m", seed = 1 }) {
+/// With `noMode`, that share of them name no mode, as many a cluster spot doesn't.
+function generatedSpots({ generate = 30, band = "20m", seed = 1, noMode = 0 }) {
   let state = seed
   const random = () => (state = (state * 1103515245 + 12345) % 2147483648) / 2147483648
   const edges = { "160m": 1800, "80m": 3500, "40m": 7000, "30m": 10100, "20m": 14000, "17m": 18068, "15m": 21000, "12m": 24890, "10m": 28000, "6m": 50000 }
@@ -210,7 +211,9 @@ function generatedSpots({ generate = 30, band = "20m", seed = 1 }) {
     const [mode, freq] = kind < 0.4 ? ["CW", base + 2 + random() * 60] : kind < 0.6 ? ["FT8", base + 74 + random() * 3] : kind < 0.65 ? ["FT4", base + 80 + random() * 3] : ["SSB", base + 150 + random() * 190]
     const park = random() < 0.6, emoji = random() < 0.12 ? "⭐" : undefined
     return {
-      call, freq: Math.round(freq * 10) / 10, mode, age: Math.floor(random() * 30), worked: random() < 0.2, notices: random() < 0.15 ? ["newDXCC"] : [],
+      call, freq: Math.round(freq * 10) / 10, mode: noMode && random() < noMode ? undefined : mode, age: Math.floor(random() * 30), worked: random() < 0.2, notices: random() < 0.15 ? ["newDXCC"] : [],
+      // The rest heard on the cluster, which names no park; the board stands its tower in for an icon.
+      source: park ? "pota" : "cluster", ...(park ? { refs: [{ type: "potaActivation", ref: `US-${1000 + i}` }] } : {}),
       display: { icon: park ? "pine-tree" : "radio-tower", ...(park ? { iconColor: "#2e7d32" } : {}), ...(emoji ? { emoji } : {}) },
     }
   })
@@ -222,7 +225,7 @@ function boardFor(c, now, options = {}) {
   const bands = [options.band ?? []].flat(), modes = [options.mode ?? []].flat()
   return listed
     .map(s => ({
-      their: { call: s.call }, freq: s.freq, band: bandForFrequency(s.freq), mode: s.mode, hookKey: s.source ?? "pota",
+      their: { call: s.call }, freq: s.freq, band: bandForFrequency(s.freq), mode: s.mode, refs: s.refs, hookKey: s.source ?? "pota",
       spot: { timeInMillis: now - (s.age ?? 0) * 60000, source: s.source ?? "pota" },
       annotations: { worked: !!s.worked, isSelf: !!s.isSelf, notices: s.notices ?? [] },
       display: s.display ?? { icon: "radio-tower" },

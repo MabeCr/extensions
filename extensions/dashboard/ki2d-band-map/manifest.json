@@ -1,7 +1,7 @@
 {
   "key": "ki2d-band-map",
   "name": "KI2D’s Band Map",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "The spots on a band, laid out along its frequencies, over the radio’s panadapter when it has one",
   "category": "dashboard",
   "icon": "map-marker-radius",

@@ -34,10 +34,17 @@ test('a lone label stays in the nearest column, and only a crowd spreads outward
   assert.deepEqual(placed.slice(1, 4).map(p => p.column).sort(), [0, 1, 2])
 })
 
-test('newer labels claim the nearer columns where they crowd', () => {
-  // The third label is the newest: given first, it takes the column beside the line.
-  const placed = columns([100, 100, 100], 3, 20, 0, 400, [2, 0, 1])
-  assert.equal(placed[2].column, 0)
+// Each column stacked on its own, a crowd reads out of order across them: a call above another
+// on the page could be higher in frequency.
+test('labels read in frequency order across the columns, and never overlap within one', () => {
+  const desired = [100, 102, 104, 106, 108, 110, 112, 200, 201, 202]
+  const placed = columns(desired, 3, 20, 0, 400)
+  assert.ok(placed.every((p, i) => i === 0 || p.top > placed[i - 1].top))
+  for (let column = 0; column < 3; column++) assert.equal(overlaps(placed.filter(p => p.column === column).map(p => p.top), 20), false)
+  // Its whole height centred where the crowd wants it.
+  const crowd = columns([100, 100, 100], 3, 20, 0, 400)
+  assert.deepEqual(crowd.map(p => p.column), [0, 1, 2])
+  assert.ok(Math.abs((crowd[0].top + crowd[2].top + 20) / 2 - 100) < 1e-9)
 })
 
 test('the scale labels are as fine as their spacing allows', () => {

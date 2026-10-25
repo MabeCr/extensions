@@ -13,7 +13,8 @@
   .grid { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
   figure { margin: 0; }
   figcaption { color: #fff; font-size: 11px; margin-bottom: 4px; max-width: 520px; }
-  .pane { position: relative; overflow: hidden; border-radius: 12px; box-shadow: 0 2px 8px rgba(0, 0, 0, .3); }
+  /* A drag on a pane scrolls or zooms it, as in the host, which selects no text: a browser would start a selection. */
+  .pane { position: relative; overflow: hidden; border-radius: 12px; box-shadow: 0 2px 8px rgba(0, 0, 0, .3); user-select: none; -webkit-user-select: none; }
   .layer { position: absolute; transform-origin: 50% 50%; }
   .layer > svg { display: block; width: 100%; height: 100%; }
   /* Flutter keeps a layer's spaces; a browser would collapse them. */
@@ -234,7 +235,12 @@ function build(entry) {
       el.addEventListener('pointerup', () => { if (last) commit(); last = undefined })
     } else if (c.kind === 'button' && c.event) {
       el.classList.add('button')
-      el.addEventListener('click', () => { if (!c.disabled) send(entry, c) })
+      el.addEventListener('click', ev => {
+        if (c.disabled) return
+        // `tapAt`: where along its longer side the click landed, 0 to 1, as the app sends it.
+        const r = el.getBoundingClientRect()
+        send(entry, c, c.tapAt ? { value: r.height > r.width ? (ev.clientY - r.top) / r.height : (ev.clientX - r.left) / r.width } : {})
+      })
     } else if (c.kind.startsWith('native')) {
       el.classList.add('native'); el.textContent = `${c.kind} ${c.label}`
       if (c.event) el.addEventListener('click', () => send(entry, c))

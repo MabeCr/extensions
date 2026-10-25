@@ -201,11 +201,13 @@ export function createRadioPanel(host: RadioHost): PanelHook {
       // Mid-scroll the radio's report lags what was asked: the knobs keep moving from the request.
       if (args.clock.realNowMillis - (p.passbandSent ?? 0) > 1500) p.passband = r?.passband ? [r.passband.lowHz, r.passband.highHz] : undefined
       // The panadapter's width: the scope set to the narrowest span covering it, the display cropped to it.
+      // Where the app sizes the scope itself to every display's width (`autoSpan`, extension API 12),
+      // the crop alone says it: asking too would fight the other displays.
       const category = panCategory(r?.mode), panWidthHz = panWidths[category][view(key).panWidth?.[category] ?? 1]
       p.panCategory = category
-      const spans = r?.spectrum?.spansHz ?? []
+      const spans = r?.spectrum?.spansHz ?? [], autoSpan = r?.spectrum?.autoSpan === true
       const span = spans.find(s => s * 2 >= panWidthHz) ?? spans[spans.length - 1]
-      if (span !== undefined && span !== p.spanAsked && r?.id && r.spectrum && host.setRadioSpectrum) {
+      if (span !== undefined && span !== p.spanAsked && !autoSpan && r?.id && r.spectrum && host.setRadioSpectrum) {
         const result = await host.setRadioSpectrum({ id: r.id, ...(selection ? { selection } : {}), spanHz: span })
         if (result.accepted) p.spanAsked = span
       }

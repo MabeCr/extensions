@@ -180,6 +180,17 @@ test('the panadapter keeps a width per kind of mode, and asks the scope for its 
   assert.equal(await span(), 150000, 'back on phone, the phone choice')
 })
 
+// A FlexRadio's scope, which the app widens for the widest display on screen: a band map beside the
+// panel may want all of it, and the panel asking for its own span would narrow the map's.
+test('where the app sizes the scope itself, the panadapter only crops to its width', async () => {
+  const state = { ...live, spectrum: { problem: null, mode: 'center', spanHz: 84000, lowHz: null, highHz: null, refLevelDb: null, speed: null,
+    spansHz: [10500, 21000, 42000, 84000], refMinDb: -30, refMaxDb: 30, refStepDb: 1, modes: ['center'], speeds: [], autoSpan: true } } as PanelRadioState
+  const asked: PanelRadioSpectrumSet[] = []
+  const panel = createRadioPanel(radioHost(() => state, { setRadioSpectrum: async s => { asked.push(s); return { accepted: true, state } } }).host)
+  assert.equal(sceneOf(await panel.render(args, ctx)).controls!.find(c => c.id === 'panadapter')?.span, 75000)
+  assert.deepEqual(asked, [])
+})
+
 test('a tune shows in the transmit bar\'s red, as the carrier it is', () => {
   const art = (tuner: 'inline' | 'tuning') => radioDocument(environment, { ...live, tuner }).layers.find(l => l.id === 'atu-pill')!.svg!
   const label = (tuner: 'inline' | 'tuning') => radioDocument(environment, { ...live, tuner }).layers.find(l => l.id === 'atu')!.text!
