@@ -50,6 +50,23 @@ test("a test operation's spot says TESTING first, since nothing on the cluster f
   assert.equal(posted[0].comment, "TESTING - POTA US-1234")
 })
 
+test("a multi-station seat spots the station's plain call, without the app's /OP<n>", async () => {
+  // `KI2D/OP1` on a cluster reads as a portable call, so hunters call, log
+  // and dupe-check a station that does not exist. A test call keeps its
+  // TESTING warning once the seat comes off.
+  reset()
+  const seat = (stationCall: string, multiIdentifier: string | number) =>
+    ext.runHook("spots", "postSelfSpot", { operation: fixtureOperation({ stationCall, local: { multiIdentifier } }), freq: 14285 })
+  await seat("KI2D/OP1", "1")
+  await seat("KI2D/OP2,NK2Y", 2)
+  await seat("KI2D/TEST/OP1", "1")
+  await seat("KI2D/OP1", "")
+  assert.deepEqual(
+    posted.map((spot) => [spot.call, spot.comment]),
+    [["KI2D", ""], ["KI2D", ""], ["KI2D/TEST", "TESTING"], ["KI2D/OP1", ""]],
+  )
+})
+
 test("a spot of a station worked carries that QSO's activities, under its first call", async () => {
   reset()
   const qso = fixtureQso({ freq: 14062.5, their: { call: "n2abc, n2xyz" }, refs: [{ type: "pota", ref: "US-5678" }] })

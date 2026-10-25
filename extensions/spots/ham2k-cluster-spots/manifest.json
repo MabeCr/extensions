@@ -2,7 +2,7 @@
   "key": "ham2k-cluster-spots",
   "name": "Cluster Spots",
   "shortName": "Cluster",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "api": 10,
   "description": "Brings the DX cluster's spots into the Spots panel, and posts self-spots and spots of the stations you work, through the node picked in Settings",
   "category": "spots",

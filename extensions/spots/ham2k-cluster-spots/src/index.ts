@@ -37,7 +37,7 @@ import manifest from "../manifest.json" with { type: "json" }
 import { tFor } from "./i18n.ts"
 import { isPromptFor, isSignOff, nodeProgramFromPrompt, parseSpotLine } from "./parse.ts"
 import type { NodeProgram } from "./parse.ts"
-import { firstCall, isTestCall, spotComment, type Json } from "./spotText.ts"
+import { firstCall, isTestCall, selfSpotCall, spotComment, type Json } from "./spotText.ts"
 
 /// How long a spot stays on the board after the node announced it. A cluster
 /// spot is news rather than a schedule: a station spotted an hour ago has
@@ -246,7 +246,7 @@ const Spots: SpotsHook = {
   },
 
   async postSelfSpot({ operation, freq, comment }: PostSelfSpotRequest, ctx): Promise<PostResult> {
-    const call = firstCall(operation.stationCall)
+    const call = selfSpotCall(operation)
     return resultOf(await host.clusterPostSpot({ freq, call, comment: spotComment(operation, comment, isTestCall(call)) }), ctx)
   },
 

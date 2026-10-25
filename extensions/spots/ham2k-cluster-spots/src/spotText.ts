@@ -51,6 +51,17 @@ export function firstCall(value: unknown): string {
   return String(value ?? "").split(",")[0].trim().toUpperCase()
 }
 
+/// The call a self-spot names: the operation's first call, less the
+/// `/OP<n>` the app appends for this device's seat in a multi-station
+/// operation. On a cluster that reads as a portable designator, so the node
+/// lists the station under a call nobody can work.
+export function selfSpotCall(operation: Json): string {
+  const call = firstCall(operation.stationCall)
+  const local = (operation.local ?? {}) as Json
+  const seat = `/OP${Number.parseInt(String(local.multiIdentifier ?? ""), 10)}`
+  return call.endsWith(seat) ? call.slice(0, -seat.length) : call
+}
+
 /// A test operation's call: `/T` as the operation carries it, `/TEST` as the
 /// app rewrites it for a self-spot. Nothing on the cluster filters either,
 /// so the spot reaches every node in the world — and says so first.
