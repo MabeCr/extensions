@@ -626,7 +626,7 @@ const SpotsHook = {
     // TEST_OPERATION_REF's doc.
     const refs = isTestOperation(call) ? [TEST_OPERATION_REF] : refsOfType(operation, ACTIVATION_TYPE)
     if (refs.length === 0) return { ok: false, message: 'No POTA activation on this operation' }
-    return postSpotToPOTA({ api: await potaApi(), call, freq, mode, refs, comment, appName: ctx.appName })
+    return postSpotToPOTA({ api: await potaApi(), call, freq, mode, refs, comment, appName: ctx.appName }, ctx)
   },
 
   async postOtherSpot({ qso, comment, spotterCall }: PostOtherSpotRequest, ctx: HookContext): Promise<PostResult> {
@@ -639,42 +639,57 @@ const SpotsHook = {
     return postSpotToPOTA({
       api: await potaApi(),
       call: String(their.call ?? ''),
-      spotter: String(our.call ?? spotterCall ?? '').split(',')[0].trim(),
+      // `||`, not `??`: the core sends an empty `our.call` as readily as it
+      // leaves the key out, and an empty spotter posts a spot nobody spotted.
+      spotter: String(our.call || spotterCall || '').split(',')[0].trim(),
       freq,
       mode: qso.mode ? String(qso.mode) : undefined,
       refs,
       comment,
       appName: ctx.appName,
-    })
+    }, ctx)
   },
 }
-
-/// The most calls POTA takes as one spot's activator.
-const MAX_ACTIVATOR_CALLS = 10
 
 /// Posts directly to the POTA API — no authentication required (unlike
 /// SOTA's spot API, which needs a logged-in account). Ported from
 /// app-polo's POTAPostSpotAPI.js.
 ///
-/// POTA takes a list of calls as the activator (`KI2D,NK2Y`), up to
-/// [MAX_ACTIVATOR_CALLS], but only one as the spotter. A longer list posts in
-/// batches, each spotted by its own first call unless [spotter] names one.
+/// One spot per call (`KI2D,NK2Y` is two), each spotted by itself unless
+/// [spotter] names one, as app-polo posts them. POTA would take the list as
+/// one activator, but a hunter clicking that spot gets the whole list as the
+/// call to log, and the spotter field takes a single call either way.
+///
+/// Every failure is named, and the spots that did go out are counted: a
+/// resend after a partial failure posts the landed calls a second time, and a
+/// call left unspotted with nothing saying which is the failure worth
+/// reporting.
 async function postSpotToPOTA(
   { api, call, spotter, freq, mode, refs, comment, appName }: { api: string; call: string; spotter?: string; freq: number; mode?: string; refs: Ref[]; comment?: string; appName?: string },
+  ctx: HookContext,
 ): Promise<PostResult> {
+  const t = tFor(ctx)
   const calls = call.split(',').map((c) => c.trim()).filter((c) => c)
   if (calls.length === 0) return { ok: false, message: 'No call to spot' }
-  const batches: string[][] = []
-  for (let i = 0; i < calls.length; i += MAX_ACTIVATOR_CALLS) batches.push(calls.slice(i, i + MAX_ACTIVATOR_CALLS))
-  const results = await Promise.all(
-    batches.map((batch) => postOneSpotToPOTA({ api, activator: batch.join(','), spotter: spotter ?? batch[0], freq, mode, refs, comment, appName })),
+  const reasons = await Promise.all(
+    calls.map((activator) => postOneSpotToPOTA({ api, activator, spotter: spotter ?? activator, freq, mode, refs, comment, appName }, t)),
   )
-  return results.find((result) => !result.ok) ?? { ok: true }
+  const failed = calls.flatMap((activator, i) => (reasons[i] ? [{ activator, reason: reasons[i] }] : []))
+  if (failed.length === 0) return { ok: true }
+  if (calls.length === 1) return { ok: false, message: failed[0].reason }
+  const posted = calls.length - failed.length
+  const message = t('postRefused', { calls: failed.map((f) => `${f.activator} (${f.reason})`).join(', ') })
+  return { ok: false, message: posted > 0 ? `${message} ${t('alreadyPosted', { count: posted })}` : message }
 }
 
+/// Why POTA did not take the spot, or `undefined` when it did. The server's
+/// own words ride along with the status, since they are what tells a refused
+/// call or park from an outage — cut short, so a proxy's HTML error page does
+/// not bury the rest of the message.
 async function postOneSpotToPOTA(
   { api, activator, spotter, freq, mode, refs, comment, appName }: { api: string; activator: string; spotter: string; freq: number; mode?: string; refs: Ref[]; comment?: string; appName?: string },
-): Promise<PostResult> {
+  t: ReturnType<typeof tFor>,
+): Promise<string | undefined> {
   const refComment = refs.length > 1 ? `${refs.length}-fer: ${refs.map((r) => r.ref).join(' ')}` : ''
   try {
     const response = await host.fetch(`${api}/spot`, {
@@ -690,14 +705,17 @@ async function postOneSpotToPOTA(
         comments: [comment, refComment].filter((x) => x).join(' '),
       }),
     })
-    if (response.status !== 200) {
-      return { ok: false, message: `POTA API returned HTTP ${response.status}` }
-    }
-    return { ok: true }
+    if (response.status === 200) return undefined
+    const body = String(response.body ?? '').trim().slice(0, MAX_ERROR_BODY)
+    const status = t('httpError', { status: response.status })
+    return body ? `${status}: ${body}` : status
   } catch (e) {
-    return { ok: false, message: e instanceof Error ? e.message : String(e) }
+    return e instanceof Error ? e.message : String(e)
   }
 }
+
+/// The most of the server's error body a failure message carries.
+const MAX_ERROR_BODY = 200
 
 function simplifyStates(locationDesc: string): string {
   if (!locationDesc) return ''
