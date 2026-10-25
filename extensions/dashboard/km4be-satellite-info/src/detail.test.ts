@@ -7,8 +7,8 @@ import { test } from "node:test"
 import { buildCatalog, ELEMENTS_URL, LIST_URL, parseElements, parseList, statusUrl } from "./data.ts"
 import { buildDetail, completePass, themeOf } from "./detail.ts"
 import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
-import { findPasses, satrecFromOmm } from "./orbit.ts"
-import { linksFor, radioLines, RADIO_LINES } from "./radio.ts"
+import { downlinkDoppler, findPasses, rangeRate, satrecFromOmm, uplinkDoppler } from "./orbit.ts"
+import { linksFor, radioLines, RADIO_LINES, shiftText } from "./radio.ts"
 import { forgetAll } from "./memory.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 import { passOfOpen, openId, rowOpenId } from "./scene.ts"
@@ -116,6 +116,48 @@ test("a detail names its pass and keeps the Radio page at a fixed length", () =>
   assert.ok(d.radio.slice(6).every((l) => l === ""))
 })
 
+test("a slider over the plot scrubs along the pass, with everything it shows worked out beforehand", () => {
+  const d = buildDetail(ao7, miami, best, best.aos - 3_600_000, true, "sky")
+  const scrub = d.scrub!
+  assert.ok(scrub)
+  const track = skyTrack(satrec, miami, completePass(ao7, miami, best, best.aos - 3_600_000))
+  assert.equal(scrub.rest, track.length, "it rests one past the last moment")
+  assert.deepEqual([scrub.control.kind, scrub.control.min, scrub.control.max, scrub.control.step, scrub.control.event], ["slider", 0, track.length, 1, undefined], "local to the pane: no call to the extension")
+  assert.equal(scrub.control.valueLabels!.length, track.length + 1)
+  assert.equal(scrub.control.valueLabels![track.length], "", "and says nothing at rest")
+
+  const byId = Object.fromEntries(scrub.layers.map((l) => [l.id, l]))
+  const samples = (id: string) => byId[id].text!.samples!
+  assert.equal(samples("scrubDnFreq").length, track.length + 1)
+  for (const i of [0, Math.floor(track.length / 2), track.length - 1]) {
+    const rate = rangeRate(satrec, miami, track[i].at)!
+    assert.equal(samples("scrubDnFreq")[i], `↓ ${downlinkDoppler(29.45, rate).toFixed(4)}`)
+    assert.equal(samples("scrubUpFreq")[i], `↑ ${uplinkDoppler(145.9, rate).toFixed(4)}`)
+    assert.equal(samples("scrubDnShift")[i], shiftText((downlinkDoppler(29.45, rate) - 29.45) * 1000))
+    assert.match(String(samples("scrubAtTime")[i]), /^\d\d:\d\d:\d\dZ · \d+°$/)
+  }
+  assert.equal(samples("scrubDnFreq")[track.length], "")
+  // The marker rides the path: a sample of the plot's x and y for every moment, centered on the point.
+  const mid = Math.floor(track.length / 2)
+  const spot = skyXY(track[mid].azimuth, track[mid].elevation)
+  assert.equal(byId.scrubAt.translateX!.samples![mid], +(spot.x - 13).toFixed(1))
+  assert.equal(byId.scrubAt.translateY!.samples![mid], +(spot.y - 13).toFixed(1))
+  // It shows while the slider is on a moment, and the always-there Doppler readout goes while it does.
+  assert.deepEqual(byId.scrubAt.opacity!.input, [track.length - 1, track.length])
+  assert.deepEqual(byId.scrubAt.opacity!.output, [1, 0])
+})
+
+test("the scrub readout takes the place of the live one while it is used, and nothing is there without an orbit", () => {
+  const mid = Math.round((best.aos + best.los) / 2)
+  const d = buildDetail(ao7, miami, best, mid, true, "sky")
+  assert.ok(d.sky.readout.length > 0)
+  for (const l of d.sky.readout) {
+    assert.deepEqual(l.opacity!.output, [0, 1], `${l.id} comes back at rest`)
+    assert.deepEqual(l.opacity!.input, [d.scrub!.rest - 1, d.scrub!.rest])
+  }
+  assert.equal(buildDetail(noOrbit, miami, best, mid, true, "sky").scrub, null)
+})
+
 test("a pass already under way is traced back to where it really rose", () => {
   const mid = Math.round((best.aos + best.los) / 2)
   const clipped = findPasses(satrec, miami, mid, 3, 0)[0]
@@ -216,11 +258,11 @@ test("tapping a row opens its pass: the Sky page, then Radio, then back to the l
   const opened = await p.event(t0, open.id, "open")
   assert.deepEqual(opened, { values: { utc: 0 } })
   const sky = await p.render(t0)
-  assert.deepEqual(sky.layers.map((l) => l.id), ["sky", "north", "south", "east", "west", "riseAt", "peakAt", "setAt"])
+  assert.deepEqual(sky.layers.map((l) => l.id).filter((id) => !id.startsWith("scrub")), ["sky", "north", "south", "east", "west", "riseAt", "peakAt", "setAt"])
   assert.match(sky.strings.title, /^(AO-7|FO-29) · /)
   assert.equal(sky.strings.tab, "sky")
   assert.ok(sky.strings.time0.startsWith("Rise"))
-  assert.equal(sky.controls.length, 4 + 3, "the Sky page keeps only the times under the plot")
+  assert.equal(sky.controls.length, 4 + 3 + 1, "the Sky page keeps only the times under the plot, and the slider over it")
   assert.equal(sky.strings.status0, undefined)
   assert.ok(sky.controls.length <= 64)
 

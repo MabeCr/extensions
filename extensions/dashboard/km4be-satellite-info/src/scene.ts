@@ -245,6 +245,15 @@ export function detailStrings(d: DetailModel): Record<string, string> {
 
 export const detailValues = (d: DetailModel): Record<string, number> => ({ utc: d.utc ? 1 : 0 })
 
+/// The side of the sky plot, in logical pixels: all the width there is, or, in a pane too short for that, all the
+/// height left under the back button and the tabs. The plot never gives up room to the lines of text under it, which
+/// are cut off instead. Undefined when the host does not say how big the pane is, and then the plot takes what is left.
+export function plotSide(d: DetailModel, dense: Density): number | undefined {
+  if (!d.pane) return undefined
+  const head = dense.button + (d.compact ? 44 : 56) + 2 * dense.gap
+  return Math.max(120, Math.floor(Math.min(d.pane.width - 2 * dense.padding, d.pane.height - 2 * dense.padding - head)))
+}
+
 export function buildDetailScene(d: DetailModel): PanelScene {
   const controls: PanelSceneControl[] = [
     { id: "back", kind: "nativeButton", label: "Back to the passes", icon: "arrow-left", variant: "text", event: "back" },
@@ -269,17 +278,19 @@ export function buildDetailScene(d: DetailModel): PanelScene {
   ]
 
   if (d.tab === "sky") {
+    const side = plotSide(d, dense)
     d.times.forEach((_, i) => controls.push({ id: timeKey(i), kind: "nativeText", label: ["Rise", "Peak", "Set"][i] ?? "Time", value: timeKey(i), style: "mono" }))
     return {
       version: 1,
       width: 360,
       height: 360,
-      values: detailValues(d),
+      // The slider rests one past the pass's last moment, where the plot shows what it always did.
+      values: { ...detailValues(d), ...(d.scrub ? { scrub: d.scrub.rest } : {}) },
       strings: detailStrings(d),
-      layers: [{ id: "sky", x: 0, y: 0, width: 360, height: 360, svg: d.sky.svg }, ...d.sky.compass, ...d.sky.labels, ...d.sky.readout],
-      controls,
+      layers: [{ id: "sky", x: 0, y: 0, width: 360, height: 360, svg: d.sky.svg }, ...d.sky.compass, ...d.sky.labels, ...d.sky.readout, ...(d.scrub?.layers ?? [])],
+      controls: d.scrub ? [...controls, d.scrub.control] : controls,
       layout: {
-        column: [...head, { scene: true, flex: 1 }, ...d.times.map((_, i): PanelSceneLayoutNode => ({ control: timeKey(i) }))],
+        column: [...head, side ? { scene: true, height: side } : { scene: true, flex: 1 }, ...d.times.map((_, i): PanelSceneLayoutNode => ({ control: timeKey(i) }))],
         padding: dense.padding,
         spacing: dense.gap,
         crossAxisAlignment: "stretch",

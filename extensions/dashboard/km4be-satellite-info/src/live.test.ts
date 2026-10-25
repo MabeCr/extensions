@@ -90,7 +90,7 @@ test("under way, the plot has the satellite's elevation beside it and the Dopple
   assert.equal(now.text.literal, `${Math.round(lookAt(satrec, miami, mid)!.elevation)}°`)
 
   const rate = rangeRate(satrec, miami, mid)!
-  const byId = Object.fromEntries(detail.sky.readout.map((l) => [l.id, l.text.literal]))
+  const byId = Object.fromEntries(detail.sky.readout.map((l) => [l.id, l.text!.literal]))
   // AO-7 is heard on 29.4-29.5 MHz (center 29.45) and sent to on 145.85-145.95 (center 145.9).
   assert.equal(byId.dnFreq, `↓ ${downlinkDoppler(29.45, rate).toFixed(4)}`)
   assert.equal(byId.upFreq, `↑ ${uplinkDoppler(145.9, rate).toFixed(4)}`)
@@ -99,8 +99,8 @@ test("under way, the plot has the satellite's elevation beside it and the Dopple
   // The downlink goes to the top left and the uplink to the top right, in the empty corners.
   const left = detail.sky.readout.find((l) => l.id === "dnFreq")!
   const right = detail.sky.readout.find((l) => l.id === "upFreq")!
-  assert.ok(left.x < 10 && left.y < 10 && left.text.align === "start")
-  assert.ok(right.x + right.width > 350 && right.y < 10 && right.text.align === "end")
+  assert.ok(left.x < 10 && left.y < 10 && left.text!.align === "start")
+  assert.ok(right.x + right.width > 350 && right.y < 10 && right.text!.align === "end")
 })
 
 test("none of it is there before the satellite rises or after it sets", () => {

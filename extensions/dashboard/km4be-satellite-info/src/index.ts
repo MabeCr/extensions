@@ -53,6 +53,12 @@ const paneState = (args: PanelRenderArgs): PaneState => {
   return state
 }
 
+/// The pane's size, when the host reports it.
+const paneOf = (args: PanelRenderArgs): { width: number; height: number } | undefined => {
+  const e = args.environment
+  return e && e.width > 0 && e.height > 0 ? { width: e.width, height: e.height } : undefined
+}
+
 const nowMillis = (args: PanelRenderArgs): number => args.clock?.realNowMillis ?? Date.now()
 
 /// Whether the pane counts down to rise, peak and set. Off unless the setting is on.
@@ -175,7 +181,7 @@ async function snapshot(args: PanelRenderArgs, ctx: HookContext): Promise<View> 
           tab,
           themeOf(args.environment?.colors),
           statusLines(statusFor(ready.reports, pass.satellite), ready.hours, now, state.utc),
-          { countdown: countdownOn(args.config), compact: isCompact(args.config, args.environment) },
+          { countdown: countdownOn(args.config), compact: isCompact(args.config, args.environment), pane: paneOf(args) },
         ) }
     state.view = "list" // it has ended, or the settings no longer list it
   }

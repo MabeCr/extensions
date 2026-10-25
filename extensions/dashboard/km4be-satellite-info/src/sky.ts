@@ -25,6 +25,9 @@ export const READOUT_BOXES = [
   { x: 244, y: 4, width: 112, height: 34 },
 ]
 
+/// Where the time and elevation of the moment being scrubbed to go: the bottom left corner, outside the circle.
+export const SCRUB_BOX = { x: 4, y: 336, width: 120, height: 20 }
+
 /// Where the satellite is in the sky, as an azimuth and an elevation.
 export interface SkyLook {
   azimuth: number

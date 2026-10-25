@@ -134,16 +134,32 @@ test("the pass's page gives its times to the second, and the plot carries them t
   assert.deepEqual(triggers, [])
 })
 
-test("the plot is left to the layout, so it takes what the text under it leaves and the text is never cut off", async () => {
-  for (const pane of [undefined, { width: 390, height: 700 }, { width: 390, height: 400 }]) {
+test("the plot keeps its size, and it is the text under it that gives way when the pane is short", async () => {
+  type Node = { scene?: boolean; flex?: number; height?: number; width?: number }
+  const plotOf = async (pane?: { width: number; height: number }, config: Record<string, unknown> = cfg) => {
     const p = await panel(pane)
-    await openFirst(p, cfg, t0)
-    const column = (await p.render(cfg, t0)).scene.layout.column
-    const plots = column.filter((n) => (n as { scene?: boolean }).scene === true)
+    await openFirst(p, config, t0)
+    const plots = (await p.render(config, t0)).scene.layout.column.filter((n) => (n as Node).scene === true) as Node[]
     assert.equal(plots.length, 1)
-    assert.equal((plots[0] as { flex?: number; width?: number; height?: number }).flex, 1, "it takes the rest")
-    assert.equal((plots[0] as { width?: number }).width, undefined, "and has no size of its own")
+    return plots[0]
   }
+  // A host that does not say how big the pane is leaves the plot what the text under it does not take.
+  assert.equal((await plotOf()).flex, 1)
+
+  // Otherwise it has a size of its own: the pane's width less its padding, in a pane tall enough for that...
+  const tall = await plotOf({ width: 1000, height: 1400 }, { ...cfg, density: "comfortable" })
+  assert.equal(tall.flex, undefined)
+  assert.equal(tall.height, 1000 - 24)
+  // ...and what is left under the back button and the tabs in one that is not, however much text is under it.
+  const short = await plotOf({ width: 1000, height: 400 }, { ...cfg, density: "comfortable" })
+  assert.ok(short.height! < 400 - 24 - 56 && short.height! > 150, String(short.height))
+  const shorter = await plotOf({ width: 1000, height: 380 }, { ...cfg, density: "comfortable" })
+  assert.ok(shorter.height! < short.height!, "it follows the pane")
+
+  // The same pane gives the same plot whatever the page holds: the lines under it change, not the plot.
+  const a = await plotOf({ width: 390, height: 500 })
+  const b = await plotOf({ width: 390, height: 500 }, { ...cfg, countdown: true })
+  assert.equal(a.height, b.height)
 })
 
 test("with the countdown on, each event shows its time to or since, and the page redraws every second", async () => {

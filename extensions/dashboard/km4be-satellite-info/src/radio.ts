@@ -107,7 +107,7 @@ export interface LiveShift {
   kHz: number
 }
 
-/// The Doppler shift of the first downlink and the first uplink at this very moment: where the
+/// The Doppler shift of the first downlink and the first uplink at `now` (`satrec` saves working the orbit out afresh for each of many moments): where the
 /// satellite is and how fast it is closing or opening, as seen from `observer`. Null when there is
 /// no orbit to work it out from.
 ///
@@ -117,9 +117,14 @@ export interface LiveShift {
 /// satellite hears the band's center. Worked out from the same orbit as everything else, so it is as
 /// good as the orbit and the device's clock: a day-old orbit and a clock a second out are each about
 /// a hundred hertz at 435 MHz.
-export function liveDoppler(satellite: Satellite, observer: Observer, now: number): { down?: LiveShift; up?: LiveShift } | null {
-  if (!satellite.omm) return null
-  const rate = rangeRate(satrecFromOmm(satellite.omm), observer, now)
+export function liveDoppler(
+  satellite: Satellite,
+  observer: Observer,
+  now: number,
+  satrec = satellite.omm ? satrecFromOmm(satellite.omm) : null,
+): { down?: LiveShift; up?: LiveShift } | null {
+  if (!satrec) return null
+  const rate = rangeRate(satrec, observer, now)
   if (rate === null) return null
   const { shown } = links(satellite)
   const shift = (nominal: number, mhz: number): LiveShift => ({ mhz, kHz: (mhz - nominal) * 1000 })
