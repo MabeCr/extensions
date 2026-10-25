@@ -48,5 +48,11 @@
   "operatorsLabel": "Operadores",
   "operatorsPlaceholder": "ej. K1ABC W2DEF (multi-operador)",
   "clubLabel": "Club",
-  "clubPlaceholder": "Nombre completo del club — en blanco usa el de tu perfil"
+  "clubPlaceholder": "Nombre completo del club — en blanco usa el de tu perfil",
+  "bandHeader": "Banda",
+  "qsosHeader": "QSOs",
+  "pointsHeader": "Pts",
+  "zonesHeader": "Zonas",
+  "countriesHeader": "País",
+  "qthsHeader": "QTHs"
 }

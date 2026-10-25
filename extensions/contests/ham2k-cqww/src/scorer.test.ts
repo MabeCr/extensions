@@ -159,6 +159,23 @@ test('the summary is titled as the operation is, over arithmetic that multiplies
   assert.equal((summary.cqww.longSummary as string).split('\n')[0], '2 QSOs, 6 pts × 4 mults (2 zones, 2 countries)')
 })
 
+test('the band table counts each band\'s zones and countries apart', () => {
+  // Two DL stations in zone 14 on 20m are one zone and one country there; a
+  // JA adds a second of each. 40m gets only the one DL.
+  const { sheet } = run([
+    qso('DL1ABC', '20m', 'SSB', '14'),
+    qso('DL2ABC', '20m', 'SSB', '14'),
+    qso('JA1ABC', '20m', 'SSB', '25'),
+    qso('DL1ABC', '40m', 'SSB', '14'),
+  ])
+  const summary = CQWWScorer.summarizeScore({ scoresheet: sheet, operation: usOperation, ref: ssbRef, scope: 'operation' }, ctx)
+  const lines = (summary.cqww.longSummary as string).split('\n')
+  assert.ok(lines.includes('| Band | QSOs | Pts | Zones | Ctry |'))
+  assert.ok(lines.includes('| **20m** | 3 | 9 | 2 | 2 |'))
+  assert.ok(lines.includes('| **40m** | 1 | 3 | 1 | 1 |'))
+  assert.ok(lines.includes('| **10m** | — | — | — | — |'))
+})
+
 test('offers no per-day summary', () => {
   // Multipliers are counted across the whole contest, so a day's share of the
   // score is not a number CQ WW defines.
@@ -236,6 +253,15 @@ test('the RTTY summary breaks out the QTH multipliers', () => {
   const { sheet } = run([rttyQso('W1AW', '20m', { theirZone: '5', theirQth: 'CT' })], usOperation, rttyRef)
   const summary = CQWWScorer.summarizeScore({ scoresheet: sheet, operation: usOperation, ref: rttyRef, scope: 'operation' }, ctx)
   assert.equal((summary.cqww.longSummary as string).split('\n')[0], '1 QSO, 1 pt × 3 mults (1 zone, 1 country, 1 W/VE QTH)')
+})
+
+test('the RTTY band table adds the W/VE QTHs', () => {
+  const { sheet } = run([rttyQso('W1AW', '20m', { theirZone: '5', theirQth: 'CT' })], usOperation, rttyRef)
+  const summary = CQWWScorer.summarizeScore({ scoresheet: sheet, operation: usOperation, ref: rttyRef, scope: 'operation' }, ctx)
+  const lines = (summary.cqww.longSummary as string).split('\n')
+  assert.ok(lines.includes('| Band | QSOs | Pts | Zones | Ctry | QTHs |'))
+  assert.ok(lines.includes('| **20m** | 1 | 1 | 1 | 1 | 1 |'))
+  assert.ok(!lines.some((line) => line.startsWith('| **160m**')), 'no 160m on the RTTY weekend')
 })
 
 test('a QTH means nothing on the CW and SSB weekends', () => {

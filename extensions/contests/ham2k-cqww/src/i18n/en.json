@@ -48,5 +48,11 @@
   "operatorsLabel": "Operators",
   "operatorsPlaceholder": "e.g. K1ABC W2DEF (multi-op)",
   "clubLabel": "Club",
-  "clubPlaceholder": "Full club name — leave blank to use your profile's"
+  "clubPlaceholder": "Full club name — leave blank to use your profile's",
+  "bandHeader": "Band",
+  "qsosHeader": "QSOs",
+  "pointsHeader": "Pts",
+  "zonesHeader": "Zones",
+  "countriesHeader": "Ctry",
+  "qthsHeader": "QTHs"
 }

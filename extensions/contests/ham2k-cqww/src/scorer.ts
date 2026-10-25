@@ -205,7 +205,7 @@ export const CQWWScorer: ContestScorer<CQWWScoresheet> = {
           },
           ctx,
         ),
-        detail: bandBreakdown(scoresheet, str(ref?.mode) === 'RTTY'),
+        detail: bandBreakdown(scoresheet, str(ref?.mode) === 'RTTY', t),
         extra: { points: scoresheet.points, mults: keys.length, qsos: scoresheet.qsos },
       },
       ctx,
@@ -220,15 +220,22 @@ export function contestTitle(ref: Record<string, JSONValue> | undefined): string
 }
 
 /// The per-band table a contester actually reads while operating — QSOs,
-/// points and multipliers for each band, in band order.
-function bandBreakdown(sheet: CQWWScoresheet, rtty: boolean): string {
-  const lines = (rtty ? RTTY_BANDS : VALID_BANDS).map((band) => {
+/// points, zones and countries (and W/VE QTHs on RTTY) for each band, in band
+/// order. Zones and countries are kept apart because each band's multiplier
+/// count says nothing about which kind is still missing there.
+function bandBreakdown(sheet: CQWWScoresheet, rtty: boolean, t: ReturnType<typeof tFor>): string {
+  const header = [t('bandHeader'), t('qsosHeader'), t('pointsHeader'), t('zonesHeader'), t('countriesHeader'), ...(rtty ? [t('qthsHeader')] : [])]
+  const rows = (rtty ? RTTY_BANDS : VALID_BANDS).map((band) => {
     const qsos = sheet.bands[band] ?? 0
-    const points = sheet.bandPoints[band] ?? 0
-    const mults = Object.keys(sheet.bandMults[band] ?? {}).length
-    return qsos === 0 && mults === 0
-      ? `**${band}**: —`
-      : `**${band}**: ${fmtInteger(qsos)} QSOs, ${fmtInteger(points)} pts, ${fmtInteger(mults)} mults`
+    const keys = Object.keys(sheet.bandMults[band] ?? {})
+    if (qsos === 0 && keys.length === 0) return [`**${band}**`, ...header.slice(1).map(() => '—')]
+    const zones = keys.filter((key) => key.includes('|Z')).length
+    const qths = keys.filter((key) => key.includes('|Q')).length
+    const countries = keys.length - zones - qths
+    return [
+      `**${band}**`,
+      ...[qsos, sheet.bandPoints[band] ?? 0, zones, countries, ...(rtty ? [qths] : [])].map((n) => fmtInteger(n)),
+    ]
   })
-  return lines.join('\n')
+  return [header, header.map(() => '---'), ...rows].map((cells) => `| ${cells.join(' | ')} |`).join('\n')
 }
