@@ -243,6 +243,9 @@ export function detailStrings(d: DetailModel): Record<string, string> {
   return strings
 }
 
+/// The line under the plot that says how to use the slider over it.
+export const SCRUB_HINT = "Scrub left to right on the sky chart to see detailed information"
+
 export const detailValues = (d: DetailModel): Record<string, number> => ({ utc: d.utc ? 1 : 0 })
 
 /// The side of the sky plot, in logical pixels: all the width there is, or, in a pane too short for that, all the
@@ -279,6 +282,7 @@ export function buildDetailScene(d: DetailModel): PanelScene {
 
   if (d.tab === "sky") {
     const side = plotSide(d, dense)
+    if (d.scrub) controls.push({ id: "scrubHint", kind: "nativeText", label: SCRUB_HINT, style: "label", align: "center" })
     d.times.forEach((_, i) => controls.push({ id: timeKey(i), kind: "nativeText", label: ["Rise", "Peak", "Set"][i] ?? "Time", value: timeKey(i), style: "mono" }))
     return {
       version: 1,
@@ -290,7 +294,7 @@ export function buildDetailScene(d: DetailModel): PanelScene {
       layers: [{ id: "sky", x: 0, y: 0, width: 360, height: 360, svg: d.sky.svg }, ...d.sky.compass, ...d.sky.labels, ...d.sky.readout, ...(d.scrub?.layers ?? [])],
       controls: d.scrub ? [...controls, d.scrub.control] : controls,
       layout: {
-        column: [...head, side ? { scene: true, height: side } : { scene: true, flex: 1 }, ...d.times.map((_, i): PanelSceneLayoutNode => ({ control: timeKey(i) }))],
+        column: [...head, side ? { scene: true, height: side } : { scene: true, flex: 1 }, ...(d.scrub ? [{ control: "scrubHint" }] : []), ...d.times.map((_, i): PanelSceneLayoutNode => ({ control: timeKey(i) }))],
         padding: dense.padding,
         spacing: dense.gap,
         crossAxisAlignment: "stretch",

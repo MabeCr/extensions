@@ -181,7 +181,7 @@ test("open controls name their pass, whatever the satellite is called", () => {
 
 const ctx = { online: true }
 let panes = 0
-interface Control { id: string; opacity?: number }
+interface Control { id: string; opacity?: number; label?: string }
 interface SceneOf { controls: Control[]; layers: { id: string }[]; strings: Record<string, string>; values: Record<string, number> }
 
 async function panel(shown: unknown[] = []) {
@@ -262,9 +262,10 @@ test("tapping a row opens its pass: the Sky page, then Radio, then back to the l
   assert.match(sky.strings.title, /^(AO-7|FO-29) · /)
   assert.equal(sky.strings.tab, "sky")
   assert.ok(sky.strings.time0.startsWith("Rise"))
-  assert.equal(sky.controls.length, 4 + 3 + 1, "the Sky page keeps only the times under the plot, and the slider over it")
+  assert.equal(sky.controls.length, 4 + 3 + 1 + 1, "the Sky page keeps only the times under the plot, the slider over it and the line that says how to use it")
   assert.equal(sky.strings.status0, undefined)
   assert.ok(sky.controls.length <= 64)
+  assert.equal(sky.controls.find((c) => c.id === "scrubHint")!.label, "Scrub left to right on the sky chart to see detailed information")
 
   assert.deepEqual(await p.event(t0, "tab", "tab", { text: "radio" }), { values: { utc: 0 } })
   const radio = await p.render(t0)
