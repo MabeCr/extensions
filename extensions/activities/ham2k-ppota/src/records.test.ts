@@ -9,9 +9,16 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 
 import { loadExtension } from "./sdkGapTesting.ts"
-import { perUtcDay } from "./exports.ts"
 
 const ppota = await loadExtension(() => import("./index.ts"))
+
+/// The ADIF writer is the host's, so a test stands in for it and keeps what
+/// each export handed it.
+const delegated: { qsos: { uuid: string }[] }[] = []
+;(globalThis as unknown as { __polo: Record<string, unknown> }).__polo.invokeLocal = async (_c: string, _m: string, args: never) => {
+  delegated.push(args)
+  return [{ key: "adif", ok: true, value: { content: "<EOH>\n" } }]
+}
 
 function mapCsv(rows: Record<string, string>[]) {
   const hook = ppota.hooks.find((h) => h.category === "dataFile" && h.key === "ham2k-ppota-all-references")
@@ -125,8 +132,8 @@ test("an evening activation across 00:00 UTC is one file per UTC day, each named
   // 21:00–22:00 in Argentina is 00:00–01:00 UTC the next day.
   const options = await optionsFor([qso("a", at(1, 23)), qso("b", at(2, 0)), qso("c", at(2, 1), { deleted: true })])
   assert.deepEqual(options.map((o) => o.exportKey), [
-    "ham2k-ppota-adif:PPAR-0004:2026-10-01",
-    "ham2k-ppota-adif:PPAR-0004:2026-10-02",
+    "ham2k-ppota-adif@2026-10-01:PPAR-0004",
+    "ham2k-ppota-adif@2026-10-02:PPAR-0004",
   ])
   assert.deepEqual(options.map((o) => o.templateData.modifier), ["2026-10-01", "2026-10-02"])
   assert.notEqual(options[0].filename, options[1].filename)
@@ -135,45 +142,21 @@ test("an evening activation across 00:00 UTC is one file per UTC day, each named
   assert.deepEqual(options.map((o) => o.qsoCount), [1, 1])
 })
 
-test("a day with only deleted contacts is no day, and a contact with no time joins the first", async () => {
-  const options = await optionsFor([qso("a", at(1, 23)), qso("b", at(2, 0), { deleted: true })])
-  assert.deepEqual(options.map((o) => o.exportKey), ["ham2k-ppota-adif:PPAR-0004"])
-
-  const handed: { qsos: { uuid: string }[] }[] = []
-  const wrapped = perUtcDay({
-    generateExport: async (args) => {
-      handed.push(args as never)
-      return { filename: "x.adi", mimeType: "text/plain", content: "" }
-    },
-  })
-  const qsos = [qso("t", 0), qso("a", at(1, 23)), qso("b", at(2, 0))]
+test("a day's file carries only that day's contacts", async () => {
+  const qsos = [qso("t", 0), qso("a", at(1, 23)), qso("b", at(2, 0)), qso("c", at(2, 1))]
   for (const day of ["2026-10-01", "2026-10-02"]) {
-    await wrapped.generateExport({ operation, qsos, exportKey: `ham2k-ppota-adif:PPAR-0004:${day}` }, {} as never)
+    await ppota.runHook("export", "generateExport", {
+      operation,
+      qsos,
+      exportType: "ppotaActivation-adif",
+      exportKey: `ham2k-ppota-adif@${day}:PPAR-0004`,
+    })
   }
-  assert.deepEqual(handed.map((h) => h.qsos.map((q) => q.uuid)), [["t", "a"], ["b"]])
+  // A contact with no time at all joins the first day.
+  assert.deepEqual(delegated.slice(-2).map((d) => d.qsos.map((q) => q.uuid)), [["t", "a"], ["b", "c"]])
 })
 
-test("a day's file carries only that day's contacts", async () => {
-  // The ADIF writer is the host's, which the harness answers with nothing; so
-  // the wrapper is checked for what it hands the hook it wraps.
-  const handed: unknown[] = []
-  const wrapped = perUtcDay({
-    generateExport: async (args) => {
-      handed.push(args)
-      return { filename: "x.adi", mimeType: "text/plain", content: "" }
-    },
-  })
-
-  await wrapped.generateExport(
-    {
-      operation,
-      qsos: [qso("a", at(1, 23)), qso("b", at(2, 0)), qso("c", at(2, 1))],
-      exportType: "ppotaActivation-adif",
-      exportKey: "ham2k-ppota-adif:PPAR-0004:2026-10-02",
-    },
-    {} as never,
-  )
-  const args = handed[0] as { exportKey: string; qsos: { uuid: string }[] }
-  assert.equal(args.exportKey, "ham2k-ppota-adif:PPAR-0004")
-  assert.deepEqual(args.qsos.map((q) => q.uuid), ["b", "c"])
+test("a day with only deleted contacts is no day", async () => {
+  const options = await optionsFor([qso("a", at(1, 23)), qso("b", at(2, 0), { deleted: true })])
+  assert.deepEqual(options.map((o) => o.exportKey), ["ham2k-ppota-adif:PPAR-0004"])
 })

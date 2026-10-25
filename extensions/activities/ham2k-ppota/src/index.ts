@@ -41,8 +41,6 @@ import { bandForFrequency } from "@ham2k/lib-operation-data"
 import { locationToGrid6 } from "@ham2k/lib-geo-tools"
 
 import { tFor } from "./i18n.ts"
-import { perUtcDay } from "./exports.ts"
-import { oneCallsignPerDay } from "./scoring.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
 
@@ -121,8 +119,7 @@ const { refHandler, activityHook, adifFieldsHook, adifImportHook } = referenceAc
 /// Five contacts, five different callsigns, one UTC day.
 ///
 /// A callsign counts once per day toward the five, whatever band or mode it
-/// is worked on again (rules §2.3). `activityScorer` cannot say "different
-/// callsigns" on its own; `oneCallsignPerDay` caps it.
+/// is worked on again (rules §2.3), which is `distinctCallsPerDay`.
 export const PPOTA_SCORING = {
   label: 'PPOTA',
   icon: manifest.icon,
@@ -132,6 +129,7 @@ export const PPOTA_SCORING = {
   allowsMultipleReferences: true,
   uniquePer: ['day', 'ref'] as const,
   freshRefRescuesActivation: false,
+  distinctCallsPerDay: true,
   activates: 'daily' as const,
   refNoun: (ctx: HookContext) => tFor(ctx)('reference'),
   refNounPlural: (ctx: HookContext) => tFor(ctx)('referencesPlural'),
@@ -416,7 +414,7 @@ defineExtension({
     registerHook('spots', { hook: ppotaSpotsHook(PPOTA_API_KEY), key: manifest.key })
     registerHook('dataFile', { hook: ppotaDataFile, key: `${manifest.key}-all-references` })
     registerHook('scoring', {
-      hook: contestScorer(oneCallsignPerDay(activityScorer(PPOTA_SCORING), ACTIVATION_TYPE), {
+      hook: contestScorer(activityScorer(PPOTA_SCORING), {
         scope: { refTypes: [ACTIVATION_TYPE, HUNTING_TYPE], huntingRefTypes: [HUNTING_TYPE] },
       }),
       key: manifest.key,
@@ -425,7 +423,7 @@ defineExtension({
     // under the single reference selected for it, and refuses a file spanning
     // two UTC days.
     registerHook('export', {
-      hook: perUtcDay(activityExportHook({ key: manifest.key, label: 'PPOTA', activationType: ACTIVATION_TYPE, icon: manifest.icon })),
+      hook: activityExportHook({ key: manifest.key, label: 'PPOTA', activationType: ACTIVATION_TYPE, icon: manifest.icon, splitByUtcDay: true }),
       key: manifest.key,
     })
   },

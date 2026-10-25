@@ -43,7 +43,6 @@ import { bandForFrequency, superModeForMode } from "@ham2k/lib-operation-data"
 import { locationToGrid6 } from "@ham2k/lib-geo-tools"
 
 import { tFor } from "./i18n.ts"
-import { oneCallsignPerDay } from "./scoring.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
 
@@ -121,8 +120,7 @@ const { refHandler, activityHook, adifFieldsHook, adifImportHook } = referenceAc
 /// a callsign counts once per day toward the five: working it again on a new
 /// band or mode is a good contact that adds no callsign, and working it at a
 /// DIFFERENT reference credits that reference to the hunter side, again
-/// without a second callsign toward the activation. `activityScorer` cannot
-/// say "different callsigns" on its own; `oneCallsignPerDay` caps it.
+/// without a second callsign toward the activation: `distinctCallsPerDay`.
 export const HOTA_SCORING = {
   label: 'HOTA',
   icon: manifest.icon,
@@ -132,6 +130,7 @@ export const HOTA_SCORING = {
   allowsMultipleReferences: true,
   uniquePer: ['band', 'mode', 'day', 'ref'] as const,
   freshRefRescuesActivation: false,
+  distinctCallsPerDay: true,
   activates: 'daily' as const,
   refNoun: (ctx: HookContext) => tFor(ctx)('site'),
   refNounPlural: (ctx: HookContext) => tFor(ctx)('sitesPlural'),
@@ -444,7 +443,7 @@ defineExtension({
     registerHook('account', { hook: AccountHook, key: manifest.key })
     registerHook('dataFile', { hook: hotaDataFile, key: `${manifest.key}-all-references` })
     registerHook('scoring', {
-      hook: contestScorer(oneCallsignPerDay(activityScorer(HOTA_SCORING), ACTIVATION_TYPE), {
+      hook: contestScorer(activityScorer(HOTA_SCORING), {
         scope: { refTypes: [ACTIVATION_TYPE, HUNTING_TYPE], huntingRefTypes: [HUNTING_TYPE] },
       }),
       key: manifest.key,
