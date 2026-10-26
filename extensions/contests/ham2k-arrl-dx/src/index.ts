@@ -11,6 +11,7 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
+import { rulesNotes, withRules } from "@ham2k/lib-contest-rules"
 import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -30,7 +31,7 @@ import { tFor } from "./i18n.ts"
 import { cabrilloLocation, normalizeSection } from "./location.ts"
 import { MODES, nearestMode, nextContestDate, relevanceFor } from "./schedule.ts"
 import { ARRLDXScorer, POWER_PATTERN, contestTitle, isWveCall, weAreWve } from "./scorer.ts"
-import { BAND_CLASSES, OPERATOR_CLASSES, POWER_CLASSES, cabrilloCategories, declaredClub, declaredOperators } from "./entry.ts"
+import { BAND_CLASSES, OPERATOR_CLASSES, POWER_CLASSES, cabrilloCategories, contestRules, declaredClub, declaredOperators } from "./entry.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
 
@@ -184,6 +185,8 @@ const ActivityHook = {
                 placeholder: ours ? t('ourStatePlaceholder') : t('ourPowerPlaceholder'),
                 uppercase: true,
               },
+              // What the rules allow, following the operator class below.
+              ...rulesNotes(ctx, 'operator', OPERATOR_CLASSES, contestRules),
               // The entry we are making, for the Cabrillo header. Each starts
               // undeclared: see entry.ts.
               ...entrySelects(t),
@@ -301,7 +304,8 @@ const RefHandler = {
     const mode = str(r.mode)
     const label = mode ? `ARRL DX ${mode}` : tFor(ctx)('unconfigured')
     const sent = str(r.exchange)
-    return { ...ref, program: 'Contest', label, shortLabel: label, name: sent || tFor(ctx)('notConfigured') }
+    const decorated = { ...ref, program: 'Contest', label, shortLabel: label, name: sent || tFor(ctx)('notConfigured') }
+    return withRules(decorated, contestRules((ref as Record<string, JSONValue>).operator))
   },
 
   /// Same reasoning as CQ WW: what we send goes in the subtitle. For ARRL DX

@@ -13,6 +13,7 @@
 // entry is all-band and may use assistance — is written for it.
 
 import type { JSONValue } from "@ham2k/extension-sdk"
+import type { ContestRules } from "@ham2k/lib-contest-rules"
 
 /// The rules' entry categories (V.A, V.C, V.D). Operator and transmitter are
 /// one axis here, as the rules list them, and split into the two Cabrillo
@@ -73,6 +74,14 @@ export function cabrilloCategories(ref: Record<string, JSONValue> | undefined): 
     ['CATEGORY-STATION', operator === 'MULTI-DISTRIBUTED' ? 'DISTRIBUTED' : undefined],
     ['CATEGORY-OVERLAY', validOverlay],
   ]
+}
+
+/// What the rules allow an entry declared as [operator]. A Single Operator
+/// uses no "QSO finding assistance of any kind" (V.A.1) — nor does the Classic
+/// overlay (V.B.1), which only a Single Operator can claim — and "self-spotting
+/// or asking to be spotted is not permitted" for anyone (IX.4).
+export function contestRules(operator: JSONValue | undefined): ContestRules {
+  return { assistance: declared(operator, OPERATOR_CLASSES) !== 'SINGLE-OP', selfSpotting: false }
 }
 
 /// `OPERATORS`: the calls typed at setup, uppercased and space-separated as

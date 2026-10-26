@@ -373,6 +373,9 @@ function optionsOf(raw) {
     bonusStationOutOfStateMult: num(o.bonusStationOutOfStateMult),
     inStateToOutOfStatePointsDouble: bool(o.inStateToOutOfStatePointsDouble),
     dataAndCWCountAsSameMode: bool(o.dataAndCWCountAsSameMode),
+    // Only an explicit `false` forbids: a file that says nothing, or `true`,
+    // leaves self-spotting to the operator.
+    selfSpottingForbidden: o.selfSpotting === false,
     pointsWhenTheyAreOutOfParty: num(o.pointsWhenTheyAreOutOfParty),
     removeCountySuffixes: bool(o.removeCountySuffixes),
     labelForCounties: str(o.labelForCounties),
@@ -564,6 +567,7 @@ function emitParty(raw, key) {
   // Stated only when it is false, which is the whole of what it says: the
   // default is that counties multiply.
   if (!options.countiesAreMultipliersInParty) rules.push(["countiesAreMultipliersInParty", "false"])
+  if (options.selfSpottingForbidden) rules.push(["selfSpotting", "false"])
   for (const value of [
     "dxEntityMultiplierMax", "inStateMultiplierMax", "bonusStationInStateMult", "bonusStationOutOfStateMult",
     "pointsWhenTheyAreOutOfParty",

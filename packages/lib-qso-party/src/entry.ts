@@ -9,6 +9,8 @@
 // `location` and `mobile` are what a rover changes when they drive into the
 // next county, so the scorer reads them per QSO rather than once per log.
 
+import type { ContestRules } from "@ham2k/lib-contest-rules"
+
 import type { ModeClass, OperatorClass, OverlayClass, PowerClass, StationClass } from "./params.ts"
 import type { Party } from "./party.ts"
 
@@ -185,6 +187,16 @@ export function ourOperatorClass(
   ref?: Record<string, unknown>,
 ): OperatorClass | undefined {
   return declared(ref ?? partyRefIn(party, operation), 'operator', OPERATOR_CLASSES, party.entryClasses.operator)
+}
+
+/// What the party's rules allow an entry declared as [operator]. Where a party
+/// publishes an assisted single-operator class, plain Single Operator is the
+/// unassisted one; elsewhere its classes say nothing of spotting assistance.
+/// Self-spotting is the party's own rule, the same for every entry.
+export function partyRules(party: Party, operator: unknown): ContestRules {
+  const unassisted = party.entryClasses.operator.includes('SINGLE-OP-ASSISTED')
+    && ourOperatorClass(party, undefined, { operator }) === 'SINGLE-OP'
+  return { assistance: !unassisted, selfSpotting: party.selfSpotting !== false }
 }
 
 export function ourStationClass(

@@ -452,6 +452,9 @@ export interface QsoPartyParams {
   powerMultipliers?: Partial<Record<PowerClass, number>>
   /// The classes this party publishes. Default: no axis is asked about.
   entryClasses?: QsoPartyEntryClasses
+  /// `false` where the sponsor's rules forbid spotting yourself, for every
+  /// entry. Default: the rules leave it to the operator.
+  selfSpotting?: boolean
   /// What the entry row asks for besides the location. Default: neither.
   exchange?: QsoPartyExchangeFields
 

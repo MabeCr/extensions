@@ -250,3 +250,17 @@ describe('how a configured entry names itself', () => {
     assert.equal((await decorate(configured)).program, 'Contest')
   })
 })
+
+test("Winter Field Day rules out self-spotting for every entry, and leaves assistance to the operator", async () => {
+  const decorated = (await wfd.runHook("ref:wfd", "decorateRef", { ref: { type: "wfd", ref: "2027", ourClass: "1O", assistance: false } })) as Record<string, unknown>
+  assert.equal(decorated.selfSpotting, false)
+  assert.equal("assistance" in decorated, false)
+  // A suggestion is stored without being decorated, so it says the same.
+  const suggestions = (await wfd.runHook("activity", "suggest", { searchTerm: "winter" })) as Record<string, unknown>[]
+  assert.ok(suggestions.length > 0 && suggestions.every((s) => s.selfSpotting === false))
+
+  const controls = (await wfd.runHook("activity", "operationControls", { operation: { refs: [] } })) as {
+    input: { form: { elements: { type: string; text?: string }[] } }
+  }[]
+  assert.ok(controls[0].input.form.elements.some((el) => el.text === "🟢 Assistance: ON, 🔴 Self-spotting: OFF"))
+})

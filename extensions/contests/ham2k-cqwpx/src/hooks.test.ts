@@ -44,3 +44,32 @@ test("an operation already running the contest is offered nothing", async () => 
 test("the activity search stays out of unrelated searches", async () => {
   assert.deepEqual(await contest.runHook("activity", "suggest", { searchTerm: "pota" }), [])
 })
+
+test("the ref states the rules for its operator class, and only what they forbid", async () => {
+  // The host forces a switch off for any ref holding `false`, and reads an
+  // absent key as no say: a ref re-decorated after the class changed has to
+  // drop the `false` the old class left on it.
+  const decorate = async (extra: Record<string, unknown>) =>
+    (await contest.runHook("ref:cqwpx", "decorateRef", { ref: { type: "cqwpx", mode: "CW", ...extra } })) as Record<string, unknown>
+
+  // The plain single operator is the entry the header files as NON-ASSISTED.
+  assert.equal((await decorate({ operator: "SINGLE-OP" })).assistance, false)
+  assert.equal("assistance" in (await decorate({ operator: "SINGLE-OP-ASSISTED", assistance: false })), false)
+  // Classic is dropped from any other class's header, so it locks nothing.
+  assert.equal("assistance" in (await decorate({ operator: "MULTI-ONE", overlay: "CLASSIC" })), false)
+  // Nobody self-spots, whatever the entry.
+  assert.equal((await decorate({})).selfSpotting, false)
+
+  const suggestions = (await contest.runHook("activity", "suggest", { searchTerm: "wpx" })) as Record<string, unknown>[]
+  assert.ok(suggestions.length > 0 && suggestions.every((s) => s.selfSpotting === false && !("assistance" in s)))
+})
+
+test("the setup form's rules line follows the operator class", async () => {
+  const controls = (await contest.runHook("activity", "operationControls", { operation: fixtureOperation({ refs: [] }) })) as {
+    input: { form: { elements: { type: string; text?: string; visibleWhen?: { field: string; equals: unknown[] } }[] } }
+  }[]
+  const notes = controls[0].input.form.elements.filter((el) => el.type === "markdown")
+  const shownFor = (op: string) => notes.filter((el) => el.visibleWhen?.equals.includes(op)).map((el) => el.text)
+  assert.deepEqual(shownFor("SINGLE-OP"), ["🔴 Assistance: OFF, 🔴 Self-spotting: OFF"])
+  assert.deepEqual(shownFor("MULTI-ONE"), ["🟢 Assistance: ON, 🔴 Self-spotting: OFF"])
+})

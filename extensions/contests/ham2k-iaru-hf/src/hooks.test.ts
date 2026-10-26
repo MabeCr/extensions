@@ -37,3 +37,31 @@ test("an operation already running the contest is offered nothing", async () => 
 test("the activity search stays out of unrelated searches", async () => {
   assert.deepEqual(await contest.runHook("activity", "suggest", { searchTerm: "pota" }), [])
 })
+
+test("the ref states the rules for its operator class, and only what they forbid", async () => {
+  const decorate = async (extra: Record<string, unknown>) =>
+    (await contest.runHook("ref:iaru-hf", "decorateRef", { ref: { type: "iaru-hf", modeRestriction: "Mixed", ...extra } })) as Record<string, unknown>
+
+  // Multi-Two is the easy one to miss: it is a multi-operator class without
+  // spotting assistance (HCAT.4.2.2).
+  assert.equal((await decorate({ operator: "SINGLE-OP" })).assistance, false)
+  assert.equal((await decorate({ operator: "MULTI-TWO" })).assistance, false)
+  // A class that may use it drops the `false` an earlier class left behind.
+  assert.equal("assistance" in (await decorate({ operator: "MULTI-ONE", assistance: false })), false)
+  assert.equal("assistance" in (await decorate({ operator: "MULTI-HQ" })), false)
+  // Nobody self-spots, whatever the class.
+  assert.equal((await decorate({})).selfSpotting, false)
+
+  const suggestions = (await contest.runHook("activity", "suggest", { searchTerm: "iaru" })) as Record<string, unknown>[]
+  assert.ok(suggestions.length > 0 && suggestions.every((s) => s.selfSpotting === false && !("assistance" in s)))
+})
+
+test("the setup form's rules line follows the operator class", async () => {
+  const controls = (await contest.runHook("activity", "operationControls", { operation: fixtureOperation({ refs: [] }) })) as {
+    input: { form: { elements: { type: string; text?: string; visibleWhen?: { field: string; equals: unknown[] } }[] } }
+  }[]
+  const notes = controls[0].input.form.elements.filter((el) => el.type === "markdown")
+  const shownFor = (op: string) => notes.filter((el) => el.visibleWhen?.equals.includes(op)).map((el) => el.text)
+  assert.deepEqual(shownFor("MULTI-TWO"), ["🔴 Assistance: OFF, 🔴 Self-spotting: OFF"])
+  assert.deepEqual(shownFor("SINGLE-OP-UNLIMITED"), ["🟢 Assistance: ON, 🔴 Self-spotting: OFF"])
+})

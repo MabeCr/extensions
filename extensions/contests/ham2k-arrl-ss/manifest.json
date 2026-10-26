@@ -2,7 +2,7 @@
   "key": "ham2k-arrl-ss",
   "name": "ARRL November Sweepstakes",
   "shortName": "ARRL SS",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Work every ARRL and RAC section from the US and Canada: serial, precedence, check and section; first full weekend of November (CW) and third (Phone)",
   "category": "contest",
   "icon": "broom",

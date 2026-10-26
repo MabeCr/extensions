@@ -12,6 +12,7 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
+import { rulesNotes, withRules } from "@ham2k/lib-contest-rules"
 import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -40,6 +41,7 @@ import {
   ENTRY_CLASSES,
   PRECEDENCE_PATTERN,
   cabrilloCategories,
+  contestRules,
   declaredClub,
   declaredOperators,
   normalizeCheck,
@@ -229,6 +231,8 @@ const ActivityHook = {
                 uppercase: true,
                 value: profileSection,
               },
+              // What the rules allow, following the entry above.
+              ...rulesNotes(ctx, 'entry', ENTRY_CLASSES, contestRules),
               {
                 type: 'field',
                 fieldType: 'text',
@@ -354,7 +358,8 @@ const RefHandler = {
     const mode = str((ref as Record<string, JSONValue>).mode)
     const label = mode ? labelFor(mode) : t('unconfigured')
     const own = ourExchange(ref as Record<string, JSONValue>)
-    return { ...ref, program: 'Contest', label, shortLabel: label, name: own || t('notConfigured') }
+    const decorated = { ...ref, program: 'Contest', label, shortLabel: label, name: own || t('notConfigured') }
+    return withRules(decorated, contestRules((ref as Record<string, JSONValue>).entry))
   },
 
   /// "KI2D for ARRL SS CW" with "A 79 CT" beneath it: the sent exchange is the

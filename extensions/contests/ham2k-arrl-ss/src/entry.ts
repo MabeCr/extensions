@@ -20,6 +20,7 @@
 // value for it, and the ARRL's upload page asks for it itself.
 
 import type { JSONValue } from "@ham2k/extension-sdk"
+import type { ContestRules } from "@ham2k/lib-contest-rules"
 
 /// The entry categories, as the setup form offers them: each a precedence and,
 /// where it has one, a power sub-category.
@@ -58,6 +59,14 @@ export function normalizeCheck(value: JSONValue | undefined): string {
 export function declaredEntry(ref: Record<string, JSONValue> | undefined): EntryClass | undefined {
   const upper = typeof ref?.entry === 'string' ? ref.entry.toUpperCase() : ''
   return ENTRY_CLASSES.find((option) => option === upper)
+}
+
+/// What the rules allow an entry declared as [entry]. A Single Operator, at
+/// any power, may not use spotting assistance (HCAT.1.1); Unlimited, Multi and
+/// School may (HCAT.2.1, HCAT.3.1, HCAT.4.5). Self-spotting is not among the
+/// prohibited conduct (PROH), so the rules leave it to the operator.
+export function contestRules(entry: JSONValue | undefined): ContestRules {
+  return { assistance: !declaredEntry({ entry: entry ?? '' })?.startsWith('SO-'), selfSpotting: true }
 }
 
 /// The precedence letter we send, from the entry declared on [ref].

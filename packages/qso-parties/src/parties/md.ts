@@ -27,6 +27,7 @@ export const PARTY: QsoPartyParams = {
   dxEntityIsMultiplier: true,
   dxLocationIsPrefix: true,
   bonusPostMultiplier: true,
+  selfSpotting: false,
   pointsByMode: { PHONE: 1, CW: 3 },
   bonusStations: { W3VPR: 50 },
   entryClasses: {

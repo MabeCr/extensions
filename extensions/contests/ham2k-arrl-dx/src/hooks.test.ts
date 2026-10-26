@@ -44,3 +44,24 @@ test("an operation already running the contest is offered nothing", async () => 
 test("the activity search stays out of unrelated searches", async () => {
   assert.deepEqual(await contest.runHook("activity", "suggest", { searchTerm: "pota" }), [])
 })
+
+test("the ref states the rules for its operator class, and only what they forbid", async () => {
+  const decorate = async (extra: Record<string, unknown>) =>
+    (await contest.runHook("ref:arrl-dx", "decorateRef", { ref: { type: "arrl-dx", mode: "CW", ...extra } })) as Record<string, unknown>
+
+  assert.equal((await decorate({ operator: "SINGLE-OP" })).assistance, false)
+  // A class that may use spots drops the `false` an earlier class left behind.
+  assert.equal("assistance" in (await decorate({ operator: "SINGLE-OP-UNLIMITED", assistance: false })), false)
+  // Self-spotting is the operator's call in ARRL DX, whatever the class.
+  assert.equal("selfSpotting" in (await decorate({ operator: "SINGLE-OP" })), false)
+})
+
+test("the setup form's rules line follows the operator class", async () => {
+  const controls = (await contest.runHook("activity", "operationControls", { operation: fixtureOperation({ refs: [] }) })) as {
+    input: { form: { elements: { type: string; text?: string; visibleWhen?: { field: string; equals: unknown[] } }[] } }
+  }[]
+  const notes = controls[0].input.form.elements.filter((el) => el.type === "markdown")
+  const shownFor = (op: string) => notes.filter((el) => el.visibleWhen?.equals.includes(op)).map((el) => el.text)
+  assert.deepEqual(shownFor("SINGLE-OP"), ["🔴 Assistance: OFF, 🟢 Self-spotting: ON"])
+  assert.deepEqual(shownFor("MULTI-ONE"), ["🟢 Assistance: ON, 🟢 Self-spotting: ON"])
+})

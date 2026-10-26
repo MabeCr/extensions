@@ -249,6 +249,17 @@ saying publishes to `stable`.
     into another one's source and two copies of a scoring table diverge. The
     writer is contest-agnostic, the shape `@ham2k/lib-qson-cabrillo`'s is, so
     if the host ever carries it only the manifests change.
+  - `@ham2k/lib-contest-rules` — what a contest's rules say about spotting
+    assistance and self-spotting, the two things the host can rule out for an
+    operation. A contest states them on its ref (`assistance: false`,
+    `selfSpotting: false`; the key absent where its rules allow it) from
+    `decorateRef` and on its search suggestions, and its setup form shows them
+    as one line — "🟢 Assistance: ON, 🔴 Self-spotting: OFF" — that follows the
+    entry category the operator picks, one markdown note per verdict under the
+    form renderer's `visibleWhen`. Each contest's `contestRules` cites the rule
+    it reads; the QSO parties take theirs from the party file's `selfSpotting`
+    and, where a party publishes an assisted single-operator class, read plain
+    Single Operator as unassisted.
   - `@ham2k/lib-panel-themes` — the themes a dashboard panel offers in its
     settings: Automatic (the app's colors), Light, Dark and Teal, the last
     KI2D's Radio Panel's face. One table, so every panel's Teal is the same

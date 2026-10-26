@@ -93,3 +93,37 @@ test("each suggestion names the day its next running starts", async (t) => {
   t.mock.timers.setTime(Date.UTC(2028, 0, 1))
   assert.deepEqual(await names('marconi'), ['144MHz CW Marconi'])
 })
+
+test("the Low Power and Backpackers events forbid spotting and self-spotting; the rest leave both to the operator", async () => {
+  const decorate = async (key: string, extra: Record<string, unknown> = {}) =>
+    (await rsgb.runHook("ref:rsgb-vhf-tests", "decorateRef", { ref: { type: "rsgb-vhf-tests", ref: key, ...extra } })) as Record<string, unknown>
+
+  for (const key of ["RSGB-144-LP", "RSGB-432-LP", "RSGB-BACKPACKERS-3"]) {
+    const ref = await decorate(key)
+    assert.equal(ref.assistance, false, key)
+    assert.equal(ref.selfSpotting, false, key)
+  }
+  // Switching the setup to another event drops what the old one forbade.
+  const ukac = await decorate("RSGB-144-UKAC-JAN", { assistance: false, selfSpotting: false })
+  assert.equal("assistance" in ukac || "selfSpotting" in ukac, false)
+
+  // A suggestion names its event, so it states that event's rules.
+  const [lp] = (await rsgb.runHook("activity", "suggest", { searchTerm: "432MHz LP" })) as Record<string, unknown>[]
+  assert.equal(lp.ref, "RSGB-432-LP")
+  assert.equal(lp.selfSpotting, false)
+
+  const controls = (await rsgb.runHook("activity", "operationControls", { operation: { refs: [] } })) as {
+    input: { form: { elements: { type: string; text?: string; visibleWhen?: { field: string; equals: unknown[] } }[] } }
+  }[]
+  const notes = controls[0].input.form.elements.filter((el) => el.type === "markdown")
+  const shownFor = (key: string) => notes.filter((el) => el.visibleWhen?.equals.includes(key)).map((el) => el.text)
+  assert.deepEqual(shownFor("RSGB-144-LP"), ["🔴 Assistance: OFF, 🔴 Self-spotting: OFF"])
+  assert.deepEqual(shownFor("RSGB-144-UKAC-JAN"), ["🟢 Assistance: ON, 🟢 Self-spotting: ON"])
+})
+
+test("an event this release does not know drops the flags a restricted one left on the ref", async () => {
+  const ref = (await rsgb.runHook("ref:rsgb-vhf-tests", "decorateRef", {
+    ref: { type: "rsgb-vhf-tests", ref: "RSGB-RETIRED", assistance: false, selfSpotting: false },
+  })) as Record<string, unknown>
+  assert.equal("assistance" in ref || "selfSpotting" in ref, false)
+})

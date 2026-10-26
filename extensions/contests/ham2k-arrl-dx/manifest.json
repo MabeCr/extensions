@@ -2,7 +2,7 @@
   "key": "ham2k-arrl-dx",
   "name": "ARRL International DX Contest",
   "shortName": "ARRL DX",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "W/VE stations work DX and vice versa; mid February (CW) and early March (Phone)",
   "category": "contest",
   "icon": "flag-variant",

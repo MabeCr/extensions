@@ -27,6 +27,7 @@ export const PARTY: QsoPartyParams = {
   dcCountsAsMaryland: true,
   dxIsMultiplier: true,
   multsPerMode: true,
+  selfSpotting: false,
   bonus: {
     perActivatedCounty: 100,
     perActivatedCountyRoverOnly: true,

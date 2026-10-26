@@ -25,6 +25,7 @@ export const PARTY: QsoPartyParams = {
     { startMillis: 1775930400000, endMillis: 1776016740000 },
   ],
   dxLocationIsPrefix: true,
+  selfSpotting: false,
   pointsByMode: { PHONE: 1, CW: 1, DATA: 1 },
   entryClasses: {
     station: ["FIXED", "MOBILE", "PORTABLE"],

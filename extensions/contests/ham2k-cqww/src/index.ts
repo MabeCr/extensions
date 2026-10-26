@@ -9,6 +9,7 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
+import { rulesNotes, withRules } from "@ham2k/lib-contest-rules"
 import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -28,7 +29,7 @@ import { tFor } from "./i18n.ts"
 import { MODES, nearestMode, nextContestDate, relevanceFor } from "./schedule.ts"
 import { CQWWScorer, ZONE_PATTERN, contestTitle, cqwwCallInfo, normalizeZone } from "./scorer.ts"
 import { QTH_PATTERN, cabrilloLocation, guessedQth, normalizeQth, sendsQth } from "./qth.ts"
-import { BAND_CLASSES, OPERATOR_CLASSES, OVERLAY_CLASSES, POWER_CLASSES, cabrilloCategories, declaredClub, declaredOperators } from "./entry.ts"
+import { BAND_CLASSES, OPERATOR_CLASSES, OVERLAY_CLASSES, POWER_CLASSES, cabrilloCategories, contestRules, declaredClub, declaredOperators } from "./entry.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
 
@@ -124,7 +125,7 @@ const ActivityHook = {
     if (term && !ALIASES.some((alias) => alias.includes(term))) return []
 
     const now = Date.now()
-    return MODES.map((mode) => ({
+    return MODES.map((mode) => withRules({
       type: TYPE,
       mode,
       // A suggestion is persisted VERBATIM and never runs through
@@ -137,7 +138,7 @@ const ActivityHook = {
       label: `CQ WW ${mode}`,
       shortLabel: `CQ WW ${mode}`,
       relevance: relevanceFor(now, mode),
-    }))
+    }, contestRules(undefined)))
   },
 
   async operationControls(
@@ -188,6 +189,8 @@ const ActivityHook = {
                 // Sent in the RTTY exchange, and the Cabrillo LOCATION line
                 // every weekend asks a US or Canadian station for.
               },
+              // What the rules allow, following the operator class below.
+              ...rulesNotes(ctx, 'operator', OPERATOR_CLASSES, contestRules),
               // The entry we are making, for the Cabrillo header. Each starts
               // undeclared: see entry.ts.
               ...entrySelects(t),
@@ -351,7 +354,8 @@ const RefHandler = {
     // `ourZoneSubtitle`, not a hardcoded `Zone ${zone}`: the two halves of
     // this line have to speak the same language, and the key already exists
     // for `suggestOperationTitle`.
-    return { ...ref, program: 'Contest', label, shortLabel: label, name: zone ? t('ourZoneSubtitle', { zone }) : t('notConfigured') }
+    const decorated = { ...ref, program: 'Contest', label, shortLabel: label, name: zone ? t('ourZoneSubtitle', { zone }) : t('notConfigured') }
+    return withRules(decorated, contestRules((ref as Record<string, JSONValue>).operator))
   },
 
   /// "KI2D for CQWW CW" with "Zone 8" beneath it: the sent exchange is the one

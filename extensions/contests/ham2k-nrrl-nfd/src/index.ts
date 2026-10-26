@@ -12,6 +12,7 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
+import { NO_RESTRICTIONS, rulesNote } from "@ham2k/lib-contest-rules"
 import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -184,6 +185,8 @@ const ActivityHook = {
         label: t('runningLabel'),
         value: currentYear || String(nextRunningYear(Date.now())),
       },
+      // The rules say nothing of spotting assistance or self-spotting.
+      rulesNote(ctx, NO_RESTRICTIONS),
       {
         type: 'field',
         fieldType: 'select',

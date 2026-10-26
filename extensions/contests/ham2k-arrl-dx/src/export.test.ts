@@ -150,10 +150,11 @@ test("the Cabrillo header carries the declared entry and its operators", async (
 
 test("the setup form asks the entry, each axis undeclared to begin with", async () => {
   const controls = (await contest.runHook('activity', 'operationControls', { operation: { stationCall: 'N0DEV', refs: [] } })) as {
-    input: { form: { elements: { key?: string; value?: unknown; options?: { value: string }[] }[] } }
+    input: { form: { elements: { type: string; key?: string; value?: unknown; options?: { value: string }[] }[] } }
   }[]
   const elements = controls[0].input.form.elements
-  assert.deepEqual(elements.map((e) => e.key), ['mode', 'stationType', 'exchange', 'operator', 'band', 'power', 'section', 'operators', 'club'])
+  // The rules line, one note per verdict, sits between the exchange and the entry.
+  assert.deepEqual(elements.map((e) => e.key ?? e.type), ['mode', 'stationType', 'exchange', 'markdown', 'markdown', 'operator', 'band', 'power', 'section', 'operators', 'club'])
   for (const key of ['operator', 'band', 'power']) {
     const select = elements.find((e) => e.key === key)
     assert.equal(select?.value, '')

@@ -19,6 +19,7 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
+import { NO_RESTRICTIONS, rulesNote } from "@ham2k/lib-contest-rules"
 import { adifForExport, contestScorer, defineExtension, exportFilename, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -186,6 +187,9 @@ const ActivityHook = {
         placeholder: t('ourNumberPlaceholder'),
         uppercase: true,
       },
+      // "Packet, Skimmer, and Reverse Beacon systems are allowed, as is
+      // self-spotting" (cwops.org/cwops-tests).
+      rulesNote(ctx, NO_RESTRICTIONS),
       {
         type: 'field',
         fieldType: 'radio',

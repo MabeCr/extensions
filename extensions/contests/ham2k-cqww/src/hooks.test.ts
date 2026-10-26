@@ -166,3 +166,41 @@ test("a single segment is not a timeline: the ref passed in is the one scored", 
 
   assert.equal(result.operationSummary.cqww.qsos, 0)
 })
+
+test("the ref states the rules for its operator class, and only what they forbid", async () => {
+  // The host forces a switch off for any ref holding `false`, and reads an
+  // absent key as no say: a ref re-decorated after the class changed has to
+  // drop the `false` the old class left on it.
+  const decorate = async (extra: Record<string, unknown>) =>
+    (await cqww.runHook("ref:cqww", "decorateRef", { ref: { type: "cqww", mode: "CW", ...extra } })) as Record<string, unknown>
+
+  const single = await decorate({ operator: "SINGLE-OP" })
+  assert.equal(single.assistance, false)
+  assert.equal(single.selfSpotting, false)
+
+  const assisted = await decorate({ operator: "SINGLE-OP-ASSISTED", assistance: false })
+  assert.equal("assistance" in assisted, false)
+  // Nobody self-spots in CQ WW, whatever the class — undeclared included.
+  assert.equal(assisted.selfSpotting, false)
+  assert.equal((await decorate({})).selfSpotting, false)
+
+  // A suggestion is stored without ever being decorated, so it carries the
+  // rule that holds for every class.
+  const suggestions = (await cqww.runHook("activity", "suggest", { searchTerm: "cq" })) as Record<string, unknown>[]
+  assert.ok(suggestions.every((s) => s.selfSpotting === false && !("assistance" in s)))
+})
+
+test("the setup form shows the rules line that follows the operator class", async () => {
+  const controls = (await cqww.runHook("activity", "operationControls", { operation })) as {
+    input: { form: { elements: { type: string; key?: string; text?: string; visibleWhen?: { field: string; equals: unknown[] } }[] } }
+  }[]
+  const elements = controls[0].input.form.elements
+  const notes = elements.filter((el) => el.type === "markdown")
+  const shownFor = (op: string) => notes.filter((el) => el.visibleWhen?.equals.includes(op)).map((el) => el.text)
+  assert.deepEqual(shownFor("SINGLE-OP"), ["🔴 Assistance: OFF, 🔴 Self-spotting: OFF"])
+  assert.deepEqual(shownFor("MULTI-ONE"), ["🟢 Assistance: ON, 🔴 Self-spotting: OFF"])
+  // After the exchange questions, before the entry ones.
+  const at = (key: string) => elements.findIndex((el) => el.key === key)
+  const first = elements.indexOf(notes[0])
+  assert.ok(at("qth") < first && first < at("operator"))
+})

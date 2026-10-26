@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-wfd",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "private": true,
   "description": "Ham2K Logger extension: Winter Field Day",
   "author": "Sebastian Delmont <sd@ham2k.com>",
@@ -11,6 +11,9 @@
     "test": "node --import ../../../scripts/sdk-node-resolve.mjs --experimental-strip-types --test 'src/**/*.test.ts'",
     "typecheck": "tsc --noEmit",
     "pack": "npm run build && h2kext-pack build --force-name"
+  },
+  "dependencies": {
+    "@ham2k/lib-contest-rules": "^0.1.0"
   },
   "//devDependencies": [
     "The libraries the host carries are DECLARED in manifest.json and rewritten",

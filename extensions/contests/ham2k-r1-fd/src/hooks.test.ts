@@ -28,3 +28,32 @@ test("each suggestion names the day its running opens, as decorateRef does", asy
     assert.equal(decorated.name, suggestion.name)
   }
 })
+
+test("a non-assisted entry rules out spotting assistance; an assisted one leaves it to the operator", async () => {
+  const decorate = async (extra: Record<string, unknown>) =>
+    (await contest.runHook("ref:r1-fd", "decorateRef", { ref: { type: "r1-fd", ref: "R1FD-2026-CW", ...extra } })) as Record<string, unknown>
+
+  // The Cabrillo header claims NON-ASSISTED unless the box is ticked, so an
+  // untouched box is the non-assisted claim and the ref has to match it.
+  assert.equal((await decorate({})).assistance, false)
+  assert.equal((await decorate({ ourAssisted: false })).assistance, false)
+  assert.equal("assistance" in (await decorate({ ourAssisted: true, assistance: false })), false)
+  assert.equal("selfSpotting" in (await decorate({})), false)
+
+  const controls = (await contest.runHook("activity", "operationControls", { operation: { refs: [] } })) as {
+    input: { form: { elements: { type: string; key?: string; text?: string; visibleWhen?: { field: string; equals: unknown[] } }[] } }
+  }[]
+  const elements = controls[0].input.form.elements
+  const notes = elements.filter((el) => el.visibleWhen?.field === "ourAssisted")
+  const shownFor = (assisted: unknown) => notes.filter((el) => el.visibleWhen?.equals.includes(assisted)).map((el) => el.text)
+  assert.deepEqual(shownFor(false), ["🔴 Assistance: OFF, 🟢 Self-spotting: ON"])
+  assert.deepEqual(shownFor(true), ["🟢 Assistance: ON, 🟢 Self-spotting: ON"])
+  // After the running, before the entry category.
+  const at = (key: string) => elements.findIndex((el) => el.key === key)
+  assert.ok(at("ref") < elements.indexOf(notes[0]) && elements.indexOf(notes[0]) < at("ourStationType"))
+})
+
+test("a suggestion, stored without being decorated, makes the same non-assisted claim as an untouched setup", async () => {
+  const suggestions = (await contest.runHook("activity", "suggest", { searchTerm: "field day" })) as Record<string, unknown>[]
+  assert.ok(suggestions.length > 0 && suggestions.every((s) => s.assistance === false))
+})

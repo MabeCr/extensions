@@ -16,6 +16,7 @@
 import type { JSONValue } from "@ham2k/extension-sdk"
 import { annotateCallAgainstCountryFile } from "@ham2k/extension-sdk"
 import { parseCallsign } from "@ham2k/lib-callsigns"
+import type { ContestRules } from "@ham2k/lib-contest-rules"
 
 /// The rules' entry categories (VI.A, VI.C, VI.D). Operator and transmitter
 /// are one axis here, as the rules list them, and split into the two Cabrillo
@@ -80,6 +81,16 @@ export function cabrilloCategories(ref: Record<string, JSONValue> | undefined): 
     ['CATEGORY-STATION', operator === 'MULTI-DISTRIBUTED' ? 'DISTRIBUTED' : undefined],
     ['CATEGORY-OVERLAY', validOverlay],
   ]
+}
+
+/// What the rules allow an entry declared as [operator]. QSO alerting
+/// assistance is "permitted in all categories with the exception of the
+/// Single Operator Classic Overlay" (VI) — but a plain Single Operator is the
+/// entry the header files as NON-ASSISTED, and the only one Classic is open to,
+/// so it is the one without. "Self-spotting or asking to be spotted is not
+/// permitted" for anyone (X.D).
+export function contestRules(operator: JSONValue | undefined): ContestRules {
+  return { assistance: declared(operator, OPERATOR_CLASSES) !== 'SINGLE-OP', selfSpotting: false }
 }
 
 /// `OPERATORS`: the calls typed at setup, uppercased and space-separated as

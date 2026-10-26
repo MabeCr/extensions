@@ -13,6 +13,7 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
+import { rulesNotes, withRules } from "@ham2k/lib-contest-rules"
 import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -35,6 +36,7 @@ import {
   POWER_CLASSES,
   cabrilloCategories,
   cabrilloLocation,
+  contestRules,
   declaredClub,
   declaredOperators,
 } from "./entry.ts"
@@ -117,7 +119,7 @@ const ActivityHook = {
     if (term && !ALIASES.some((alias) => alias.includes(term))) return []
 
     const now = Date.now()
-    return MODES.map((mode) => ({
+    return MODES.map((mode) => withRules({
       type: TYPE,
       mode,
       // A suggestion is persisted VERBATIM and never runs through
@@ -130,7 +132,7 @@ const ActivityHook = {
       label: `CQ WPX ${mode}`,
       shortLabel: `CQ WPX ${mode}`,
       relevance: relevanceFor(now, mode),
-    }))
+    }, contestRules(undefined)))
   },
 
   async operationControls(
@@ -171,6 +173,8 @@ const ActivityHook = {
                 placeholder: t('locationPlaceholder'),
                 uppercase: true,
               },
+              // What the rules allow, following the operator class below.
+              ...rulesNotes(ctx, 'operator', OPERATOR_CLASSES, contestRules),
               // The entry we are making, for the Cabrillo header. Each starts
               // undeclared: see entry.ts.
               ...entrySelects(t),
@@ -287,7 +291,7 @@ const RefHandler = {
   async decorateRef({ ref }: { ref: Ref }, ctx: HookContext): Promise<Ref> {
     const mode = str((ref as Record<string, JSONValue>).mode)
     const label = mode ? `CQ WPX ${mode}` : tFor(ctx)('unconfigured')
-    return { ...ref, program: 'Contest', label, shortLabel: label }
+    return withRules({ ...ref, program: 'Contest', label, shortLabel: label }, contestRules((ref as Record<string, JSONValue>).operator))
   },
 
   /// "KI2D for CQWPX CW", subtitled with what the exchange is — unlike CQ WW's

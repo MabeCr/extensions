@@ -14,6 +14,7 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
+import { rulesNotes, withRules } from "@ham2k/lib-contest-rules"
 import { adifForExport, annotateCallAgainstCountryFile, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -33,7 +34,7 @@ import { tFor } from "./i18n.ts"
 import { cabrilloLocation, normalizeSection } from "./location.ts"
 import { nextContestDate, relevanceFor } from "./schedule.ts"
 import { EXCHANGE_PATTERN, IARUHFScorer, contestTitle, normalizeZone, ourExchange } from "./scorer.ts"
-import { OPERATOR_CLASSES, OVERLAY_CLASSES, POWER_CLASSES, cabrilloCategories, declaredClub, declaredOperators } from "./entry.ts"
+import { OPERATOR_CLASSES, OVERLAY_CLASSES, POWER_CLASSES, cabrilloCategories, contestRules, declaredClub, declaredOperators } from "./entry.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
 
@@ -129,7 +130,7 @@ const ActivityHook = {
 
     const now = Date.now()
     return [
-      {
+      withRules({
         type: TYPE,
         // A suggestion is persisted VERBATIM and never runs through
         // `decorateRef`, so everything the operation row reads has to be here,
@@ -141,7 +142,7 @@ const ActivityHook = {
         label: 'IARU HF',
         shortLabel: 'IARU HF',
         relevance: relevanceFor(now),
-      },
+      }, contestRules(undefined)),
     ]
   },
 
@@ -227,6 +228,8 @@ const ActivityHook = {
                 ],
                 visibleWhen: { field: 'stationType', equals: 'official' },
               },
+              // What the rules allow, following the operator class below.
+              ...rulesNotes(ctx, 'operator', OPERATOR_CLASSES, contestRules),
               // The entry we are making, for the Cabrillo header, alongside
               // the mode restriction and station type above. Each starts
               // undeclared: see entry.ts.
@@ -363,13 +366,13 @@ const RefHandler = {
       .filter(Boolean)
       .join(' ')
     const sent = ourExchange({}, ref as Record<string, JSONValue>)
-    return {
+    return withRules({
       ...ref,
       program: 'Contest',
       label: label || tFor(ctx)('unconfigured'),
       shortLabel: label || tFor(ctx)('unconfigured'),
       name: sent || tFor(ctx)('notConfigured'),
-    }
+    }, contestRules((ref as Record<string, JSONValue>).operator))
   },
 
   /// "KI2D for IARU HF" with "Sending 8" beneath it: the sent exchange is the

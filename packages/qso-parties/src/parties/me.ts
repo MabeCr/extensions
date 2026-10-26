@@ -28,6 +28,7 @@ export const PARTY: QsoPartyParams = {
   stateCountsForInState: true,
   dxEntityIsMultiplier: true,
   multsPerBandMode: true,
+  selfSpotting: false,
   pointsWhenTheyAreOutOfParty: 1,
   pointsByMode: { PHONE: 2, CW: 2 },
   entryClasses: {

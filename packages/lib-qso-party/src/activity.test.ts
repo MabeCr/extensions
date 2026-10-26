@@ -656,3 +656,41 @@ test('a station outside the US and Canada starts out as DX', async () => {
     registerEntityLookup(() => undefined)
   }
 })
+
+test("the ref states the party's rules: its own on self-spotting, and no assistance for a single operator where an assisted class exists", async () => {
+  const decorate = async (params: QsoPartyParams, ref: Record<string, JSONValue>) =>
+    (await qsoPartyRefHandler(params).decorateRef!({ ref: { type: params.refType, ...ref } }, ctx)) as Record<string, JSONValue>
+
+  // California publishes SINGLE-OP-ASSISTED, so plain SINGLE-OP is the claim
+  // of operating without spots.
+  const single = await decorate(CA, { operator: 'SINGLE-OP' })
+  assert.equal(single.assistance, false)
+  assert.equal(single.selfSpotting, false)
+  // Changing class drops the `false` the old one left on the ref.
+  assert.equal('assistance' in (await decorate(CA, { operator: 'SINGLE-OP-ASSISTED', assistance: false })), false)
+
+  // New York has no assisted class, so its single operator may use spots, and
+  // its rules leave self-spotting to the operator.
+  const ny = await decorate(NY, { operator: 'SINGLE-OP' })
+  assert.equal('assistance' in ny || 'selfSpotting' in ny, false)
+
+  // A suggestion is stored without being decorated, so it says what holds
+  // for every entry.
+  const [suggestion] = await qsoPartyActivity(CA).suggest!({ operation: {}, searchTerm: 'CQP' }, ctx)
+  assert.equal((suggestion as Record<string, JSONValue>).selfSpotting, false)
+  assert.equal('assistance' in suggestion, false)
+})
+
+test("the setup form's rules line follows the operator class, ahead of the entry questions", async () => {
+  const form = await setupForm(CA)
+  const notes = form.elements.filter((el) => el.type === 'markdown' && (el as { visibleWhen?: unknown }).visibleWhen) as unknown as
+    { text: string; visibleWhen: { equals: JSONValue[] } }[]
+  const shownFor = (operator: string) => notes.filter((el) => el.visibleWhen.equals.includes(operator)).map((el) => el.text)
+  assert.deepEqual(shownFor('SINGLE-OP'), ['🔴 Assistance: OFF, 🔴 Self-spotting: OFF'])
+  assert.deepEqual(shownFor('MULTI-ONE'), ['🟢 Assistance: ON, 🔴 Self-spotting: OFF'])
+  assert.ok(form.elements.indexOf(notes[0] as never) < form.elements.indexOf(fieldOf(form, 'operator')))
+
+  // A party whose rules restrict nothing still shows the line, unconditionally.
+  const ny = await setupForm(NY)
+  assert.ok(ny.elements.some((el) => el.type === 'markdown' && el.text === '🟢 Assistance: ON, 🟢 Self-spotting: ON'))
+})

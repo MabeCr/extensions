@@ -1,0 +1,38 @@
+{
+  "name": "@ham2k/lib-contest-rules",
+  "version": "0.1.0",
+  "description": "What a contest's rules say about spotting assistance and self-spotting: the flags its operation ref carries for the host, and the line its setup form shows",
+  "author": "Sebastian Delmont <sd@ham2k.com>",
+  "license": "MIT",
+  "type": "module",
+  "//exports": [
+    "Consumed as TypeScript source: the only consumers are extensions, which",
+    "esbuild bundles, so there is no build step and no dist/ to point at."
+  ],
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "node --import ../../scripts/sdk-node-resolve.mjs --experimental-strip-types --test 'src/**/*.test.ts'",
+    "typecheck": "tsc --noEmit"
+  },
+  "//peerDependencies": [
+    "The SDK is provided by the extension that consumes this package: its own",
+    "bundle carries one copy, rewritten to the host's instance at build time."
+  ],
+  "peerDependencies": {
+    "@ham2k/extension-sdk": "^1.12.0"
+  },
+  "devDependencies": {
+    "@ham2k/extension-sdk": "^1.12.0"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

@@ -30,6 +30,7 @@ export const PARTY: QsoPartyParams = {
   dxLocationIsPrefix: true,
   multsPerBandMode: true,
   dataAndCWCountAsSameMode: true,
+  selfSpotting: false,
   bonus: {
     perActivatedCounty: 50,
     perActivatedCountyRoverOnly: true,

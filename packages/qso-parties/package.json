@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/qso-parties",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Every QSO party's rules, counties and dates as QsoPartyParams — one module per event, generated from the sponsors' own files",
   "author": "Sebastian Delmont <sd@ham2k.com>",
   "license": "MIT",

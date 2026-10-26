@@ -31,6 +31,7 @@ import type {
   TitleSuggestion,
 } from "@ham2k/extension-sdk"
 
+import { NO_RESTRICTIONS, rulesNote } from "@ham2k/lib-contest-rules"
 import { GRID_PATTERN, REG1TEST_BAND, guessedGrid, qsonToReg1test, refOfType, serial as serialFor, str, trimmedGrid } from "@ham2k/lib-vhf-contests"
 
 import { EVENTS, eventFor, nextStartDate, type R1VhfEvent } from "./events.ts"
@@ -95,6 +96,9 @@ const ActivityHook = {
         value: currentKey || options[0]?.value,
         options,
       },
+      // "Use of the DX Cluster, or any similar spotting network (e.g. ON4KST),
+      // is permitted. Entrants may spot their own station" (VHF Handbook 9.7).
+      rulesNote(ctx, NO_RESTRICTIONS),
     ]
 
     return [

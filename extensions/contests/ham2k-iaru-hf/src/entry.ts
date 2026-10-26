@@ -17,6 +17,7 @@
 // high power and assisted, a Multi-Two low power and not — is written for it.
 
 import type { JSONValue } from "@ham2k/extension-sdk"
+import type { ContestRules } from "@ham2k/lib-contest-rules"
 
 /// The rules' entry categories (Entry Categories, HCAT.1–HCAT.4). Operator and
 /// transmitter are one axis here, as the rules list them, and split into the
@@ -95,6 +96,15 @@ export function cabrilloCategories(ref: Record<string, JSONValue> | undefined): 
     ['CATEGORY-STATION', hq ? 'HQ' : undefined],
     ['CATEGORY-OVERLAY', single ? declared(ref?.overlay, OVERLAY_CLASSES) : undefined],
   ]
+}
+
+/// What the rules allow an entry declared as [operator]: spotting assistance
+/// wherever [ASSISTED_FOR] does not rule it out, and no self-spotting for
+/// anyone — "spotting your own station ('self-spotting') or asking to be
+/// spotted by another station" is prohibited conduct (PROH.4).
+export function contestRules(operator: JSONValue | undefined): ContestRules {
+  const declaredClass = declared(operator, OPERATOR_CLASSES)
+  return { assistance: !declaredClass || ASSISTED_FOR[declaredClass] !== 'NON-ASSISTED', selfSpotting: false }
 }
 
 /// `OPERATORS`: the calls typed at setup, uppercased and space-separated —

@@ -22,6 +22,7 @@ import type {
   LoggingControlDescriptor,
   SuggestArgs,
 } from "@ham2k/extension-sdk"
+import { rulesNotes, withRules } from "@ham2k/lib-contest-rules"
 
 import {
   ROVING_STATION_CLASSES,
@@ -30,6 +31,7 @@ import {
   ourModeClass,
   ourName,
   ourOperatorClass,
+  partyRules,
   ourOverlayClass,
   ourPowerClass,
   ourStationClass,
@@ -413,7 +415,9 @@ export function qsoPartyActivity(params: QsoPartyParams): ActivityHook {
 
       // No `ref` field. The TYPE names the party — one extension is one party —
       // so a second key holding the same fact could only ever disagree with it.
-      return [{
+      // The rules that hold whatever the entry: a suggestion is stored
+      // without ever being decorated.
+      return [withRules({
         type: party.refType,
         name: partySubtitle(party),
         program: 'Contest',
@@ -421,7 +425,7 @@ export function qsoPartyActivity(params: QsoPartyParams): ActivityHook {
         shortLabel: party.short,
         // Nearer ranks higher — running now, this weekend, next month.
         relevance: relevanceOf(party, Date.now()),
-      }]
+      }, partyRules(party, undefined))]
     },
 
     /// Where we are operating from, and the claims a submitted log has to carry.
@@ -490,6 +494,8 @@ export function qsoPartyActivity(params: QsoPartyParams): ActivityHook {
       // The classes THIS party publishes, and only those: an axis a sponsor does
       // not classify by is a question with no answer, and the operator should not
       // be made to look at it.
+      // What the rules allow, following the operator class below.
+      elements.push(...rulesNotes(ctx, 'operator', party.entryClasses.operator, (operator) => partyRules(party, operator)))
       for (const element of entryClassElements(party, ref, ctx)) elements.push(element)
 
       elements.push({

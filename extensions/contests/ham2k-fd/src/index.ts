@@ -12,6 +12,7 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
+import { NO_RESTRICTIONS, rulesNote } from "@ham2k/lib-contest-rules"
 import {
   adifForExport,
   contestScorer,
@@ -209,6 +210,9 @@ const ActivityHook = {
                 uppercase: true,
                 value: profileSection,
               },
+              // The rules say nothing of spotting assistance or self-spotting,
+              // and pull in none of the general rules that do.
+              rulesNote(ctx, NO_RESTRICTIONS),
               {
                 type: 'field',
                 fieldType: 'select',

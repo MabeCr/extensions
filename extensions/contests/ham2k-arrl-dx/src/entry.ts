@@ -23,6 +23,7 @@
 // value for it, as in `arrl-ss`.
 
 import type { JSONValue } from "@ham2k/extension-sdk"
+import type { ContestRules } from "@ham2k/lib-contest-rules"
 
 /// The rules' entry categories. Operator and transmitter are one axis here,
 /// as the rules list them, and split into the two Cabrillo lines on the way
@@ -89,6 +90,14 @@ export function cabrilloCategories(ref: Record<string, JSONValue> | undefined): 
     ['CATEGORY-MODE', mode === 'Phone' ? 'SSB' : mode || undefined],
     ['CATEGORY-TRANSMITTER', operator ? TRANSMITTER_FOR[operator] : undefined],
   ]
+}
+
+/// What the rules allow an entry declared as [operator]. A Single Operator
+/// may not use spotting assistance (HCAT.1.1, and HCAT.3.2.1 single-band);
+/// every other class may. Self-spotting is not among the prohibited conduct
+/// (PROH), so the rules leave it to the operator.
+export function contestRules(operator: JSONValue | undefined): ContestRules {
+  return { assistance: declared(operator, OPERATOR_CLASSES) !== 'SINGLE-OP', selfSpotting: true }
 }
 
 /// `OPERATORS`: the calls typed at setup, uppercased and space-separated —

@@ -12,6 +12,7 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
+import { rulesNotes, withRules, type ContestRules } from "@ham2k/lib-contest-rules"
 import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -88,6 +89,14 @@ async function profileDetails(): Promise<{ name: string; email: string; club: st
   }
 }
 
+/// What the rules allow an entry that ticked Assisted [assisted] or not. A
+/// non-assisted station may not use "chat-rooms, DX clusters, the RBN network,
+/// remote receivers, skimmers and other support functions" (DARC rules §6).
+/// The rules say nothing of self-spotting, so they leave it to the operator.
+function contestRules(assisted: JSONValue | undefined): ContestRules {
+  return { assistance: assisted === true, selfSpotting: true }
+}
+
 /// The next running of [mode] as a ref key, "SSB-2026".
 function nextRunningKey(nowMillis: number, mode: R1FdMode): string {
   return `${mode}-${nextRunningYear(nowMillis, mode)}`
@@ -129,7 +138,9 @@ const ActivityHook = {
     const now = Date.now()
     return MODES.map((mode) => {
       const key = nextRunningKey(now, mode)
-      return {
+      // Saved undecorated, and a setup nobody ticked Assisted on is the
+      // non-assisted claim the Cabrillo header makes.
+      return withRules({
         type: TYPE,
         // The picker's duplicate guard compares type+ref, and the setup form
         // writes the same key, so both add-paths produce a ref the core
@@ -142,7 +153,7 @@ const ActivityHook = {
         label: `${t('activityLabel')} ${runningLabel(t, key)}`,
         shortLabel: `R1FD ${mode}`,
         relevance: relevanceFor(now, mode),
-      }
+      }, contestRules(undefined))
     })
   },
 
@@ -172,6 +183,8 @@ const ActivityHook = {
         value: currentKey || nextRunningKey(now, nearestMode(now)),
         options,
       },
+      // What the rules allow, following the Assisted box below.
+      ...rulesNotes(ctx, 'ourAssisted', [true, false], contestRules),
       // The two-axis entry category. Station type feeds the scorer —
       // fixed-to-fixed is worth zero, so it changes every verdict — while the
       // rest only describe the entry to the Cabrillo CATEGORY headers.
@@ -320,13 +333,13 @@ const RefHandler = {
     const t = tFor(ctx)
     const key = str(ref.ref as JSONValue)
     const mode = modeOfRef(key)
-    return {
+    return withRules({
       ...ref,
       program: 'Contest',
       name: runningName(t, key),
       label: [t('activityLabel'), runningLabel(t, key)].filter((part) => part).join(' '),
       shortLabel: mode ? `R1FD ${mode}` : 'R1FD',
-    }
+    }, contestRules(ref.ourAssisted))
   },
 
   async suggestOperationTitle({ ref }: { ref: Ref }, ctx: HookContext): Promise<TitleSuggestion | null> {

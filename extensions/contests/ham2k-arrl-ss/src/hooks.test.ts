@@ -11,7 +11,7 @@ import { fixtureOperation, loadExtension } from "./sdkGapTesting.ts"
 const contest = await loadExtension(() => import("./index.ts"), { hostCalls: { getSettings: () => ({ operatorSection: 'eny' }) } })
 
 type Suggestion = { mode?: string; name: string; label: string; shortLabel: string; relevance: number }
-type Control = { key: string; input: Record<string, unknown> & { form?: { elements: { key?: string; value?: unknown }[] } } }
+type Control = { key: string; input: Record<string, unknown> & { form?: { elements: { type?: string; key?: string; value?: unknown }[] } } }
 
 const configured = fixtureOperation({
   stationCall: 'N0DEV',
@@ -45,7 +45,8 @@ test("an operation already running the contest is offered nothing, and unrelated
 test("the setup seeds our section from the profile", async () => {
   const controls = (await contest.runHook("activity", "operationControls", { operation: fixtureOperation() })) as Control[]
   const elements = controls[0].input.form!.elements
-  assert.deepEqual(elements.map((e) => e.key), ['mode', 'entry', 'check', 'section', 'operators', 'club'])
+  // The rules line, one note per verdict, sits between the exchange and the rest of the entry.
+  assert.deepEqual(elements.map((e) => e.key ?? e.type), ['mode', 'entry', 'check', 'section', 'markdown', 'markdown', 'operators', 'club'])
   assert.equal(elements.find((e) => e.key === 'section')!.value, 'ENY')
 })
 
@@ -97,4 +98,27 @@ test("a part that isn't a valid value is kept as typed, so the exchange never lo
 test("an unknown section is flagged in the entry field rather than accepted", async () => {
   const controls = (await contest.runHook("activity", "loggingControls", { operation: configured, qso: { their: { call: 'W1AW' } } })) as Control[]
   assert.notEqual(controls[4].input.allowFreeform, true)
+})
+
+test("the ref states the rules for its entry, and only what they forbid", async () => {
+  const decorate = async (extra: Record<string, unknown>) =>
+    (await contest.runHook("ref:arrl-ss", "decorateRef", { ref: { type: "arrl-ss", mode: "CW", ...extra } })) as Record<string, unknown>
+
+  // Every single-operator power class is unassisted, QRP included.
+  for (const entry of ["SO-QRP", "SO-LOW", "SO-HIGH"]) assert.equal((await decorate({ entry })).assistance, false, entry)
+  // An entry that may use spots drops the `false` an earlier one left behind.
+  assert.equal("assistance" in (await decorate({ entry: "SOU-LOW", assistance: false })), false)
+  assert.equal("assistance" in (await decorate({ entry: "SCHOOL" })), false)
+  // Self-spotting is the operator's call in Sweepstakes.
+  assert.equal("selfSpotting" in (await decorate({ entry: "SO-LOW" })), false)
+})
+
+test("the setup form's rules line follows the entry", async () => {
+  const controls = (await contest.runHook("activity", "operationControls", { operation: fixtureOperation({ refs: [] }) })) as {
+    input: { form: { elements: { type: string; text?: string; visibleWhen?: { field: string; equals: unknown[] } }[] } }
+  }[]
+  const notes = controls[0].input.form.elements.filter((el) => el.type === "markdown")
+  const shownFor = (entry: string) => notes.filter((el) => el.visibleWhen?.equals.includes(entry)).map((el) => el.text)
+  assert.deepEqual(shownFor("SO-HIGH"), ["🔴 Assistance: OFF, 🟢 Self-spotting: ON"])
+  assert.deepEqual(shownFor("MULTI-LOW"), ["🟢 Assistance: ON, 🟢 Self-spotting: ON"])
 })
