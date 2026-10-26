@@ -1,0 +1,55 @@
+{
+  "key": "ki2d-hamalert",
+  "name": "KI2D’s HamAlert",
+  "shortName": "HamAlert",
+  "version": "0.1.0",
+  "api": 1,
+  "description": "Your HamAlert alerts on the spots board, marked with a red bell, and a station you work is muted in HamAlert for a while",
+  "category": "spots",
+  "icon": "bell-ring-outline",
+  "accentColor": "#C62828",
+  "keywords": [
+    "spots",
+    "hamalert",
+    "alerts",
+    "triggers",
+    "notifications",
+    "dx",
+    "rbn"
+  ],
+  "hooks": [
+    "account",
+    "scoring",
+    "settingsPanel",
+    "spots"
+  ],
+  "settings": {
+    "section": "spotting"
+  },
+  "domains": [
+    "hamalert.org"
+  ],
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  },
+  "translations": {
+    "es": {
+      "name": "HamAlert de KI2D",
+      "description": "Tus alertas de HamAlert en el tablero de spots, marcadas con una campana roja, y una estación que trabajas queda silenciada en HamAlert por un rato",
+      "keywords": [
+        "spots",
+        "hamalert",
+        "alertas",
+        "disparadores",
+        "notificaciones"
+      ]
+    }
+  }
+}

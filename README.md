@@ -15,15 +15,15 @@ extension**, so an operator installs the Texas QSO Party and gets the Texas QSO
 Party. **Catalog copies of the app's own built-ins**, so that each can ship
 and update without an app release — see **Porting a built-in**. And
 **extensions the app never shipped**: new activity programs, contests and
-state-park events, the DX cluster's spots, dashboard panels, and three
+state-park events, the DX cluster's spots, dashboard panels, and four
 spotting sources under the `ki2d-` callsign prefix a third party's extension
 takes — the QSO Party Hub and APRS Tracker feeds that app-polo's `qp`
-extension carried inside it, an APRS position beacon, and Discord channel
-webhooks.
+extension carried inside it, an APRS position beacon, Discord channel
+webhooks, and HamAlert's alerts.
 
 ## What is here
 
-107 extensions, grouped by the manifest's own `category`:
+108 extensions, grouped by the manifest's own `category`:
 
 | directory | manifest `category` | n | of which |
 |---|---|--:|---|
@@ -31,13 +31,13 @@ webhooks.
 | `extensions/contests/` | `contest` | 69 | 14 ported built-ins, 1 new contest, 49 QSO party events, 5 park events |
 | `extensions/awards/` | `award` | 2 | 2 new award checklists |
 | `extensions/lookups/` | `lookup` | 5 | 5 ported built-ins |
-| `extensions/spots/` | `spots` | 5 | 1 ported built-in, 4 new spotting sources |
+| `extensions/spots/` | `spots` | 6 | 1 ported built-in, 5 new spotting sources |
 | `extensions/dashboard/` | `dashboard` | 6 | 1 ported built-in, 2 new panels, 3 SVG reference panels |
-| **total** | | **107** | **39 ported, 65 new, 3 SVG reference panels** |
+| **total** | | **108** | **39 ported, 66 new, 3 SVG reference panels** |
 
-The 39 are the app's own extensions, ported one for one. The 65 are new: a
+The 39 are the app's own extensions, ported one for one. The 66 are new: a
 contest and events the app has never shipped separately, five state-park
-events, four spotting sources, two award programs, Worked All States and
+events, five spotting sources, two award programs, Worked All States and
 DXCC checklists, a rate chart and a band map:
 
 - **`ham2k-hota`** — [History on the Air](https://cqhota.app), historic sites
@@ -119,6 +119,26 @@ DXCC checklists, a rate chart and a band map:
   spot-discord names, lowercased, with PoLo's `qCode` and `qRest` working
   too — besides the app's `op`; the app's template editor
   does not know `spot` yet, so its preview shows those blank.
+- **`ki2d-hamalert`** puts the operator's [HamAlert](https://hamalert.org)
+  alerts on the spots board, under the spot `source` `hamalert`, each
+  labelled with the comments of the triggers it matched. It polls
+  `/api/spots2`, the endpoint HamAlert's own app reads — HTTP Basic with the
+  HamAlert login, the last hour's alerts from every trigger with the **App**
+  action — at most once a minute, because every request is a login. HamAlert
+  pauses a login after 20 failures in fifteen minutes, its own app's too, so
+  a refused password is never sent again until the account is checked. Its
+  Telnet feed needs a raw socket and its webhook a public URL, and an
+  extension has neither. Once the log shows an alerted station worked on the
+  alert's band and mode, it asks HamAlert to mute that call there (`addMute`,
+  an hour unless the operator picks otherwise), as the mute buttons in
+  HamAlert's app do. Every spot of an alerted station on its band, from any
+  source, shows a red bell beside its references' icons: an `'always'`
+  scorer that judges nothing answers `scoreCandidates` with the icon alone
+  (SDK 1.12.7), and needs a HaLo whose fallback scorers keep an icon that
+  yielded nothing. HamAlert's code is public at
+  [github.com/hamalert](https://github.com/hamalert), which is where the
+  record's fields come from; a `v1` API with a server-sent event stream is
+  drafted there and not yet deployed, and is the better target once it is.
 - **`ham2k-cluster-spots`** reads the one telnet connection the app holds to
   the node picked in Settings › DX Cluster (extension API 10), and turns every
   `DX de` line the node sends into a spot on the board, under the spot
