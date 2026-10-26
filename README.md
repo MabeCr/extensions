@@ -23,20 +23,20 @@ webhooks, and HamAlert's alerts.
 
 ## What is here
 
-108 extensions, grouped by the manifest's own `category`:
+109 extensions, grouped by the manifest's own `category`:
 
 | directory | manifest `category` | n | of which |
 |---|---|--:|---|
 | `extensions/activities/` | `activity` | 20 | 18 ported built-ins, 2 new programs |
-| `extensions/contests/` | `contest` | 69 | 14 ported built-ins, 1 new contest, 49 QSO party events, 5 park events |
+| `extensions/contests/` | `contest` | 70 | 14 ported built-ins, 2 new contests, 49 QSO party events, 5 park events |
 | `extensions/awards/` | `award` | 2 | 2 new award checklists |
 | `extensions/lookups/` | `lookup` | 5 | 5 ported built-ins |
 | `extensions/spots/` | `spots` | 6 | 1 ported built-in, 5 new spotting sources |
 | `extensions/dashboard/` | `dashboard` | 6 | 1 ported built-in, 2 new panels, 3 SVG reference panels |
-| **total** | | **108** | **39 ported, 66 new, 3 SVG reference panels** |
+| **total** | | **109** | **39 ported, 67 new, 3 SVG reference panels** |
 
-The 39 are the app's own extensions, ported one for one. The 66 are new: a
-contest and events the app has never shipped separately, five state-park
+The 39 are the app's own extensions, ported one for one. The 67 are new: two
+contests and events the app has never shipped separately, five state-park
 events, five spotting sources, two award programs, Worked All States and
 DXCC checklists, a rate chart and a band map:
 
@@ -82,6 +82,23 @@ DXCC checklists, a rate chart and a band map:
   same way as HOTA's. Each weekend's dates are computed (`src/schedule.ts`), so
   only the manifest's `relevance.dates` need moving each year, and a test
   checks them against the schedule.
+
+- **`ki2d-ssb-sprint`** — the [North American SSB Sprint](https://ssbsprint.com),
+  four hours on 20, 40 and 80m, written for the catalog from the sponsor's
+  [rules](https://ssbsprint.com/rules/) and
+  [Cabrillo page](https://ssbsprint.com/submit-log-cabrillo/). A `ki2d-` key,
+  so it side-loads from its `.h2kext`. Its ref type, `ssb-sprint`, is new and
+  permanent in the same way as HOTA's. The exchange is a serial, a name and a
+  location; the name and location are suggested from N1MM's `SPRINTSSB` call
+  history, then the callsign lookup. Multipliers count once per contest, not
+  per band, and "North America" is CQ WW's plus KH6, so the multiplier list is
+  the sponsor's own (`HI3` for the Dominican Republic, `FO/C` for Clipperton)
+  rather than NAQP's. The sponsor publishes each season's date rather than a
+  rule, so `src/schedule.ts` lists the runnings and needs the next one added,
+  with the manifest's `relevance.dates`, when it is announced. Spotting
+  assistance is ruled out for every entry but a check log (rule 3), and
+  self-spotting is left to the operator. The QSY rule is shown at setup but
+  not judged: the log does not say who solicited a contact.
 
 - **`ham2k-dxcc`** — ARRL's [DXCC](https://www.arrl.org/dxcc) as a chasing
   program: Mixed ("DXCC ATNO"), the three mode groups ("DXCC in CW") and
@@ -677,7 +694,7 @@ publishing it to the catalog, or building it under a key that is not `ham2k-`.
 
 **The host must carry `@ham2k/lib-qson-cabrillo` 1.2.0 or newer.** That release
 added the Cabrillo *writer* the engine calls; 1.1.0 and earlier read Cabrillo
-and cannot write it. 61 of the 64 contests and events declare `^1.2.0` — all but
+and cannot write it. 62 of the 65 contests and events declare `^1.2.0` — all but
 the two VHF families, which submit REG1TEST/EDI instead, and Winter Field Day,
 which has no Cabrillo submission. The host checks a declared
 range against the copy it actually holds, so an app built against an older one
