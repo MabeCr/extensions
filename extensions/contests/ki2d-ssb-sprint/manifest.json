@@ -2,7 +2,7 @@
   "key": "ki2d-ssb-sprint",
   "name": "KI2D’s North American SSB Sprint",
   "shortName": "SSB Sprint",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Four hours on 20, 40 and 80m: serial, name and state, province or country, and QSY after every solicited contact; a Saturday evening in the fall and in the spring",
   "category": "contest",
   "icon": "run-fast",

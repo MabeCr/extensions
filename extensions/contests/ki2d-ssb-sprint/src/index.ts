@@ -13,6 +13,7 @@
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 import { rulesNotes, withRules } from "@ham2k/lib-contest-rules"
+import { stampedExchange } from "@ham2k/lib-contest-exchange"
 import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -31,7 +32,7 @@ import type {
 
 import { tFor } from "./i18n.ts"
 import { OPERATOR_CLASSES, POWER_CLASSES, cabrilloCategories, contestRules } from "./entry.ts"
-import { TYPE, guessedLocation, guessedName, ourExchange, refOfType, serial, str, theirExchange } from "./exchange.ts"
+import { TYPE, guessedLocation, guessedName, ourExchange, refOfType, serial, serialOf, str, theirExchange } from "./exchange.ts"
 import { HISTORY_STEM, firstName, loadHistory, parseHistory, removeHistory } from "./history.ts"
 import { LOCATION_PATTERN, VALID_LOCATIONS, normalizeLocation } from "./locations.ts"
 import { nextContestDate, relevanceFor } from "./schedule.ts"
@@ -258,28 +259,17 @@ const ActivityHook = {
 
     const their = (args.qso.their as Record<string, JSONValue>) ?? {}
     const qsoRef = refOfType(args.qso, TYPE)
-    const nameDecided = qsoRef !== undefined && 'name' in qsoRef
-    const locationDecided = qsoRef !== undefined && 'location' in qsoRef
-    const name = nameDecided ? firstName(qsoRef.name) : guessedName(their)
-    const location = locationDecided ? normalizeLocation(qsoRef.location) : guessedLocation(their)
-
-    // Only the halves that carry something, or that the operator already
-    // decided: stamping `location: ''` onto a QSO whose location just couldn't
-    // be guessed yet would read back forever as "the operator emptied this".
-    const refPatch: Record<string, JSONValue> = { type: TYPE }
-    if (name || nameDecided) refPatch.name = name
-    if (location || locationDecided) refPatch.location = location
-    const received = { ...(qsoRef ?? {}), ...refPatch }
+    const received = stampedExchange(TYPE, qsoRef, {
+      // Read into the exchange as typed, and left on the ref as typed.
+      theirSerial: { read: serialOf, stamp: false },
+      name: { read: firstName, guess: () => guessedName(their) },
+      location: { read: normalizeLocation, guess: () => guessedLocation(their) },
+    }, ({ theirSerial, name, location }) => [theirSerial, name, location].filter((part) => part).join(' '))
 
     // Ours only once the core has allocated it: the second and later calls of
     // a call list get theirs after this hook runs, and '' would blank the cell.
-    const patch: Record<string, JSONValue> = {}
     const ourSerial = serial(qsoRef, 'ourSerial')
-    if (ourSerial) patch.our = { exchange: ourSerial }
-    if (Object.keys(refPatch).length > 1) patch.refs = [refPatch]
-    const decided = qsoRef !== undefined && ['theirSerial', 'name', 'location'].some((key) => key in qsoRef)
-    if (decided || Object.keys(refPatch).length > 1) patch.their = { exchange: theirExchange(received) }
-    return Object.keys(patch).length > 0 ? patch : null
+    return ourSerial ? { ...received, our: { exchange: ourSerial } } : received
   },
 }
 

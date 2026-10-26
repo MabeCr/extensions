@@ -65,7 +65,8 @@ test("the two halves decide independently", async () => {
   // A cleared name must not re-guess, and must not stop the untouched location
   // from being guessed.
   const patch = await decorate({ their: { call: 'W1AW', state: 'CT', guess: { name: 'Hiram' } }, refs: [{ type: 'naqp', name: '' }] })
-  assert.equal(patch?.refs?.[0].name, '')
+  // Left as the operator cleared it: the patch never writes over it.
+  assert.equal('name' in (patch?.refs?.[0] ?? {}), false)
   assert.equal(patch?.refs?.[0].location, 'CT')
   assert.equal(patch?.their?.exchange, 'CT')
 })

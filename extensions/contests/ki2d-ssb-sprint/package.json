@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-ki2d-ssb-sprint",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Ham2K Logger extension: North American SSB Sprint",
   "author": "Sebastian Delmont <sd@ham2k.com>",
@@ -13,6 +13,7 @@
     "pack": "npm run build && h2kext-pack build"
   },
   "dependencies": {
+    "@ham2k/lib-contest-exchange": "^0.1.0",
     "@ham2k/lib-contest-rules": "^0.1.0"
   },
   "//devDependencies": [

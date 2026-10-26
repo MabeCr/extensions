@@ -18,6 +18,7 @@
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 import { NO_RESTRICTIONS, rulesNote } from "@ham2k/lib-contest-rules"
+import { stampedExchange } from "@ham2k/lib-contest-exchange"
 import { adifForExport, contestScorer, defineExtension, exportFilename, operationForQso, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -171,24 +172,15 @@ const ActivityHook = {
     const event = eventOn(operation)
     if (!event) return null
 
-    const qsoRef = refOfType(qso, TYPE)
-    // PRESENCE, not truthiness — a present, empty `grid` is the operator
-    // deliberately clearing what they'd typed, and has to survive as that
-    // decision rather than be re-guessed on the next save (§5.4).
-    const decided = qsoRef !== undefined && 'grid' in qsoRef
-    const grid = decided
-      ? trimmedGrid(str(qsoRef.grid), event)
-      : guessedGrid((qso.their as Record<string, JSONValue>) ?? {}, event)
-
     // Our sent exchange is the operation's grid, the same on every QSO, so
     // it is not projected into `our.exchange` — the QSO row would repeat it
     // on every line; the exports read `operation.grid` directly.
-    if (!grid) return decided ? { their: { exchange: '' } } : null
-
-    return {
-      refs: [{ type: TYPE, grid }],
-      their: { exchange: grid },
-    }
+    return stampedExchange(TYPE, refOfType(qso, TYPE), {
+      grid: {
+        read: (value) => trimmedGrid(str(value), event),
+        guess: () => guessedGrid((qso.their as Record<string, JSONValue>) ?? {}, event),
+      },
+    }, ({ grid }) => grid)
   },
 }
 

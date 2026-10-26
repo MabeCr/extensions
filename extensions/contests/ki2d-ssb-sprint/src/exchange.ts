@@ -31,7 +31,10 @@ export function refOfType(container: Record<string, JSONValue> | undefined, type
 
 /// A serial as it should appear in an export: whatever is on the ref, as digits.
 export function serial(ref: Record<string, JSONValue> | undefined, field: string): string {
-  const value = ref?.[field]
+  return serialOf(ref?.[field])
+}
+
+export function serialOf(value: JSONValue | undefined): string {
   if (typeof value === 'number') return String(value)
   const digits = str(value).trim()
   return /^\d+$/.test(digits) ? String(parseInt(digits, 10)) : ''

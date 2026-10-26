@@ -20,6 +20,7 @@
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 import { NO_RESTRICTIONS, rulesNote } from "@ham2k/lib-contest-rules"
+import { stampedExchange } from "@ham2k/lib-contest-exchange"
 import { adifForExport, contestScorer, defineExtension, exportFilename, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -272,37 +273,12 @@ const ActivityHook = {
     _ctx: HookContext,
   ): Promise<Record<string, JSONValue> | null> {
     if (!refOfType(operation, TYPE)) return null
-
     const their = ((qso.their as Record<string, JSONValue>) ?? {})
-    const qsoRef = refOfType(qso, TYPE)
-
-    // PRESENCE of each field, not its truthiness. The core writes `field: ''`
-    // when the operator empties one on purpose and drops the key entirely when
-    // it was never filled in — so a present key, blank or not, is a decision,
-    // and guessing over it would put back what they just removed.
-    const nameDecided = qsoRef !== undefined && 'name' in qsoRef
-    const numberDecided = qsoRef !== undefined && 'number' in qsoRef
-    const name = nameDecided ? firstName(qsoRef.name) : guessedName(their)
     // The number is never guessed — only what the operator typed is recorded.
-    const number = numberDecided ? normalizeNumber(qsoRef.number) : ''
-
-    if (!name && !number) {
-      // A deliberate blank still projects, so clearing an exchange on an edit
-      // clears the QSO row's column too instead of leaving the old value there.
-      return nameDecided || numberDecided ? { their: { exchange: '' } } : null
-    }
-
-    // Only the halves that carry something or that the operator already
-    // decided: an object literal would stamp `number: ''` onto every QSO, which
-    // the presence rule above then reads back forever as "emptied on purpose".
-    const refPatch: Record<string, JSONValue> = { type: TYPE }
-    if (name || nameDecided) refPatch.name = name
-    if (number || numberDecided) refPatch.number = number
-
-    return {
-      refs: [refPatch],
-      their: { exchange: [name, number].filter((x) => x).join(' ') },
-    }
+    return stampedExchange(TYPE, refOfType(qso, TYPE), {
+      name: { read: firstName, guess: () => guessedName(their) },
+      number: { read: normalizeNumber },
+    }, ({ name, number }) => [name, number].filter((x) => x).join(' '))
   },
 }
 

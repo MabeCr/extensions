@@ -15,6 +15,7 @@
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 import { rulesNotes, withRules } from "@ham2k/lib-contest-rules"
+import { stampedExchange } from "@ham2k/lib-contest-exchange"
 import { adifForExport, annotateCallAgainstCountryFile, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -328,28 +329,14 @@ const ActivityHook = {
   ): Promise<Record<string, JSONValue> | null> {
     if (!refOfType(args.operation, TYPE)) return null
 
-    const qsoRef = refOfType(args.qso, TYPE)
-    // PRESENCE of the field, not its truthiness. The core writes
-    // `theirExchange: ''` when the operator empties the field on purpose, and
-    // drops the key entirely when it was never filled in — so a present key,
-    // blank or not, is a decision, and guessing over it would put back what
-    // they just removed.
-    const decided = qsoRef !== undefined && 'theirExchange' in qsoRef
     // Only a ZONE can be guessed — nothing can infer a society or an office, so
     // those are always the operator's own typing.
-    const exchange = decided
-      ? str(qsoRef.theirExchange).trim().toUpperCase()
-      : guessedZoneFor((args.qso.their as Record<string, JSONValue>) ?? {})
-
-    // A deliberate blank still projects, so clearing an exchange on an edit
-    // clears the QSO row's column too instead of leaving the old value there.
-    if (!exchange) return decided ? { their: { exchange: '' } } : null
-
-    return {
-      // Field-wise into our own ref; the core allows this extension no other.
-      refs: [{ type: TYPE, theirExchange: exchange }],
-      their: { exchange },
-    }
+    return stampedExchange(TYPE, refOfType(args.qso, TYPE), {
+      theirExchange: {
+        read: (value) => str(value).trim().toUpperCase(),
+        guess: () => guessedZoneFor((args.qso.their as Record<string, JSONValue>) ?? {}),
+      },
+    }, ({ theirExchange }) => theirExchange)
   },
 }
 

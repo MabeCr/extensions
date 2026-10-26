@@ -86,14 +86,15 @@ test("saving stamps the guesses and projects both exchanges", async () => {
     their: { exchange: '122 HIRAM CT' },
   })
 
-  // A location the operator emptied stays empty; what they typed wins.
+  // A location the operator emptied stays empty — the patch never writes over
+  // it — and what they typed wins.
   const typed = await contest.runHook("activity", "processQsoBeforeSave", {
     operation: configured,
     qso: { their: { call: 'W1AW', state: 'CT' }, refs: [{ type: 'ssb-sprint', ourSerial: 2, theirSerial: '5', name: 'bill', location: '' }] },
   })
   assert.deepEqual(typed, {
     our: { exchange: '2' },
-    refs: [{ type: 'ssb-sprint', name: 'BILL', location: '' }],
+    refs: [{ type: 'ssb-sprint', name: 'BILL' }],
     their: { exchange: '5 BILL' },
   })
 

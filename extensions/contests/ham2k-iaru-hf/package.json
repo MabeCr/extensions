@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-iaru-hf",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "private": true,
   "description": "Ham2K Logger extension: IARU HF World Championship",
   "author": "Sebastian Delmont <sd@ham2k.com>",
@@ -13,6 +13,7 @@
     "pack": "npm run build && h2kext-pack build --force-name"
   },
   "dependencies": {
+    "@ham2k/lib-contest-exchange": "^0.1.0",
     "@ham2k/lib-contest-rules": "^0.1.0"
   },
   "//devDependencies": [

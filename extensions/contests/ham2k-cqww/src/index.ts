@@ -10,6 +10,7 @@
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 import { rulesNotes, withRules } from "@ham2k/lib-contest-rules"
+import { stampedExchange } from "@ham2k/lib-contest-exchange"
 import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -306,35 +307,17 @@ const ActivityHook = {
     const their = ((args.qso.their as Record<string, JSONValue>) ?? {})
     const guess = (their.guess as Record<string, JSONValue>) ?? {}
     const call = str(their.call)
-    const qsoRef = refOfType(args.qso, TYPE)
+    // RTTY's QTH, and only from a W/VE station. Anywhere else the part reads as
+    // nothing, typed or not.
+    const sendsAQth = str(refOfType(args.operation, TYPE)?.mode) === 'RTTY' && call !== '' && sendsQth(call)
 
-    // PRESENCE of the field, not its truthiness. The core writes `theirZone: ''`
-    // when the operator empties the field on purpose, and drops the key
-    // entirely when it was simply never filled in — so a present key, blank or
-    // not, is a decision, and guessing over it would put back what they just
-    // removed.
-    const zone = qsoRef && 'theirZone' in qsoRef
-      ? normalizeZone(qsoRef.theirZone)
-      : normalizeZone(guess.cqZone) || (call ? normalizeZone(cqwwCallInfo(call).cqZone) : '')
-    // RTTY's QTH, by the same presence rule, and only from a W/VE station.
-    const rtty = str(refOfType(args.operation, TYPE)?.mode) === 'RTTY'
-    const qth = !rtty || !call || !sendsQth(call)
-      ? ''
-      : qsoRef && 'theirQth' in qsoRef ? normalizeQth(qsoRef.theirQth) : guessedQth(their)
-    const exchange = exchangeOf(zone, qth)
-    const decided = Boolean(qsoRef && ('theirZone' in qsoRef || 'theirQth' in qsoRef))
-
-    // A deliberate blank still projects, so clearing an exchange on an edit
-    // clears the QSO row's column too instead of leaving the old value there.
-    if (!exchange) {
-      return decided ? { their: { exchange: '' } } : null
-    }
-
-    return {
-      // Field-wise into our own ref; the core allows this extension no other.
-      refs: [{ type: TYPE, ...(zone ? { theirZone: zone } : {}), ...(qth ? { theirQth: qth } : {}) }],
-      their: { exchange },
-    }
+    return stampedExchange(TYPE, refOfType(args.qso, TYPE), {
+      theirZone: {
+        read: normalizeZone,
+        guess: () => normalizeZone(guess.cqZone) || (call ? normalizeZone(cqwwCallInfo(call).cqZone) : ''),
+      },
+      theirQth: sendsAQth ? { read: normalizeQth, guess: () => guessedQth(their) } : { read: () => '' },
+    }, ({ theirZone, theirQth }) => exchangeOf(theirZone, theirQth))
   },
 }
 

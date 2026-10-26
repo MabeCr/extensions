@@ -277,6 +277,15 @@ saying publishes to `stable`.
     it reads; the QSO parties take theirs from the party file's `selfSpotting`
     and, where a party publishes an assisted single-operator class, read plain
     Single Operator as unassisted.
+  - `@ham2k/lib-contest-exchange` — a contest's received exchange at save
+    time. `stampedExchange` is what `processQsoBeforeSave` returns for every
+    contest that guesses an exchange (CQ WW, IARU HF, ARRL VHF, CWT, NAQP,
+    Ohio SPOTA, the SSB Sprint): each part the operator decided is read from
+    the ref, each part they left alone is guessed and stamped onto it, and the
+    whole is projected into `their.exchange`. The guesses are each contest's
+    own; the package holds the bookkeeping they all share and that is easy to
+    get wrong — a present key, blank or not, is a decision; a guess that comes
+    up empty is never stamped as a blank, which would read back as one.
   - `@ham2k/lib-panel-themes` — the themes a dashboard panel offers in its
     settings: Automatic (the app's colors), Light, Dark and Teal, the last
     KI2D's Radio Panel's face. One table, so every panel's Teal is the same

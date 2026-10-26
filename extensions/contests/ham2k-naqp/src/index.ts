@@ -13,6 +13,7 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
+import { stampedExchange } from "@ham2k/lib-contest-exchange"
 import { adifForExport, annotateCallAgainstCountryFile, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -251,41 +252,11 @@ const ActivityHook = {
     _ctx: HookContext,
   ): Promise<Record<string, JSONValue> | null> {
     if (!refOfType(args.operation, TYPE)) return null
-
     const their = ((args.qso.their as Record<string, JSONValue>) ?? {})
-    const qsoRef = refOfType(args.qso, TYPE)
-
-    // PRESENCE of each field, not its truthiness. The core writes `field: ''`
-    // when the operator empties one on purpose, and drops the key entirely when
-    // it was never filled in — so a present key, blank or not, is a decision,
-    // and guessing over it would put back what they just removed. The two
-    // halves decide independently: clearing a name doesn't re-guess a location.
-    const nameDecided = qsoRef !== undefined && 'name' in qsoRef
-    const locationDecided = qsoRef !== undefined && 'location' in qsoRef
-    const name = nameDecided ? firstName(qsoRef.name) : guessedName(their)
-    const location = locationDecided ? normalizeLocation(qsoRef.location) : guessedLocation(their)
-
-    if (!name && !location) {
-      // A deliberate blank still projects, so clearing an exchange on an edit
-      // clears the QSO row's column too instead of leaving the old value there.
-      return nameDecided || locationDecided ? { their: { exchange: '' } } : null
-    }
-
-    // Only the halves that actually carry something, or that the operator
-    // already decided. An object literal would put BOTH keys on the ref every
-    // time — stamping `location: ''` onto a QSO whose location simply couldn't
-    // be guessed yet, which the presence rule above then reads back forever as
-    // "the operator emptied this". The half would never be guessed again, and
-    // the state multiplier would be lost for good.
-    const refPatch: Record<string, JSONValue> = { type: TYPE }
-    if (name || nameDecided) refPatch.name = name
-    if (location || locationDecided) refPatch.location = location
-
-    return {
-      // Field-wise into our own ref; the core allows this extension no other.
-      refs: [refPatch],
-      their: { exchange: [name, location].filter((x) => x).join(' ') },
-    }
+    return stampedExchange(TYPE, refOfType(args.qso, TYPE), {
+      name: { read: firstName, guess: () => guessedName(their) },
+      location: { read: normalizeLocation, guess: () => guessedLocation(their) },
+    }, ({ name, location }) => [name, location].filter((x) => x).join(' '))
   },
 }
 
