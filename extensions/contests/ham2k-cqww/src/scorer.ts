@@ -237,5 +237,7 @@ function bandBreakdown(sheet: CQWWScoresheet, rtty: boolean, t: ReturnType<typeo
       ...[qsos, sheet.bandPoints[band] ?? 0, zones, countries, ...(rtty ? [qths] : [])].map((n) => fmtInteger(n)),
     ]
   })
-  return [header, header.map(() => '---'), ...rows].map((cells) => `| ${cells.join(' | ')} |`).join('\n')
+  // Counts right-aligned so the digits line up down each column.
+  const rule = header.map((_, i) => (i === 0 ? '---' : '---:'))
+  return [header, rule, ...rows].map((cells) => `| ${cells.join(' | ')} |`).join('\n')
 }

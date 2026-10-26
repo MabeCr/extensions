@@ -171,6 +171,7 @@ test('the band table counts each band\'s zones and countries apart', () => {
   const summary = CQWWScorer.summarizeScore({ scoresheet: sheet, operation: usOperation, ref: ssbRef, scope: 'operation' }, ctx)
   const lines = (summary.cqww.longSummary as string).split('\n')
   assert.ok(lines.includes('| Band | QSOs | Pts | Zones | Ctry |'))
+  assert.ok(lines.includes('| --- | ---: | ---: | ---: | ---: |'), 'the counts are right-aligned')
   assert.ok(lines.includes('| **20m** | 3 | 9 | 2 | 2 |'))
   assert.ok(lines.includes('| **40m** | 1 | 3 | 1 | 1 |'))
   assert.ok(lines.includes('| **10m** | — | — | — | — |'))
