@@ -1,0 +1,59 @@
+{
+  "key": "ki2d-wwsac",
+  "name": "KI2D’s Worldwide Sideband Activity Contest",
+  "shortName": "WWSAC",
+  "version": "0.1.0",
+  "description": "A weekly hour of SSB, Tuesdays at 0100 UTC: signal report and age group, YLs and youth worth more, every callsign prefix a multiplier",
+  "category": "contest",
+  "icon": "microphone",
+  "accentColor": "#00838F",
+  "api": 11,
+  "keywords": [
+    "contest",
+    "wwsac",
+    "sideband",
+    "ssb",
+    "phone",
+    "weekly",
+    "prefix",
+    "youth",
+    "yl",
+    "cabrillo"
+  ],
+  "relevance": {
+    "interests": [
+      "phone"
+    ]
+  },
+  "hooks": [
+    "activity",
+    "adifFields",
+    "export",
+    "ref:wwsac",
+    "scoring"
+  ],
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "@ham2k/lib-qson-cabrillo": "^1.2.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  },
+  "translations": {
+    "es": {
+      "name": "Worldwide Sideband Activity Contest de KI2D",
+      "description": "Una hora semanal de SSB, los martes a las 0100 UTC: reporte de señal y grupo de edad, YL y jóvenes valen más, cada prefijo de indicativo es un multiplicador",
+      "keywords": [
+        "concurso",
+        "fonía",
+        "semanal",
+        "prefijo",
+        "jóvenes"
+      ]
+    }
+  }
+}

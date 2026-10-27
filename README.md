@@ -23,19 +23,19 @@ webhooks, and HamAlert's alerts.
 
 ## What is here
 
-109 extensions, grouped by the manifest's own `category`:
+110 extensions, grouped by the manifest's own `category`:
 
 | directory | manifest `category` | n | of which |
 |---|---|--:|---|
 | `extensions/activities/` | `activity` | 20 | 18 ported built-ins, 2 new programs |
-| `extensions/contests/` | `contest` | 70 | 14 ported built-ins, 2 new contests, 49 QSO party events, 5 park events |
+| `extensions/contests/` | `contest` | 71 | 14 ported built-ins, 3 new contests, 49 QSO party events, 5 park events |
 | `extensions/awards/` | `award` | 2 | 2 new award checklists |
 | `extensions/lookups/` | `lookup` | 5 | 5 ported built-ins |
 | `extensions/spots/` | `spots` | 6 | 1 ported built-in, 5 new spotting sources |
 | `extensions/dashboard/` | `dashboard` | 6 | 1 ported built-in, 2 new panels, 3 SVG reference panels |
-| **total** | | **109** | **39 ported, 67 new, 3 SVG reference panels** |
+| **total** | | **110** | **39 ported, 68 new, 3 SVG reference panels** |
 
-The 39 are the app's own extensions, ported one for one. The 67 are new: two
+The 39 are the app's own extensions, ported one for one. The 68 are new: three
 contests and events the app has never shipped separately, five state-park
 events, five spotting sources, two award programs, Worked All States and
 DXCC checklists, a rate chart and a band map:
@@ -99,6 +99,24 @@ DXCC checklists, a rate chart and a band map:
   assistance is ruled out for every entry but a check log (rule 3), and
   self-spotting is left to the operator. The QSY rule is shown at setup but
   not judged: the log does not say who solicited a contact.
+
+- **`ki2d-wwsac`** — the [Worldwide Sideband Activity Contest](https://wwsac.com),
+  an hour of SSB every Tuesday at 0100 UTC, written for the catalog from the
+  sponsor's [rules](https://wwsac.com/rules.html) and its N1MM user-defined
+  contest file, [`WWSACv3.udc`](https://wwsac.com/WWSACv3.udc), which is where
+  the Cabrillo name (`WWSAC`), the column order and the dupe rule (once per
+  band) come from: the rules give none of them. A `ki2d-` key, so it
+  side-loads from its `.h2kext`. Its ref type, `wwsac`, is new and permanent
+  in the same way as HOTA's, and like CWT's its `ref` names the occurrence —
+  the Tuesday, `2026-10-27` — since every week is its own entry; the sessions
+  are computed (`src/schedule.ts`), so nothing needs moving each year. The
+  exchange is a report and an age group (OM, YL, Y, YYL); the other station's
+  age group is what the contact is worth (1, 5, 10, 15), suggested from what
+  that call sent in an earlier WWSAC contact and otherwise only hinted as OM.
+  The multiplier is the CQ WPX prefix, once per session; `src/prefix.ts` is a
+  copy of `ham2k-cqwpx`'s `wpxPrefix` and must be kept the same. Spotting
+  assistance is allowed in every entry and self-spotting is not, so the ref
+  rules out self-spotting.
 
 - **`ham2k-dxcc`** — ARRL's [DXCC](https://www.arrl.org/dxcc) as a chasing
   program: Mixed ("DXCC ATNO"), the three mode groups ("DXCC in CW") and
@@ -280,9 +298,9 @@ saying publishes to `stable`.
   - `@ham2k/lib-contest-exchange` — a contest's received exchange at save
     time. `stampedExchange` is what `processQsoBeforeSave` returns for every
     contest that guesses an exchange (CQ WW, IARU HF, ARRL VHF, CWT, NAQP,
-    Ohio SPOTA, the SSB Sprint): each part the operator decided is read from
-    the ref, each part they left alone is guessed and stamped onto it, and the
-    whole is projected into `their.exchange`. The guesses are each contest's
+    Ohio SPOTA, the SSB Sprint, the WWSAC): each part the operator decided is
+    read from the ref, each part they left alone is guessed and stamped onto
+    it, and the whole is projected into `their.exchange`. The guesses are each contest's
     own; the package holds the bookkeeping they all share and that is easy to
     get wrong — a present key, blank or not, is a decision; a guess that comes
     up empty is never stamped as a blank, which would read back as one.
@@ -703,7 +721,7 @@ publishing it to the catalog, or building it under a key that is not `ham2k-`.
 
 **The host must carry `@ham2k/lib-qson-cabrillo` 1.2.0 or newer.** That release
 added the Cabrillo *writer* the engine calls; 1.1.0 and earlier read Cabrillo
-and cannot write it. 62 of the 65 contests and events declare `^1.2.0` — all but
+and cannot write it. 63 of the 66 contests and events declare `^1.2.0` — all but
 the two VHF families, which submit REG1TEST/EDI instead, and Winter Field Day,
 which has no Cabrillo submission. The host checks a declared
 range against the copy it actually holds, so an app built against an older one
