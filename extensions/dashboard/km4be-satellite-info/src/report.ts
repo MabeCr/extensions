@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: MIT
 //
 // Telling AMSAT whether a satellite was heard: the report an operator would otherwise
-// fill in at amsat.org/status. That page is a plain form that posts to submit.php, with
-// no login, so the extension fills it in the same way: the satellite as AMSAT names it
-// (`AO-7_[U/v]`), what was heard, the date and the quarter hour in UTC, a callsign, and
-// a grid square if wanted.
+// fill in at amsat.org/status. AMSAT has a status API for it (amsat.org/status/api), with
+// no login: a satellite as AMSAT names it (`AO-7_[U/v]`), what was heard, a time, a
+// callsign, and a grid square if wanted, sent as JSON. It answers 201 when it has the
+// report and a message when it has not, which the old web form's page did not.
 //
 // Nothing here sends anything; `sendReport` does, and only when the operator has said so.
 
@@ -17,26 +17,24 @@ import { onForget } from "./memory.ts"
 import { isOwnVariant } from "./status.ts"
 import type { Kind } from "./status.ts"
 
-export const FORM_URL = "https://www.amsat.org/status/"
-export const SUBMIT_URL = "https://www.amsat.org/status/submit.php"
+export const CATALOG_URL = "https://www.amsat.org/status/api/v1/catalog.php"
+export const REPORTS_URL = "https://www.amsat.org/status/api/v1/reports.php"
 
-/// What the form's `SatReport` field says for each kind of report.
+/// What the API's `report` field says for each kind of report.
 export const REPORT_VALUES: Record<Kind, string> = { heard: "Heard", telemetry: "Telemetry Only", notHeard: "Not Heard" }
 /// What each kind is called on the button.
 export const REPORT_LABELS: Record<Kind, string> = { heard: "Heard", telemetry: "Telemetry only", notHeard: "Not heard" }
 export const REPORT_KINDS: Kind[] = ["heard", "telemetry", "notHeard"]
 
-/// The satellites the form offers, as it names them: `AO-7_[U/v]`, `ISS_[FM]`, `AO-73_[U/v]`.
-/// Read from the form itself, so a satellite AMSAT adds can be reported the day it appears.
-export function parseSatNames(html: string): string[] {
-  const start = html.search(/<select[^>]*name=["']?SatName["']?/i)
-  if (start < 0) return []
-  const end = html.indexOf("</select>", start)
-  const block = html.slice(start, end < 0 ? undefined : end)
+/// The satellites AMSAT takes reports for, as it names them: `AO-7_[U/v]`, `ISS_[FM]`, `AO-73_[U/v]`. Read from its
+/// catalog, so a satellite AMSAT adds can be reported the day it appears.
+export function parseCatalog(raw: unknown): string[] {
+  const data = (raw as { data?: unknown } | null)?.data
+  if (!Array.isArray(data)) return []
   const names: string[] = []
-  for (const m of block.matchAll(/<option\s+value=["']?([^"'>]+)["']?\s*>/gi)) {
-    const value = m[1].trim()
-    if (value && !names.includes(value)) names.push(value)
+  for (const row of data) {
+    const name = typeof row?.name === "string" ? row.name.trim() : ""
+    if (name && !names.includes(name)) names.push(name)
   }
   return names
 }
@@ -59,21 +57,13 @@ export function namesFor(all: string[], satellite: Pick<Satellite, "name" | "mod
   return [...own, ...mine.filter((n) => !own.includes(n))]
 }
 
-export interface Moment {
-  year: string
-  month: string
-  day: string
-  hour: string
-  /// 0 to 3: which quarter of the hour.
-  period: string
-}
-
 const two = (n: number): string => String(n).padStart(2, "0")
 
-/// The form's date and quarter hour, in UTC, for a time.
-export function momentOf(millis: number): Moment {
-  const d = new Date(millis)
-  return { year: String(d.getUTCFullYear()), month: two(d.getUTCMonth() + 1), day: two(d.getUTCDate()), hour: two(d.getUTCHours()), period: String(Math.floor(d.getUTCMinutes() / 15)) }
+/// The start of the quarter hour a time is in, as the API takes it: `2026-10-22T21:00:00Z`. AMSAT keeps a report by the
+/// quarter hour, so a later one for the same satellite and callsign in it replaces the earlier.
+export function reportedAt(millis: number): string {
+  const d = new Date(Math.floor(millis / 900_000) * 900_000)
+  return `${d.getUTCFullYear()}-${two(d.getUTCMonth() + 1)}-${two(d.getUTCDate())}T${two(d.getUTCHours())}:${two(d.getUTCMinutes())}:00Z`
 }
 
 /// `21:00–21:15Z`: what the quarter hour of a report is.
@@ -127,44 +117,35 @@ export function summaryOf(r: Report): string {
   return `${labelOf(r.name)}: ${REPORT_LABELS[r.kind].toLowerCase()}, ${quarterText(r.at)}, as ${cleanCall(r.call)}${r.grid.trim() ? `, ${cleanGrid(r.grid)}` : ", no grid"}`
 }
 
-const encode = (s: string): string => encodeURIComponent(s).replace(/%20/g, "+")
-
-/// The form's fields, in the form's own order, as a form posts them.
-export function bodyOf(r: Report): string {
-  const m = momentOf(r.at)
-  const fields: [string, string][] = [
-    ["SatName", r.name],
-    ["SatReport", REPORT_VALUES[r.kind]],
-    ["SatYear", m.year],
-    ["SatMonth", m.month],
-    ["SatDay", m.day],
-    ["SatHour", m.hour],
-    ["SatPeriod", m.period],
-    ["SatCall", cleanCall(r.call)],
-    ["SatGridSquare", r.grid.trim() ? cleanGrid(r.grid) : ""],
-    ["SatSubmit", "Submit Data"],
-  ]
-  return fields.map(([k, v]) => `${encode(k)}=${encode(v)}`).join("&")
+/// What is sent: the API's own fields. The grid is left out when there is none, rather than sent empty.
+export function payloadOf(r: Report): Record<string, string> {
+  return {
+    name: r.name,
+    report: REPORT_VALUES[r.kind],
+    callsign: cleanCall(r.call),
+    ...(r.grid.trim() ? { grid_square: cleanGrid(r.grid) } : {}),
+    reported_at: reportedAt(r.at),
+  }
 }
 
-// --- The form's satellites ----------------------------------------------------
+// --- AMSAT's satellites ---------------------------------------------------------
 
 const NAMES_MAX_AGE_MS = 6 * 3_600_000
 let namesMemo: { at: number; names: string[] } | undefined
 onForget(() => (namesMemo = undefined))
 
-/// The satellites AMSAT's form offers, kept six hours; empty when the form cannot be read.
+/// The satellites AMSAT takes reports for, kept six hours; empty when its catalog cannot be read.
 export async function loadSatNames(ctx: HookContext, now: number): Promise<string[]> {
   if (namesMemo && now >= namesMemo.at && now - namesMemo.at < NAMES_MAX_AGE_MS) return namesMemo.names
   if (!ctx.online) return namesMemo?.names ?? []
   try {
-    const response = await host.fetch(FORM_URL)
+    const response = await host.fetch(CATALOG_URL, { headers: { Accept: "application/json" } })
     if (response.status !== 200) throw new Error(`HTTP ${response.status}`)
-    const names = parseSatNames(response.body)
+    const names = parseCatalog(JSON.parse(response.body))
     if (names.length) namesMemo = { at: now, names }
     return names.length ? names : (namesMemo?.names ?? [])
   } catch (error) {
-    host.log(`km4be-satellite-info: ${FORM_URL}: ${error instanceof Error ? error.message : String(error)}`)
+    host.log(`km4be-satellite-info: ${CATALOG_URL}: ${error instanceof Error ? error.message : String(error)}`)
     return namesMemo?.names ?? []
   }
 }
@@ -185,22 +166,33 @@ export const textOf = (html: string): string =>
     .replace(/\s+/g, " ")
     .trim()
 
-/// Posts the report. AMSAT answers with a web page, not a status, so what is known is that it
-/// accepted the request; a page that talks of an error is reported as one.
+/// What AMSAT said in a reply that was not a success, in its own words when it gave them: its error envelope is
+/// `{error: {code, message}}`, and a report it refuses for what is in it comes with a message saying what.
+export function errorText(status: number, body: string): string {
+  try {
+    const said = JSON.parse(body) as { error?: { message?: unknown }; message?: unknown }
+    const message = said?.error?.message ?? said?.message
+    if (typeof message === "string" && message.trim()) return `AMSAT did not take it: ${message.trim().slice(0, 160)} (HTTP ${status})`
+  } catch {
+    // not JSON: a web page, a gateway's reply
+  }
+  const words = textOf(body).slice(0, 120)
+  return `AMSAT did not take it (HTTP ${status})${words ? `: ${words}` : ""}.`
+}
+
+/// Sends the report to AMSAT's status API. A 201 is the report taken; anything else is said as AMSAT said it, so that a
+/// report that did not land is not taken for one that did.
 export async function sendReport(report: Report): Promise<Outcome> {
   try {
-    const response = await host.fetch(SUBMIT_URL, {
+    const response = await host.fetch(REPORTS_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: bodyOf(report),
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(payloadOf(report)),
     })
-    if (response.status < 200 || response.status >= 400) return { ok: false, message: `AMSAT did not take it (HTTP ${response.status}). Try again in a moment.` }
-    const said = textOf(response.body)
-    if (/\b(error|invalid|failed|not accepted|missing)\b/i.test(said)) return { ok: false, message: `AMSAT's page says: ${said.slice(0, 140)}` }
-    return { ok: true, message: `Sent to AMSAT: ${summaryOf(report)}. It can take a few minutes to show up.` }
+    if (response.status !== 201) return { ok: false, message: errorText(response.status, response.body) }
+    return { ok: true, message: `Sent to AMSAT: ${summaryOf(report)}. It is on their status page now.` }
   } catch (error) {
-    host.log(`km4be-satellite-info: ${SUBMIT_URL}: ${error instanceof Error ? error.message : String(error)}`)
+    host.log(`km4be-satellite-info: ${REPORTS_URL}: ${error instanceof Error ? error.message : String(error)}`)
     return { ok: false, message: "Could not reach AMSAT. Nothing was sent." }
   }
 }
-

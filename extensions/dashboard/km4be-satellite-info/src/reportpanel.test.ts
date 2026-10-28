@@ -7,9 +7,9 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 
 import { ELEMENTS_URL, LIST_URL, statusUrl } from "./data.ts"
-import { ELEMENTS, FORM, LIST, SUMMARY } from "./fixtures.ts"
+import { CATALOG, ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
 import { forgetAll } from "./memory.ts"
-import { FORM_URL, SUBMIT_URL } from "./report.ts"
+import { CATALOG_URL, REPORTS_URL } from "./report.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 
 const ctx = { online: true }
@@ -52,12 +52,12 @@ async function panel(options: { operation?: Record<string, unknown>; answer?: (p
       fetch: (params) => {
         const url = String(params.url)
         fetched.push(url)
-        if (url === SUBMIT_URL) {
+        if (url === REPORTS_URL) {
           const request = params as unknown as Posted
           posted.push(request)
-          return (options.answer ?? (() => ({ status: 200, body: "<html><body>Thank you for your report.</body></html>" })))(request)
+          return (options.answer ?? (() => ({ status: 201, body: JSON.stringify({ data: { id: 1 } }) })))(request)
         }
-        if (url === FORM_URL) return options.noForm ? { status: 500, body: "" } : { status: 200, body: FORM }
+        if (url === CATALOG_URL) return options.noForm ? { status: 500, body: "" } : { status: 200, body: JSON.stringify(CATALOG) }
         if (url === LIST_URL) return { status: 200, body: JSON.stringify(LIST) }
         if (url === ELEMENTS_URL) return { status: 200, body: JSON.stringify(ELEMENTS) }
         if (url === statusUrl(24)) return { status: 200, body: JSON.stringify(SUMMARY) }
@@ -110,10 +110,10 @@ test("the Report page starts from the operator's callsign and the grid the panel
   assert.ok(scene.controls.every((c) => c.kind.startsWith("native")))
   assert.ok(scene.controls.length <= 64)
   assert.equal(p.posted.length, 0)
-  assert.ok(p.fetched.includes(FORM_URL), "the form is read for its satellites")
+  assert.ok(p.fetched.includes(CATALOG_URL), "AMSAT's catalog is read for its satellites")
 })
 
-test("the transponders offered are the form's for this satellite, its own kind first", async () => {
+test("the transponders offered are AMSAT's for this satellite, its own kind first", async () => {
   const p = await panel()
   const scene = await openReport(p)
   const options = control(scene, "variant")!.options!
@@ -128,7 +128,7 @@ test("the station's callsign is used when there is no operator, and none when th
   assert.equal(blank.strings.call, "")
 })
 
-test("sending asks first, and only the second tap posts the form, once", async () => {
+test("sending asks first, and only the second tap posts the report, once", async () => {
   const p = await panel()
   await openReport(p)
   assert.equal((await p.event(t0, "kind", "kind", { text: "heard" })).strings!.kind, "heard")
@@ -146,8 +146,10 @@ test("sending asks first, and only the second tap posts the form, once", async (
   assert.equal(p.posted.length, 1)
   const [post] = p.posted
   assert.equal(post.method, "POST")
-  assert.equal(post.headers?.["Content-Type"], "application/x-www-form-urlencoded")
-  assert.match(post.body!, /^SatName=(AO-7|FO-29)_%5B(U%2Fv|V%2Fu)%5D&SatReport=Heard&SatYear=2026&SatMonth=10&SatDay=07&SatHour=00&SatPeriod=0&SatCall=KM4BE&SatGridSquare=EL95vs&SatSubmit=Submit\+Data$/)
+  assert.equal(post.headers?.["Content-Type"], "application/json")
+  const sent = JSON.parse(post.body!) as Record<string, string>
+  assert.match(sent.name, /^(AO-7_\[U\/v\]|FO-29_\[V\/u\])$/)
+  assert.deepEqual({ ...sent, name: "x" }, { name: "x", report: "Heard", callsign: "KM4BE", grid_square: "EL95vs", reported_at: "2026-10-07T00:00:00Z" })
 
   const after = await p.render(t0)
   assert.match(after.strings.message, /^Sent to AMSAT: /)
@@ -193,7 +195,8 @@ test("the callsign can be changed before it is sent, and is tidied and checked",
   await p.event(t0, "grid", "grid", { text: "" })
   await p.event(t0, "send", "send")
   await p.event(t0, "confirm", "confirm")
-  assert.match(p.posted[0].body!, /SatReport=Telemetry\+Only&.*SatCall=W8ABE&SatGridSquare=&SatSubmit/)
+  const sent = JSON.parse(p.posted[0].body!) as Record<string, string>
+  assert.deepEqual([sent.report, sent.callsign, "grid_square" in sent], ["Telemetry Only", "W8ABE", false], "no grid sent when it is empty")
 })
 
 test("the callsign stays for the next pass; what was heard does not", async () => {
@@ -223,7 +226,9 @@ test("a report that was sent makes the marks fetch AMSAT's reports again", async
 test("a refusal, an error page and a dead connection are each said, and the report is kept to try again", async () => {
   for (const [answer, message] of [
     [() => ({ status: 503, body: "" }), /did not take it \(HTTP 503\)/],
-    [() => ({ status: 200, body: "<p>Error: invalid callsign</p>" }), /AMSAT's page says: Error: invalid callsign/],
+    [() => ({ status: 422, body: JSON.stringify({ error: { code: "invalid_parameter", message: "callsign is not valid", status: 422 } }) }), /AMSAT did not take it: callsign is not valid \(HTTP 422\)/],
+    // Anything but a 201 is not a report taken, whatever the page says.
+    [() => ({ status: 200, body: "<html><body>Thank you for your report.</body></html>" }), /did not take it \(HTTP 200\): Thank you for your report/],
     [() => {
       throw new Error("network down")
     }, /Could not reach AMSAT\. Nothing was sent\./],
@@ -239,7 +244,7 @@ test("a refusal, an error page and a dead connection are each said, and the repo
   }
 })
 
-test("when AMSAT's form cannot be read, the page says so and nothing can be sent", async () => {
+test("when AMSAT's catalog cannot be read, the page says so and nothing can be sent", async () => {
   const p = await panel({ noForm: true })
   const scene = await openReport(p)
   assert.match(scene.strings.summary, /Could not read AMSAT's list of satellites/)
@@ -256,7 +261,7 @@ test("the other pages have the Report tab too, and nothing is sent just by looki
   await p.event(t0, list.controls.find((c) => c.id.startsWith("open:") && c.opacity !== 0)!.id, "open")
   const sky = await p.render(t0)
   assert.deepEqual(control(sky, "tab")!.options!.map((o) => o.value), ["sky", "radio", "report"])
-  assert.equal(p.fetched.includes(FORM_URL), false, "the form is only read when the Report page is opened")
+  assert.equal(p.fetched.includes(CATALOG_URL), false, "the catalog is only read when the Report page is opened")
   await p.event(t0, "tab", "tab", { text: "report" })
   await p.render(t0)
   await p.event(t0, "tab", "tab", { text: "radio" })

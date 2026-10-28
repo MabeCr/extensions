@@ -36,16 +36,16 @@ export const SUMMARY = {
   meta: { hours: 24, count: 8 },
 }
 
-/// The form's satellite menu, as amsat.org/status/ serves it (cut down).
-export const FORM = `<form method="post" action="submit.php">
-<select name="SatName">
-  <option value="">Select Satellite</option>
-        <option value="AO-123_[FM]">AO-123 [FM]</option>
-        <option value="AO-7_[U/v]">AO-7 [U/v]</option>
-        <option value="AO-7_[V/a]">AO-7 [V/a]</option>
-        <option value="FO-29_[V/u]">FO-29 [V/u]</option>
-        <option value="ISS_[FM]">ISS [FM]</option>
-        <option value="ISS_[SSTV]">ISS [SSTV]</option>
-        <option value="ISS_[UHF Digi]">ISS [UHF Digi]</option>
-</select>
-<select name="SatYear"><option value="2026" selected>2026</option></select>`
+/// AMSAT's catalog of the satellites it takes reports for, as amsat.org/status/api/v1/catalog.php serves it (cut down).
+export const CATALOG = {
+  data: [
+    { id: 153, name: "AO-123_[FM]", display_name: "AO-123 [FM]", website: "https://www.amsat.org/live-fm-satellites/" },
+    { id: 2, name: "AO-7_[U/v]", display_name: "AO-7 [U/v]", website: "https://www.amsat.org/live-linear-satellites/" },
+    { id: 1, name: "AO-7_[V/a]", display_name: "AO-7 [V/a]", website: "https://www.amsat.org/live-linear-satellites/" },
+    { id: 3, name: "FO-29_[V/u]", display_name: "FO-29 [V/u]", website: "https://www.amsat.org/live-linear-satellites/" },
+    { id: 7, name: "ISS_[FM]", display_name: "ISS [FM]", website: "https://www.amsat.org/live-fm-satellites/" },
+    { id: 8, name: "ISS_[SSTV]", display_name: "ISS [SSTV]", website: "https://www.amsat.org/image-transmitting-satellites/" },
+    { id: 224, name: "ISS_[UHF_Digi]", display_name: "ISS [UHF Digi]", website: "https://www.amsat.org/live-digipeater-satellites/" },
+  ],
+  meta: { count: 7 },
+}
