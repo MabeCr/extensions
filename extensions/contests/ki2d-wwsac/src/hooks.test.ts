@@ -31,6 +31,9 @@ test("unprompted, a session is offered only around its hour", async (t) => {
   const decorated = (await contest.runHook("ref:wwsac", "decorateRef", { ref: { type: "wwsac", ref: near[0].ref } })) as Suggestion
   assert.equal(near[0].label, decorated.label)
   assert.equal(near[0].shortLabel, decorated.shortLabel)
+  // Tapped and never set up, it says so, as the decorated row does.
+  assert.equal(near[0].name, '2026-10-27 0100z · Not configured!')
+  assert.equal(near[0].name, decorated.name)
   assert.equal(near[0].selfSpotting, false)
   assert.equal("assistance" in near[0], false)
 
@@ -45,6 +48,8 @@ test("a search or a scoped picker finds the next sessions on any day", async (t)
   for (const term of ['WWSAC', 'wws', 'sideband activity', 'worldwide sideband activity contest', 'world wide sideband', 'wwsac 2026']) {
     assert.equal((await found(term)).length, 4, term)
   }
+  // Nothing flickers away while a word is still being typed.
+  for (const term of ['sideband a', 'world wide s', 'wwsac t', 'wwsac con']) assert.equal((await found(term)).length, 4, term)
   for (const term of ['contest', 'cwt', 'ssb sprint', 'pota', 's', 'ww']) assert.deepEqual(await found(term), [], term)
 
   const scoped = (await contest.runHook("activity", "suggest", { searchTerm: '11-10', scoped: true })) as Suggestion[]

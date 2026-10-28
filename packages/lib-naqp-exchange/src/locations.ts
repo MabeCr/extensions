@@ -4,12 +4,14 @@
 // NAQP's location exchange: the 50 US states, the 13 Canadian provinces and
 // territories, the North American DXCC entities, and `DX` for everyone else.
 //
-// INLINE, not a shared dataset. docs/design/contests.md §5.3's own table places
-// "NAQP locations (111)" here rather than in `operation-data`, and §5.3's M4
-// amendment says why that is the right call generally: `ContestScorer` is
-// synchronous, so a scorer could never await a cross-extension lookup anyway.
-// The whole set is 110 unique codes and well under a kilobyte, read in exactly
-// two places, both inside this bundle.
+// BUNDLED into each contest that uses it, not a shared dataset.
+// docs/design/contests.md §5.3's own table places "NAQP locations (111)" in
+// the NAQP extension rather than in `operation-data`, and §5.3's M4 amendment
+// says why that is the right call generally: `ContestScorer` is synchronous,
+// so a scorer could never await a cross-extension lookup anyway. The whole set
+// is 110 unique codes and well under a kilobyte. A package rather than a copy
+// because the Phone Weekly Test's multipliers are this set word for word, and
+// two copies of a multiplier list diverge.
 
 /// The 50 US states. Territories are NOT states here — KP2/KP4/KH6-style
 /// entities appear under the DXCC list below, which is how NAQP counts them.

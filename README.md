@@ -23,19 +23,19 @@ webhooks, and HamAlert's alerts.
 
 ## What is here
 
-110 extensions, grouped by the manifest's own `category`:
+111 extensions, grouped by the manifest's own `category`:
 
 | directory | manifest `category` | n | of which |
 |---|---|--:|---|
 | `extensions/activities/` | `activity` | 20 | 18 ported built-ins, 2 new programs |
-| `extensions/contests/` | `contest` | 71 | 14 ported built-ins, 3 new contests, 49 QSO party events, 5 park events |
+| `extensions/contests/` | `contest` | 72 | 14 ported built-ins, 4 new contests, 49 QSO party events, 5 park events |
 | `extensions/awards/` | `award` | 2 | 2 new award checklists |
 | `extensions/lookups/` | `lookup` | 5 | 5 ported built-ins |
 | `extensions/spots/` | `spots` | 6 | 1 ported built-in, 5 new spotting sources |
 | `extensions/dashboard/` | `dashboard` | 6 | 1 ported built-in, 2 new panels, 3 SVG reference panels |
-| **total** | | **110** | **39 ported, 68 new, 3 SVG reference panels** |
+| **total** | | **111** | **39 ported, 69 new, 3 SVG reference panels** |
 
-The 39 are the app's own extensions, ported one for one. The 68 are new: three
+The 39 are the app's own extensions, ported one for one. The 69 are new: four
 contests and events the app has never shipped separately, five state-park
 events, five spotting sources, two award programs, Worked All States and
 DXCC checklists, a rate chart and a band map:
@@ -117,6 +117,24 @@ DXCC checklists, a rate chart and a band map:
   copy of `ham2k-cqwpx`'s `wpxPrefix` and must be kept the same. Spotting
   assistance is allowed in every entry and self-spotting is not, so the ref
   rules out self-spotting.
+
+- **`ki2d-phone-weekly-test`** — the Phone Weekly Test, formerly the Phone
+  Fray: half an hour of SSB every Wednesday at 0230 UTC (Tuesday evening in
+  North America), written for the catalog from its one-page
+  [rules](http://www.perluma.com/Phone_Fray_Contest_Rules.pdf) — its website,
+  phoneweeklytest.com, is still a parked domain. "The same rules as NAQP but
+  without 10 meters": name and state, province or NA entity, `DX` from
+  outside North America, multipliers once per band, from NAQP's own location
+  set (`@ham2k/lib-naqp-exchange`). A `ki2d-` key, so it
+  side-loads from its `.h2kext`. Its ref type, `pwt`, is new and permanent,
+  and its `ref` names the Wednesday (`2026-10-28`), computed as the WWSAC's
+  is. Name and location are suggested from what the station sent earlier in
+  the session, else in an earlier week or an NAQP (the name over the
+  lookup's, the lookup's location over the old one). There are no logs to
+  send — the score is posted on 3830scores.com — so it offers no Cabrillo,
+  only the contest's ADIF, under the CONTEST_ID `PWT`, which the rules do not
+  name. Single operator at 100 W with no assistance, so the ref rules out
+  both assistance and self-spotting.
 
 - **`ham2k-dxcc`** — ARRL's [DXCC](https://www.arrl.org/dxcc) as a chasing
   program: Mixed ("DXCC ATNO"), the three mode groups ("DXCC in CW") and
@@ -298,12 +316,25 @@ saying publishes to `stable`.
   - `@ham2k/lib-contest-exchange` — a contest's received exchange at save
     time. `stampedExchange` is what `processQsoBeforeSave` returns for every
     contest that guesses an exchange (CQ WW, IARU HF, ARRL VHF, CWT, NAQP,
-    Ohio SPOTA, the SSB Sprint, the WWSAC): each part the operator decided is
+    Ohio SPOTA, the SSB Sprint, the WWSAC, the Phone Weekly Test): each part the operator decided is
     read from the ref, each part they left alone is guessed and stamped onto
     it, and the whole is projected into `their.exchange`. The guesses are each contest's
     own; the package holds the bookkeeping they all share and that is easy to
     get wrong — a present key, blank or not, is a decision; a guess that comes
     up empty is never stamped as a blank, which would read back as one.
+  - `@ham2k/lib-naqp-exchange` — NAQP's exchange, a name and a location: the
+    states, provinces and North American entities it accepts, which of them
+    are multipliers, and the guesses from the callsign lookup and the country
+    file. For NAQP and the Phone Weekly Test, whose multipliers are NAQP's
+    word for word — two copies of a multiplier list diverge. The SSB Sprint's
+    list differs (DC and KH6 as states, the sponsor's own country spellings)
+    and keeps its own.
+  - `@ham2k/lib-weekly-contest` — the weekly contests' schedule, for CWT, the
+    WWSAC and the Phone Weekly Test: each week's sessions computed from the
+    sponsor's rule, the reference that names one occurrence, the one at hand
+    (offered unprompted from three hours before until an hour after), whether
+    a contact falls in it, and `searchMatches`, which finds a contest by the
+    words of its name and holds steady while the operator is still typing.
   - `@ham2k/lib-panel-themes` — the themes a dashboard panel offers in its
     settings: Automatic (the app's colors), Light, Dark and Teal, the last
     KI2D's Radio Panel's face. One table, so every panel's Teal is the same
@@ -721,9 +752,10 @@ publishing it to the catalog, or building it under a key that is not `ham2k-`.
 
 **The host must carry `@ham2k/lib-qson-cabrillo` 1.2.0 or newer.** That release
 added the Cabrillo *writer* the engine calls; 1.1.0 and earlier read Cabrillo
-and cannot write it. 63 of the 66 contests and events declare `^1.2.0` — all but
-the two VHF families, which submit REG1TEST/EDI instead, and Winter Field Day,
-which has no Cabrillo submission. The host checks a declared
+and cannot write it. 63 of the 67 contests and events declare `^1.2.0` — all but
+the two VHF families, which submit REG1TEST/EDI instead, Winter Field Day,
+which has no Cabrillo submission, and the Phone Weekly Test, which has no logs
+at all. The host checks a declared
 range against the copy it actually holds, so an app built against an older one
 refuses those bundles by name and version rather than failing at the moment
 someone exports a log. The app's own `extensions/package.json` is where that

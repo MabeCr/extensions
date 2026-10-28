@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-ki2d-wwsac",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Ham2K Logger extension: Worldwide Sideband Activity Contest",
   "author": "Sebastian Delmont <sd@ham2k.com>",
@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@ham2k/lib-contest-exchange": "^0.1.0",
-    "@ham2k/lib-contest-rules": "^0.1.0"
+    "@ham2k/lib-contest-rules": "^0.1.0",
+    "@ham2k/lib-weekly-contest": "^0.1.0"
   },
   "//devDependencies": [
     "The libraries the host carries are DECLARED in manifest.json and rewritten",

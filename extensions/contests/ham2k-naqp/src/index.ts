@@ -8,8 +8,9 @@
 // a name
 // and a location, and both are typed on every QSO.
 //
-// Its location set is inline (`locations.ts`), per docs/design/contests.md
-// §5.3's dataset table.
+// Its location set and lookup guesses are `@ham2k/lib-naqp-exchange`, which the
+// Phone Weekly Test shares; the set is bundled, not looked up, per
+// docs/design/contests.md §5.3's dataset table.
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
@@ -28,11 +29,10 @@ import type {
   RefLink,
   SuggestArgs,
 } from "@ham2k/extension-sdk"
+import { LOCATION_PATTERN, VALID_LOCATIONS, firstName, guessedLocation, guessedName, normalizeLocation, ourExchange } from "@ham2k/lib-naqp-exchange"
 
 import { tFor } from "./i18n.ts"
 import { OPERATOR_CLASSES, POWER_CLASSES, cabrilloCategories, declaredOperators } from "./entry.ts"
-import { firstName, guessedLocation, guessedName, normalizeLocation, ourExchange } from "./exchange.ts"
-import { LOCATION_PATTERN, VALID_LOCATIONS } from "./locations.ts"
 import { MODES, nearestMode, nextContestDate, relevanceFor } from "./schedule.ts"
 import { NAQPScorer, contestTitle } from "./scorer.ts"
 

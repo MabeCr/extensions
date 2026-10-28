@@ -1,0 +1,28 @@
+{
+  "name": "@ham2k/lib-weekly-contest",
+  "version": "0.1.0",
+  "description": "The weekly contests' schedule: each week's sessions computed from the sponsor's rule, the one at hand, and finding one by name in the picker",
+  "author": "Sebastian Delmont <sd@ham2k.com>",
+  "license": "MIT",
+  "type": "module",
+  "//exports": [
+    "Consumed as TypeScript source: the only consumers are extensions, which",
+    "esbuild bundles, so there is no build step and no dist/ to point at."
+  ],
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "node --experimental-strip-types --test 'src/**/*.test.ts'",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

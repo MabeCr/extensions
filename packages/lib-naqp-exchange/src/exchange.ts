@@ -1,11 +1,8 @@
 // Copyright ©️ 2026 Sebastian Delmont <sd@ham2k.com>
 // SPDX-License-Identifier: MIT
 //
-// Reading and guessing NAQP's two-part exchange.
-//
-// Separate from index.ts so these can be unit-tested: index.ts calls
-// `defineExtension` at import time, so nothing in it is reachable from
-// `node --test`.
+// Reading and guessing NAQP's two-part exchange — a name and a location —
+// which the Phone Weekly Test uses too.
 
 import type { JSONValue } from "@ham2k/extension-sdk"
 import { annotateCallAgainstCountryFile } from "@ham2k/extension-sdk"
@@ -29,7 +26,7 @@ export function normalizeLocation(value: JSONValue | undefined): string {
   return String(value ?? '').trim().toUpperCase()
 }
 
-/// A first name, upper-cased — NAQP exchanges are single names, and the lookup
+/// A first name, upper-cased — the exchange is a single name, and the lookup
 /// may well hand back "Hiram Percy Maxim".
 export function firstName(value: JSONValue | undefined): string {
   return str(value).trim().split(/\s+/)[0].toUpperCase()

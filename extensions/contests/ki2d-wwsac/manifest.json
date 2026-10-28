@@ -2,7 +2,7 @@
   "key": "ki2d-wwsac",
   "name": "KI2D’s Worldwide Sideband Activity Contest",
   "shortName": "WWSAC",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A weekly hour of SSB, Tuesdays at 0100 UTC: signal report and age group, YLs and youth worth more, every callsign prefix a multiplier",
   "category": "contest",
   "icon": "microphone",

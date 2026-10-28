@@ -1,0 +1,61 @@
+{
+  "key": "ki2d-phone-weekly-test",
+  "name": "KI2D’s Phone Weekly Test",
+  "shortName": "Phone Weekly Test",
+  "version": "0.1.0",
+  "description": "A weekly half hour of SSB, Wednesdays at 0230 UTC (Tuesday evening in North America): name and location, NAQP-style, on 160 through 15m. Formerly the Phone Fray",
+  "category": "contest",
+  "icon": "account-voice",
+  "accentColor": "#6A1B9A",
+  "api": 11,
+  "keywords": [
+    "contest",
+    "phone weekly test",
+    "phone fray",
+    "pwt",
+    "ssb",
+    "phone",
+    "weekly",
+    "naqp",
+    "state",
+    "province"
+  ],
+  "relevance": {
+    "continents": [
+      "NA"
+    ],
+    "interests": [
+      "phone"
+    ]
+  },
+  "hooks": [
+    "activity",
+    "adifFields",
+    "export",
+    "ref:pwt",
+    "scoring"
+  ],
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  },
+  "translations": {
+    "es": {
+      "name": "Phone Weekly Test de KI2D",
+      "description": "Media hora semanal de SSB, los miércoles a las 0230 UTC (martes por la noche en Norteamérica): nombre y ubicación, al estilo NAQP, de 160 a 15m. Antes, el Phone Fray",
+      "keywords": [
+        "concurso",
+        "fonía",
+        "semanal",
+        "estado",
+        "provincia"
+      ]
+    }
+  }
+}

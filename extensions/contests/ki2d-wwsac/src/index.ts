@@ -21,6 +21,7 @@ import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 import { rulesNote, withRules } from "@ham2k/lib-contest-rules"
 import { stampedExchange } from "@ham2k/lib-contest-exchange"
+import { type WeeklySession, relevanceFor, searchMatches } from "@ham2k/lib-weekly-contest"
 import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -41,7 +42,7 @@ import type {
 import { tFor } from "./i18n.ts"
 import { CONTEST_RULES, POWER_CLASSES, cabrilloCategories } from "./entry.ts"
 import { AGE_GROUPS, AGE_GROUP_PATTERN, TYPE, ourAgeGroup, priorAgeGroup, refOfType, str, theirAgeGroup } from "./exchange.ts"
-import { type WwsacSession, relevanceFor, sessionAtHand, sessionDateLabel, sessionFor, sessionsFrom } from "./schedule.ts"
+import { sessionAtHand, sessionDateLabel, sessionFor, sessionsFrom } from "./schedule.ts"
 import { CONTEST_TITLE, WwsacScorer } from "./scorer.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
@@ -53,19 +54,11 @@ const CONTEST_ID = 'WWSAC'
 /// How many sessions a search or a scoped picker offers.
 const SESSIONS_OFFERED = 4
 
-/// The words a search can be made of. Every word typed has to be one of these,
-/// or from three letters on the start of one — "wwsac", "sideband activity",
-/// "world wide sideband". "Contest" and a year are ignored, since they say
-/// nothing about which contest.
+/// The words a search for it can be made of — "wwsac", "sideband activity",
+/// "world wide sideband". See `searchMatches`.
 const SEARCH_WORDS = ['WWSAC', 'WORLDWIDE', 'WORLD', 'WIDE', 'SIDEBAND', 'ACTIVITY', 'SSB']
-const FILLER_WORDS = ['CONTEST', 'TEST']
 
-function searchMatches(term: string): boolean {
-  const words = term.split(/\s+/).filter((word) => word && !/^\d+$/.test(word) && !FILLER_WORDS.includes(word))
-  return words.length > 0 && words.every((word) => SEARCH_WORDS.some((known) => known === word || (word.length >= 3 && known.startsWith(word))))
-}
-
-function sessionOn(operation: Record<string, JSONValue> | undefined): WwsacSession | undefined {
+function sessionOn(operation: Record<string, JSONValue> | undefined): WeeklySession | undefined {
   return sessionFor(str(refOfType(operation, TYPE)?.ref))
 }
 
@@ -82,14 +75,21 @@ async function profileDetails(): Promise<{ name: string; email: string }> {
   }
 }
 
+/// The operation row's second line: the session, and our age group — or that
+/// the setup still lacks it, and every sent exchange would export blank.
+function rowName(session: WeeklySession | undefined, ours: string, t: ReturnType<typeof tFor>): string {
+  return [session ? sessionDateLabel(session) : t('noSession'), ours ? t(`ourAgeGroup_${ours}`) : t('notConfigured')].join(' · ')
+}
+
 /// One picker row for a session. A suggestion is persisted VERBATIM and never
 /// runs through `decorateRef`, so everything the operation row reads has to be
-/// here, the rules flags included.
-function suggestionFor(session: WwsacSession, nowMillis: number, ctx: HookContext): ActivitySuggestion {
+/// here, the rules flags included — and the row says "Not configured!" until
+/// the setup is saved, as a decorated one would.
+function suggestionFor(session: WeeklySession, nowMillis: number, ctx: HookContext): ActivitySuggestion {
   return withRules({
     type: TYPE,
     ref: session.key,
-    name: `${sessionDateLabel(session)} · ${tFor(ctx)('sessionDescription')}`,
+    name: rowName(session, '', tFor(ctx)),
     program: 'Contest',
     label: CONTEST_TITLE,
     shortLabel: CONTEST_TITLE,
@@ -105,7 +105,7 @@ const ActivityHook = {
   async suggest({ operation, searchTerm, scoped }: SuggestArgs, ctx: HookContext): Promise<ActivitySuggestion[]> {
     if (refOfType(operation, TYPE)) return []
     const term = (searchTerm ?? '').trim().toUpperCase()
-    const namesThisContest = !term || searchMatches(term)
+    const namesThisContest = !term || searchMatches(term, SEARCH_WORDS)
     if (!namesThisContest && !scoped) return []
 
     const now = Date.now()
@@ -257,9 +257,7 @@ const RefHandler = {
       program: 'Contest',
       label: CONTEST_TITLE,
       shortLabel: CONTEST_TITLE,
-      // The row's second line SAYS when our age group is still missing: a
-      // suggestion tapped and never set up exports every sent exchange blank.
-      name: [session ? sessionDateLabel(session) : t('noSession'), ours ? t(`ourAgeGroup_${ours}`) : t('notConfigured')].join(' · '),
+      name: rowName(session, ours, t),
     }
     return withRules(decorated, CONTEST_RULES)
   },
