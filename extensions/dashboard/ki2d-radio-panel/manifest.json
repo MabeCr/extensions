@@ -1,7 +1,7 @@
 {
   "key": "ki2d-radio-panel",
   "name": "KI2D’s Radio Panel",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "Live CAT readout, meters and panadapter for a local radio",
   "category": "dashboard",
   "icon": "radio-handheld",
@@ -15,7 +15,7 @@
       "description": "Lecturas CAT, medidores y panorámico de una radio local"
     }
   },
-  "api": 9,
+  "api": 13,
   "sharedDependencies": {
     "@ham2k/lib-callsigns": "^1.0.0",
     "@ham2k/lib-country-files": "^1.0.0",

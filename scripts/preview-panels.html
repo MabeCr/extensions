@@ -45,6 +45,13 @@ const bind = (b, values) => {
   }
   return b.output[0] + (b.output[1] - b.output[0]) * f
 }
+/// A layer's `when`, as the host tests it: a missing number fails the test itself, before `not`.
+function holds(w, values) {
+  const v = values[w.value], matches = w.is !== undefined ? [w.is] : w.in
+  const pass = typeof v === 'string' ? (matches ?? []).includes(v)
+    : v !== undefined && v !== -Infinity && (matches ? matches.includes(v) : (w.min === undefined || v >= w.min) && (w.max === undefined || v <= w.max))
+  return pass !== !!w.not
+}
 /// A bound number as the host formats it: scale, truncate, modulo, then zero padding.
 function number(v, t) {
   let x = v * (t.scale ?? 1)
@@ -63,6 +70,7 @@ function paint(pane, values) {
     if (l.scaleY) t.push(`scaleY(${bind(l.scaleY, values)})`)
     el.style.transform = t.join(' ')
     if (l.opacity) el.style.opacity = bind(l.opacity, values)
+    if (l.when && !holds(l.when, values)) el.style.opacity = 0
     if (l.text?.value) {
       const v = values[l.text.value], s = l.text.samples
       el.textContent = typeof v === 'string' ? v

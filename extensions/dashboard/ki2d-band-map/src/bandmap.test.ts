@@ -376,3 +376,34 @@ test('a station whose newest report is outside the window is not shown at an old
   assert.deepEqual(mapSpots([at(14250, 1), at(14074, 20)] as any, 1e12, [14049, 14099]), [])
   assert.deepEqual(mapSpots([at(14250, 1), at(14074, 20)] as any, 1e12, [14000, 14350]).map(s => s.khz), [14250])
 })
+
+// A render comes 750 ms after the last at the soonest: a pointer drawn only where the render put it
+// trails a turn of the radio's knob by that much. Bound to the live frequency, it moves with the
+// report, along the same linear scale the render places it on.
+test("the radio's pointer follows its live frequency between renders, and hides off the window", async () => {
+  const { hook } = bandMap()
+  const { scene } = await render(hook, 900, 220, '20m')
+  assert.deepEqual(scene.radio, {})
+  const [lo, hi] = bandEdges['20m'], [a0, a1] = [8, scene.width - 8]
+  const vfo = scene.layers.find((l: { id: string }) => l.id === 'vfo')
+  const p = a0 + ((14074 - lo) / (hi - lo)) * (a1 - a0)
+  assert.deepEqual(vfo.translateX, { value: 'radio.frequencyHz', input: [lo * 1000, hi * 1000], output: [a0 - p, a1 - p] })
+  assert.deepEqual(vfo.when, { value: 'radio.frequencyHz', min: lo * 1000, max: hi * 1000 })
+  // At the rendered frequency the binding moves it nowhere.
+  const shift = (hz: number) => vfo.translateX.output[0] + ((hz - vfo.translateX.input[0]) / (hi * 1000 - lo * 1000)) * (vfo.translateX.output[1] - vfo.translateX.output[0])
+  assert.ok(Math.abs(shift(14074000)) < 1e-6)
+  assert.ok(Math.abs(shift(14174000) - (100 / (hi - lo)) * (a1 - a0)) < 1e-6)
+  assert.deepEqual(scene.layers.find((l: { id: string }) => l.id === 'radio')?.translateX, vfo.translateX)
+
+  // With no radio the pointer is the logging controls' frequency, which the host does not feed.
+  const draft = bandMap({ readRadio: async () => null }).hook
+  const { scene: typed } = await draft.render({ environment: env(900, 220), clock: { nowMillis: 1e12 }, instanceId: 'a', config: {}, operation: {}, qso: { freq: 14074, band: '20m', mode: 'USB' } }, { getSpots: async () => spots })
+  assert.equal(typed.radio, undefined)
+  assert.ok(typed.layers.some((l: { id: string }) => l.id === 'vfo'))
+  assert.ok(!typed.layers.some((l: { translateX?: unknown; when?: unknown }) => l.translateX && l.when))
+})
+
+test('the map asks to be rendered when the dial moves, to scroll and redraw about it', async () => {
+  const [descriptor] = await bandMap().hook.getPanels({}, { locale: 'en' })
+  assert.ok(descriptor.on.includes('radio'))
+})

@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-ki2d-radio-panel",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "private": true,
   "description": "Interactive SVG front face for the designated local CAT radio",
   "author": "Sebastian Delmont <sd@ham2k.com>",
@@ -13,8 +13,8 @@
     "pack": "npm run build && h2kext-pack build"
   },
   "devDependencies": {
-    "@ham2k/extension-sdk": "^1.12.4",
-    "@ham2k/extension-tools": "^1.12.0",
+    "@ham2k/extension-sdk": "^1.13.0",
+    "@ham2k/extension-tools": "^1.13.0",
     "esbuild": "^0.25.5"
   },
   "engines": {

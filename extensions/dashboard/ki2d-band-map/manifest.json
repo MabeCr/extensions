@@ -1,7 +1,7 @@
 {
   "key": "ki2d-band-map",
   "name": "KI2D’s Band Map",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The spots on a band, laid out along its frequencies, over the radio’s panadapter when it has one",
   "category": "dashboard",
   "icon": "map-marker-radius",
@@ -15,7 +15,7 @@
       "description": "Los spots de una banda, dispuestos a lo largo de sus frecuencias, sobre el panorámico de la radio cuando lo tiene"
     }
   },
-  "api": 12,
+  "api": 13,
   "sharedDependencies": {
     "@ham2k/lib-callsigns": "^1.0.0",
     "@ham2k/lib-country-files": "^1.0.0",

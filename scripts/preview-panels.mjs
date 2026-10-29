@@ -110,6 +110,7 @@ async function loadExtension() {
     if (!radios.has(c.index)) radios.set(c.index, { ...structuredClone(demoRadio), ...c.radio })
     radio = radios.get(c.index)
     current = c
+    return radio
   }
   // How many panel events are running: as the host, `suggestQso` answers only from inside one.
   const events = { running: 0 }
@@ -184,7 +185,19 @@ async function readCases() {
 
 let loaded, cases = [], results = { rendered: null, results: [] }
 /// The demo radio, receiving, long after its last transmission. A case's `readings` replace any of them.
-const radioReadings = { "radio.signalDbm": -85, "radio.powerOut": 0, "radio.supplyVolts": 13.8, "radio.transmitting": 0, "radio.secondsSinceTransmit": 1e6 }
+const radioReadings = { "radio.signalDbm": -85, "radio.powerOut": 0, "radio.supplyVolts": 13.8, "radio.transmitting": 0, "radio.secondsSinceTransmit": 1e6, "radio.ptt": 0 }
+/// The case radio's dial, as the host feeds it: what a panel tuned shows, as it would on the radio.
+/// The frequency and mode are the last the radio gave; the rest only while it is live. A reading it
+/// has not given is left out, so a binding and a `when` take it as missing, as in the host.
+const radioDial = r => {
+  const live = r.status === "connected" && !r.stale && !r.problem
+  const values = Object.fromEntries(Object.entries({
+    "radio.frequencyHz": r.frequencyHz, "radio.connected": live ? 1 : 0,
+    ...(live ? { "radio.powerWatts": r.powerWatts } : {}),
+    ...(live && r.passband ? { "radio.passbandLowHz": r.passband.lowHz, "radio.passbandHighHz": r.passband.highHz, "radio.passbandWidthHz": r.passband.highHz - r.passband.lowHz } : {}),
+  }).filter(([, v]) => typeof v === "number"))
+  return { values, strings: { "radio.mode": r.mode ?? "", "radio.tuner": live ? r.tuner ?? "" : "", "radio.status": r.status } }
+}
 
 /// A run of contacts ending now at about `rate` an hour, its pace swinging so a chart has some shape.
 function contactRun({ minutes = 120, rate = 60, operators = [] }, now) {
@@ -243,7 +256,7 @@ function argsFor(c, index, panelKey) {
   const qsos = c.contacts ? contactRun(c.contacts, now) : c.qsos ?? []
   const args = { environment, clock: { nowMillis: now, realNowMillis: now }, instanceId: `case-${index}`, panelKey, operation: c.operation ?? {}, qso: c.qso, qsoCount: qsos.length, config: c.config ?? {}, reason: "preview" }
   const ctx = { online: true, locale: c.locale, distanceUnits: "kilometers", getQsos: async () => qsos, getSpots: async options => boardFor(c, now, options) }
-  loaded.useRadio({ ...c, index })
+  const radio = loaded.useRadio({ ...c, index })
   return { args, ctx }
 }
 
@@ -257,7 +270,11 @@ async function renderCase(c, index) {
       try {
         const result = await hook.render({ ...args, panelKey: descriptor.key }, ctx)
         // The host feeds a scene that asks for the radio its live readings, with no render between.
-        if (result?.scene?.radio) Object.assign(result.scene.values, { ...radioReadings, ...c.readings })
+        if (result?.scene?.radio) {
+          const dial = radioDial(radio)
+          Object.assign(result.scene.values, dial.values, radioReadings, c.readings)
+          result.scene.strings = { ...result.scene.strings, ...dial.strings }
+        }
         // The host refuses a scene past these, so the preview shows the refusal rather than the scene.
         const over = [["layers", 512], ["controls", 256]].find(([part, most]) => (result?.scene?.[part]?.length ?? 0) > most)
         if (over) throw new Error(`${result.scene[over[0]].length} ${over[0]}, past the host's ${over[1]}`)

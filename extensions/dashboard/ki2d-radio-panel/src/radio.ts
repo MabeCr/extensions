@@ -134,6 +134,8 @@ function mix(a: string, b: string, t: number) {
 export function createRadioPanel(host: RadioHost): PanelHook {
   const placements = new Map<string, {
     id: string | null; selection?: string; requested?: number; dial?: boolean; mode?: string; sent?: number
+    /** Where the radio was as last rendered, and so when a request was sent. */
+    seen?: number | null; from?: number | null
     /** The scope span last asked of the radio for the panadapter's width: asked once per change. */
     spanAsked?: number
     panCategory?: PanCategory
@@ -166,7 +168,7 @@ export function createRadioPanel(host: RadioHost): PanelHook {
     async getPanels(_args, ctx) {
       const t = words(ctx.locale)
       const radios = await host.listRadios?.() ?? []
-      return [{ key: 'front-face', title: t.title, description: t.description, icon: 'radio-handheld', multiple: true, on: ['tick:1'], form: [
+      return [{ key: 'front-face', title: t.title, description: t.description, icon: 'radio-handheld', multiple: true, on: ['tick:1', 'radio'], form: [
         { type: 'field', fieldType: 'select', key: 'radio', label: t.radio, value: 'auto', options: [
           { value: 'auto', label: t.automatic }, ...radios.filter(r => r.id).map(r => ({ value: r.id!, label: r.name ?? r.id! })),
         ] },
@@ -197,6 +199,10 @@ export function createRadioPanel(host: RadioHost): PanelHook {
       // A dial's last step is not where the radio stays when Smart VFO Snap rounds it: once the dial
       // has been still a moment, the readout follows the radio again.
       if (p.requested !== undefined && p.dial && args.clock.realNowMillis - (p.sent ?? 0) > 1500) delete p.requested
+      // A click the radio moved for but rounded, or that the operator's own knob took on from: it has
+      // answered, and holding the request would keep the digits off the dial.
+      if (p.requested !== undefined && !p.dial && r?.frequencyHz != null && p.from != null && r.frequencyHz !== p.from) delete p.requested
+      p.seen = r?.frequencyHz
       if (p.mode !== undefined && r?.mode === p.mode) delete p.mode
       // Mid-scroll the radio's report lags what was asked: the knobs keep moving from the request.
       if (args.clock.realNowMillis - (p.passbandSent ?? 0) > 1500) p.passband = r?.passband ? [r.passband.lowHz, r.passband.highHz] : undefined
@@ -290,12 +296,12 @@ export function createRadioPanel(host: RadioHost): PanelHook {
       // The pill follows the radio's report, not the request; the box shows what was asked until the radio answers.
       if (command.tunerInline !== undefined || command.startTune || command.antenna || command.powerWatts !== undefined) return { values: {} as Record<string, number> }
       if (command.passband) return { values: passbandValues([command.passband.lowHz, command.passband.highHz]) }
-      if (command.frequencyHz !== undefined) p.dial = command.dial === true
+      if (command.frequencyHz !== undefined) { p.dial = command.dial === true; p.from = p.seen }
       p.requested = command.frequencyHz ?? p.requested
       p.mode = command.mode ?? p.mode
       p.sent = args.clock?.realNowMillis ?? 0
       // Reported readouts only change on radio telemetry, never on acceptance.
-      return { values: { requested: (p.requested ?? result.state?.frequencyHz ?? 0) / 1000 } }
+      return { values: { requested: (p.requested ?? result.state?.frequencyHz ?? 0) / 1000, pending: p.requested !== undefined ? 1 : 0 } }
     },
   }
 }
@@ -307,16 +313,20 @@ export function radioDocument(e: PanelEnvironment, r: PanelRadioState | null, re
   const requested = (requestedHz ?? r?.frequencyHz ?? 0) / 1000
   const live = r?.status === 'connected' && !r.stale && !r.problem, canTune = live && r.canTune && r.transmitting !== true
   const maxWatts = r?.maxWatts ?? 100
-  const layers: SvgSceneLayer[] = [], scene: SvgScene = { version: 1, width, height, values: { reported: (r?.frequencyHz ?? 0) / 1000, requested, rf: r?.meters.powerOut ?? 0 }, layers, controls: [] }
+  const layers: SvgSceneLayer[] = [], scene: SvgScene = { version: 1, width, height, values: { reported: (r?.frequencyHz ?? 0) / 1000, requested, pending: requestedHz !== undefined ? 1 : 0, rf: r?.meters.powerOut ?? 0 }, layers, controls: [] }
   if (w < 70 || h < 50) return scene
+  // The radio's live values (`scene.radio`), which the host updates as the radio reports them, with
+  // no render between: the frequency, the mode, and the meters below.
+  scene.radio = view.radio ? { node: view.radio } : {}
   const label = e.typography.label, line = label.scaledFontSize * label.lineHeight + 4
   function svg(id: string, x: number, y: number, sw: number, sh: number, art: string): SvgSceneLayer {
     return { id, x, y, width: sw, height: sh, svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${sw} ${sh}">${art}</svg>` }
   }
-  function text(id: string, value: string, x: number, y: number, tw: number, role: 'label' | 'display' | 'mono' = 'label', color = c.onSurface, align?: 'start' | 'center' | 'end') {
+  /** [value] is the text itself, or the scene value it is bound to. */
+  function text(id: string, value: string | { value: string }, x: number, y: number, tw: number, role: 'label' | 'display' | 'mono' = 'label', color = c.onSurface, align?: 'start' | 'center' | 'end') {
     const s = e.typography[role], th = s.scaledFontSize * s.lineHeight + 4
     if (tw < 1 || y + th > top + h) return
-    layers.push({ id, x, y, width: tw, height: th, text: { literal: value, size: s.fontSize, fontFamily: s.fontFamily ?? undefined, fontWeight: s.fontWeight, lineHeight: s.lineHeight, color, ...(align ? { align } : {}) } })
+    layers.push({ id, x, y, width: tw, height: th, text: { ...(typeof value === 'string' ? { literal: value } : value), size: s.fontSize, fontFamily: s.fontFamily ?? undefined, fontWeight: s.fontWeight, lineHeight: s.lineHeight, color, ...(align ? { align } : {}) } })
   }
   layers.push(svg('face', 0, 0, width, height, `<rect width="${width}" height="${height}" fill="${c.surface}"/>`))
 
@@ -356,7 +366,8 @@ export function radioDocument(e: PanelEnvironment, r: PanelRadioState | null, re
     if (canTune) scene.controls!.push({ id: 'power-pill', label: t.powerAdjust, kind: 'button', x: left + 12, y: powerY, width: pillWidth, height: line,
       menu: powerSteps(maxWatts).map(watts => ({ label: `${watts} W`, event: `watts-${watts}` })) })
     pill('mode-pill', left + 12, modeY)
-    text('mode', r?.mode ?? '—', left + 12, modeY, pillWidth, 'label', c.onSurface, 'center')
+    // Once the radio has named a mode, its live one, which changes before any render could show it.
+    text('mode', r?.mode ? { value: 'radio.mode' } : '—', left + 12, modeY, pillWidth, 'label', c.onSurface, 'center')
     if (canTune) scene.controls!.push({ id: 'mode', label: t.mode, kind: 'button', x: left + 12, y: modeY, width: pillWidth, height: line,
       menu: modes.map(mode => ({ label: mode, event: `mode-${mode}` })) })
   }
@@ -481,23 +492,33 @@ export function radioDocument(e: PanelEnvironment, r: PanelRadioState | null, re
     const group = e.locale.startsWith('es') ? '.' : ',', decimal = e.locale.startsWith('es') ? ',' : '.'
     const digits = (mhz > 0 ? mhzDigits + .5 + 3 : Math.max(1, String(Math.floor(requested)).length)) + (hz ? .5 + 1.8 : 0)
     let x = Math.max(frequencyX, frequencyX + fieldWidth - digits * digit)
-    function part(id: string, count: number, spec: NonNullable<SvgSceneLayer['text']>, small = false) {
+    // Each digit group twice, in the same place: the request while one is pending, and otherwise the
+    // radio's own frequency in Hz, which follows the dial as the radio reports it. Bound to the
+    // request alone, the digits would wait for the next render to show a turn of the radio's knob.
+    const follows = r?.frequencyHz != null
+    type Text = NonNullable<SvgSceneLayer['text']>
+    function part(id: string, count: number, spec: Text, small = false, radio?: Text) {
       const partSize = small ? size * .6 : size
       const pw = count * digit
-      layers.push({ id, x, y: topY + (small ? scaled * .4 * .85 : 0), width: pw + 4, height: scaled * (small ? .6 : 1) * base.lineHeight + 4,
-        text: { size: partSize, fontFamily: base.fontFamily ?? undefined, lineHeight: base.lineHeight, color: live ? c.accent : c.outline, ...spec } })
+      const box = { x, y: topY + (small ? scaled * .4 * .85 : 0), width: pw + 4, height: scaled * (small ? .6 : 1) * base.lineHeight + 4 }
+      const style = { size: partSize, fontFamily: base.fontFamily ?? undefined, lineHeight: base.lineHeight, color: live ? c.accent : c.outline }
+      if (follows && radio) {
+        layers.push({ id, ...box, when: { value: 'pending', is: 1 }, text: { ...style, ...spec } })
+        layers.push({ id: `${id}-radio`, ...box, when: { value: 'pending', is: 0 }, text: { ...style, ...radio } })
+      } else layers.push({ id, ...box, text: { ...style, ...spec } })
       x += pw
     }
+    const hzOf = { value: 'radio.frequencyHz' }
     if (mhz > 0) {
-      part('frequency-mhz', mhzDigits, { value: 'requested', scale: .001, truncate: true, fontWeight: 700 })
+      part('frequency-mhz', mhzDigits, { value: 'requested', scale: .001, truncate: true, fontWeight: 700 }, false, { ...hzOf, scale: 1e-6, truncate: true, fontWeight: 700 })
       part('frequency-group', .5, { literal: group })
-      part('frequency-khz', 3, { value: 'requested', truncate: true, modulo: 1000, minIntegerDigits: 3 })
+      part('frequency-khz', 3, { value: 'requested', truncate: true, modulo: 1000, minIntegerDigits: 3 }, false, { ...hzOf, scale: .001, truncate: true, modulo: 1000, minIntegerDigits: 3 })
     } else {
-      part('frequency-khz', Math.max(1, String(Math.floor(requested)).length), { value: 'requested', truncate: true, fontWeight: 700 })
+      part('frequency-khz', Math.max(1, String(Math.floor(requested)).length), { value: 'requested', truncate: true, fontWeight: 700 }, false, { ...hzOf, scale: .001, truncate: true, fontWeight: 700 })
     }
     if (hz) {
       part('frequency-decimal', .5, { literal: decimal })
-      part('frequency-hz', 1.8, { value: 'requested', scale: 1000, modulo: 1000, minIntegerDigits: 3 }, true)
+      part('frequency-hz', 1.8, { value: 'requested', scale: 1000, modulo: 1000, minIntegerDigits: 3 }, true, { ...hzOf, modulo: 1000, minIntegerDigits: 3 })
     }
   } else {
     text('frequency', '— MHz', frequencyX, topY, frequencyWidth, 'display', c.outline)
@@ -523,10 +544,9 @@ export function radioDocument(e: PanelEnvironment, r: PanelRadioState | null, re
   // Under the pills, beside the meter.
   if (passbandFits) passbandBox(left + 12, rowY + pillsHeight + pillGap * 2)
   if (meterFits) {
-    // Drawn from the radio's live values (`scene.radio`), which the host updates as the radio
-    // reports them: no render is needed for the bars, the numbers, or the switch between receive
-    // and transmit. Only the dBm/S-unit labels, the power ceiling and the SWR hold come from here.
-    scene.radio = view.radio ? { node: view.radio } : {}
+    // Drawn from the radio's live values: no render is needed for the bars, the numbers, or the
+    // switch between receive and transmit. Only the dBm/S-unit labels, the power ceiling and the SWR
+    // hold come from here.
     // The receive level sits inside the bar at its left, the SWR at its right.
     const meterWidth = barWidth, meterX = barX, numberX = meterX + 3, numberY = y + 2, numberW = Math.min(60, meterWidth - 6)
     const swrX = meterX + meterWidth - 3 - numberW

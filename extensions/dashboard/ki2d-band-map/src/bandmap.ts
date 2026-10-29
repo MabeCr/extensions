@@ -155,6 +155,8 @@ export type MapView = {
   /** The age at which a spot is shown faintest: the oldest the map asks for. */
   maxAgeMinutes: number
   radioKHz?: number
+  /** `radioKHz` is the radio's own report, not the logging controls': its pointer follows the radio between renders. */
+  follows?: boolean
   /** The receive filter's edges in Hz from the tuned frequency. */
   passband?: [number, number]
   /** The band plan: where its modes change, and the stretches not meant for the radio's mode. */
@@ -275,11 +277,18 @@ export function bandMapScene(
   // draws across the field carried on to the pane's edge.
   const dark = e.brightness === 'dark', tunedLine = dark ? tuned.line : tuned.lineLight
   const vfo = view.radioKHz != null && view.radioKHz >= lo && view.radioKHz <= hi ? at(view.radioKHz) : undefined
+  // The radio's pointer and line move with its live frequency, which the host updates as the radio
+  // reports it: a render comes 750 ms after the last at the soonest, and the map is redrawn about the
+  // new place only then. Off the window they hide rather than stop at its end.
+  const following: Partial<Layer> = vfo != null && view.follows ? {
+    [vertical ? 'translateY' : 'translateX']: { value: 'radio.frequencyHz', input: [lo * 1000, hi * 1000], output: [a0 - vfo, a1 - vfo] },
+    when: { value: 'radio.frequencyHz', min: lo * 1000, max: hi * 1000 },
+  } : {}
   if (vfo != null) {
     const p = vfo, edge = vertical ? (side < 0 ? width : 0) : side < 0 ? height : 0, stroke = `stroke="${tunedLine}" stroke-width="${tuned.width}"`
     piece('vfo', vertical ? [Math.min(axis, edge), p - 7, Math.max(axis, edge), p + 7] : [p - 7, Math.min(axis, edge), p + 7, Math.max(axis, edge)], vertical
       ? `<path d="M${axis} ${p}H${edge}" ${stroke}/><path d="M${axis - side * 12} ${p - 7}L${axis} ${p}L${axis - side * 12} ${p + 7}Z" fill="${tunedLine}"/>`
-      : `<path d="M${p} ${axis}V${edge}" ${stroke}/><path d="M${p - 7} ${axis - side * 12}L${p} ${axis}L${p + 7} ${axis - side * 12}Z" fill="${tunedLine}"/>`)
+      : `<path d="M${p} ${axis}V${edge}" ${stroke}/><path d="M${p - 7} ${axis - side * 12}L${p} ${axis}L${p + 7} ${axis - side * 12}Z" fill="${tunedLine}"/>`, following)
   }
   for (let k = Math.ceil(lo / step - 1e-9); k * step <= hi; k++) {
     const khz = Math.round(k * step * 1000) / 1000, p = at(khz), parts = freqParts(khz, step < 1 ? 1 : 0, view.marks)
@@ -363,7 +372,7 @@ export function bandMapScene(
     const [p0, p1] = [Math.min(p - 2, q - pad), Math.max(p + 2, r + pad)]
     piece('radio', vertical ? [fieldLeft, p0, fieldRight, p1] : [p0, fieldTop, p1, fieldBottom], band + (vertical
       ? `<path d="M${axis} ${p}H${side < 0 ? fieldLeft : fieldRight}" stroke="${tunedLine}" stroke-width="${tuned.width}"/>`
-      : `<path d="M${p} ${side < 0 ? fieldTop : fieldBottom}V${axis}" stroke="${tunedLine}" stroke-width="${tuned.width}"/>`))
+      : `<path d="M${p} ${side < 0 ? fieldTop : fieldBottom}V${axis}" stroke="${tunedLine}" stroke-width="${tuned.width}"/>`), following)
   }
 
   const ink = (s: MapSpot) => (s.notices ? c.primary : s.isSelf ? c.secondary : s.worked ? c.onSurfaceVariant : c.onSurface)
@@ -615,7 +624,7 @@ export function bandMapScene(
     }
   }
   const scroll = view.scroll ? { scroll: { axis: vertical ? ('y' as const) : ('x' as const), value: 'scroll', event: 'scrolled' } } : {}
-  return { scene: { version: 1, width, height, values, layers, controls, ...scroll }, placed, offset, centerKHz, centerAt, tuneAt }
+  return { scene: { version: 1, width, height, values, layers, controls, ...scroll, ...(view.follows ? { radio: {} } : {}) }, placed, offset, centerKHz, centerAt, tuneAt }
 }
 
 export function createBandMap(host: BandMapHost): PanelHook {
@@ -637,7 +646,7 @@ export function createBandMap(host: BandMapHost): PanelHook {
     async getPanels(_args, ctx) {
       const t = words(ctx.locale)
       return [{
-        key: 'band-map', title: t.title, description: t.description, icon: 'map-marker-radius', multiple: true, on: ['spots', 'qso', 'tick:1'],
+        key: 'band-map', title: t.title, description: t.description, icon: 'map-marker-radius', multiple: true, on: ['spots', 'qso', 'tick:1', 'radio'],
         form: [
           { type: 'field', fieldType: 'select', key: 'band', label: t.band, value: 'auto', options: [{ value: 'auto', label: t.auto }, ...bands.map(b => ({ value: b, label: b }))] },
           { type: 'field', fieldType: 'select', key: 'age', label: t.age, value: '30', options: ages.map(n => ({ value: String(n), label: t.minutes(n) })) },
@@ -759,7 +768,7 @@ export function createBandMap(host: BandMapHost): PanelHook {
         edges: segments.slice(1).map(s => s.from),
         off: kind ? segments.filter(s => !planAllows(s, kind)).map(s => [s.from, s.to] as [number, number]) : [],
       }
-      const view: MapView = { band, window, inverted: args.config.direction === 'inverted', passband, plan, superMode: kind, tunable: !!radio?.id, spots: mapSpots(board, args.clock.nowMillis, window), markers, maxAgeMinutes, radioKHz, scope, marks, zoom, scroll }
+      const view: MapView = { band, window, inverted: args.config.direction === 'inverted', passband, plan, superMode: kind, tunable: !!radio?.id, spots: mapSpots(board, args.clock.nowMillis, window), markers, maxAgeMinutes, radioKHz, follows: !fromDraft, scope, marks, zoom, scroll }
       const { scene, placed, offset, centerKHz, centerAt, tuneAt } = bandMapScene(args.environment, view, t)
       if (scroll) {
         const v = viewOf(key)

@@ -56,6 +56,50 @@ test('a dial tune is a request: the readout shows it until the radio reports one
   assert.equal(sceneOf(await panel.render(at(now + 2000), ctx)).values.requested, 14075)
 })
 
+test('the digits and the mode follow the radio between renders, and a pending tune shows the request instead', async () => {
+  // A render comes at most every 750 ms after the last: digits drawn only from the render's value
+  // would show a turn of the radio's own knob that late.
+  const { host } = radioHost(() => live)
+  const panel = createRadioPanel(host)
+  const idle = sceneOf(await panel.render(args, ctx))
+  assert.equal(idle.values.pending, 0)
+  for (const id of ['frequency-mhz', 'frequency-khz', 'frequency-hz']) {
+    const request = idle.layers.find(l => l.id === id)!, radio = idle.layers.find(l => l.id === `${id}-radio`)!
+    assert.equal(radio.text?.value, 'radio.frequencyHz')
+    assert.deepEqual(radio.when, { value: 'pending', is: 0 })
+    assert.deepEqual(request.when, { value: 'pending', is: 1 })
+    assert.deepEqual([radio.x, radio.y], [request.x, request.y], `${id}: one place, whichever shows`)
+  }
+  assert.equal(idle.layers.find(l => l.id === 'mode')?.text?.value, 'radio.mode')
+
+  // The event's answer flips to the request at once, without waiting for a render to say so.
+  const answer = await panel.onEvent!(event('panadapter', 'tune', 'activate', 14076000), ctx)
+  assert.deepEqual(answer.values, { requested: 14076, pending: 1 })
+  assert.equal(sceneOf(await panel.render(args, ctx)).values.pending, 1)
+
+  // Until the radio has said where it is there is nothing live to show, and a hidden pair would show nothing.
+  const silent = radioDocument(environment, { ...live, frequencyHz: null, mode: null } as unknown as PanelRadioState)
+  assert.ok(!silent.layers.some(l => l.id.endsWith('-radio')))
+  assert.equal(silent.layers.find(l => l.id === 'mode')?.text?.literal, '—')
+})
+
+test('a click the radio rounds, or moves on from, gives the digits back to the dial', async () => {
+  // Cleared only on an exact echo, the request would hold the digits on the click for good: a radio
+  // reporting in 10 Hz steps never echoes it, nor does one the operator has since tuned by hand.
+  let state = { ...live }
+  const panel = createRadioPanel(radioHost(() => state).host)
+  await panel.render(args, ctx)
+  await panel.onEvent!(event('panadapter', 'tune', 'activate', 14076003), ctx)
+  assert.equal(sceneOf(await panel.render(args, ctx)).values.pending, 1, 'the radio has not moved yet')
+  state = { ...state, frequencyHz: 14076000 }
+  assert.equal(sceneOf(await panel.render(args, ctx)).values.pending, 0)
+})
+
+test('the panel asks to be rendered when the dial moves, to lay the digits out for a new band', async () => {
+  const [descriptor] = await createRadioPanel(radioHost(() => live).host).getPanels({}, ctx)
+  assert.deepEqual(descriptor.on, ['tick:1', 'radio'])
+})
+
 test('a disconnected, stale or transmitting radio offers nothing that would command it', () => {
   for (const state of [null, { ...live, status: 'disconnected' as const }, { ...live, stale: true }, { ...live, transmitting: true }]) {
     assert.deepEqual(tuningControls(radioDocument(environment, state)), [], JSON.stringify(state))
