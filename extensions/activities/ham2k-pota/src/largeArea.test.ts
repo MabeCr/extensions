@@ -58,3 +58,46 @@ test("a park named exactly in the search carries the mark", async () => {
   const suggestions = (await extension.runHook("activity", "suggest", { location: { lat: 40, lon: -75 }, searchTerm: "US-4567" })) as Record<string, unknown>[]
   assert.equal(suggestions.find((s) => s.ref === "US-4567")?.largeArea, true)
 })
+
+// A contact with a park is placed in the park's state, over the callbook's
+// home address — the state an export writes and state awards count. A park
+// across several states names none: claiming one would put a trail contact
+// in whichever state happened to be listed first.
+test("a park in one state carries that state on its ref; one across several, and a re-decorated one, carry none", async () => {
+  assert.equal((await decorate({ ref: "US-0001" })).state, "ME")
+  assert.equal((await decorate({ ref: "US-4567" })).state, undefined)
+  assert.equal((await decorate({ ref: "US-4567", state: "ME" })).state, undefined)
+  assert.equal((await decorate({ ref: "US-9999", state: "ME" })).state, undefined)
+
+  const suggestions = (await extension.runHook("activity", "suggest", { location: { lat: 40, lon: -75 } })) as Record<string, unknown>[]
+  const byRef = Object.fromEntries(suggestions.map((s) => [s.ref, s]))
+  assert.equal(byRef["US-0001"].state, "ME")
+  assert.equal(byRef["US-4567"].state, undefined)
+})
+
+// The lookup answers for a hunted park whose ref nobody decorated — one a
+// spot proposed. Its grid would put a trail contact at one point of it.
+test("the lookup for a park across several states says so, and gives no grid or state", async () => {
+  const [answer] = (await extension.runHook("lookup", "lookupCall", {
+    callInfo: { call: "KI2D" },
+    qso: { their: { call: "KI2D" }, refs: [{ type: "pota", ref: "US-4567" }] },
+    operation: {},
+  })) as Record<string, unknown>[]
+  assert.equal(answer.largeArea, true)
+  assert.equal(answer.grid, undefined)
+  assert.equal(answer.state, undefined)
+  assert.equal(answer.scope, "qso")
+})
+
+// An app that predates `largeArea` merges the answer as an ordinary one.
+// Without a located field and an accuracy to lock the location, the hunter's
+// callbook address fills it — the trail contact lands at the hunter's home.
+test("the large-area answer still holds the location against a callbook on an app that ignores the flag", async () => {
+  const [answer] = (await extension.runHook("lookup", "lookupCall", {
+    callInfo: { call: "KI2D" },
+    qso: { their: { call: "KI2D" }, refs: [{ type: "pota", ref: "US-4567" }] },
+    operation: {},
+  })) as Record<string, unknown>[]
+  assert.equal(answer.location, "US-4567: Appalachian National Scenic Trail")
+  assert.equal(typeof answer.locAccuracy, "number")
+})

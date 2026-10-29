@@ -52,7 +52,12 @@ test("offline, a park missing from the local database takes its state from the s
   const [result] = await lookup("US-3830", "US-KY")
   assert.equal(result.state, "KY")
   assert.equal(result.grid, undefined)
-  assert.deepEqual(await lookup("US-4567", "US-GA,US-NC"), [], "a park across several states is in none of them")
+  // A park across several states is in none of them, and its one point is
+  // not where the station is — but the station is on it, not at home.
+  const [trail] = await lookup("US-4567", "US-GA,US-NC")
+  assert.equal(trail.largeArea, true)
+  assert.equal(trail.state, undefined)
+  assert.equal(trail.grid, undefined)
 })
 
 test("a park the local database lists without its area takes its state from the spot's ref", async () => {

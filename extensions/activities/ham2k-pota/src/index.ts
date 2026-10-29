@@ -66,6 +66,17 @@ function spansSeveralAreas(locationDesc: string | undefined): boolean {
   return (locationDesc ?? '').split(',').filter((area) => area.trim() !== '').length > 1
 }
 
+/// The state a park's ref carries (`Ref.state`), as a spread: the one state
+/// it lies in, where states matter, so a contact with the park is placed in
+/// that state rather than at the callbook's home address. The key is always
+/// present, as `largeArea` is, so a re-decoration clears a stale state — a
+/// park across several states, or no park at all, carries none. Typed apart
+/// from `Ref` until the SDK this builds against declares the field.
+function refState(reference: string, locationDesc: string | undefined): { state?: string } {
+  const state = stateOfPark(reference, locationDesc)
+  return { state }
+}
+
 // Nearby suggestions use a ~150km bounding box (dbLookupSelectByLocation is a
 // rectangular query, not a true radius); results are then given a real
 // Haversine distance and capped, same trade-off app-polo's own POTA
@@ -196,6 +207,7 @@ const RefHandler = {
       location: undefined,
       retired: undefined,
       largeArea: undefined,
+      ...refState(reference, undefined),
     })
 
     if (!REFERENCE_REGEX.test(reference)) return undecorated(t('invalidReference'))
@@ -211,6 +223,7 @@ const RefHandler = {
       lat: park.lat,
       lon: park.lon,
       location: park.locationDesc,
+      ...refState(reference, park.locationDesc),
       program: 'POTA',
       label: `POTA ${reference}: ${park.name}`,
       shortLabel: `POTA ${reference}`,
@@ -349,6 +362,7 @@ const ActivityHook = {
         lon: row.lon,
         location: data.locationDesc,
         largeArea: spansSeveralAreas(data.locationDesc),
+        ...refState(row.key, data.locationDesc),
         program: 'POTA',
         label: `POTA ${row.key}: ${row.name ?? ''}`,
         shortLabel: `POTA ${row.key}`,
@@ -413,6 +427,7 @@ const ActivityHook = {
         lon: resolved?.lon,
         location: resolved?.locationDesc,
         largeArea: spansSeveralAreas(resolved?.locationDesc),
+        ...refState(typedSearch, resolved?.locationDesc),
         program: 'POTA',
         label: `POTA ${typedSearch}: ${name}`,
         shortLabel: `POTA ${typedSearch}`,
@@ -457,7 +472,31 @@ async function lookupCall(
 
   const reference = refs[0].ref!.toUpperCase()
   const park = await fetchPark(reference, { online: ctx.online })
-  const state = stateOfPark(reference, park?.locationDesc || refs[0].location)
+  const locationDesc = park?.locationDesc || refs[0].location
+  // A park across several states is one point standing for all of it: the
+  // station is away from its home address, but on the trail or in the
+  // forest, nobody knows where — so the answer says that, and places nothing
+  // (`largeArea` on a lookup result, the app's lookup pipeline).
+  //
+  // The park's name and an accuracy ride along for an app that predates
+  // `largeArea`, whose merge would otherwise let a callbook's home address
+  // fill the location this answer leaves empty: a located answer with a
+  // declared accuracy locks out a same-scope source that declares none. An
+  // app that reads `largeArea` drops both.
+  if (spansSeveralAreas(locationDesc)) {
+    const name = park?.name ? `: ${park.name}` : ''
+    const answer: LookupResult[number] & { largeArea: boolean } = {
+      call: callInfo.call,
+      source: 'pota',
+      scope: 'qso',
+      locationScope: 'portable',
+      largeArea: true,
+      location: `${reference}${name}`,
+      locAccuracy: LOCATION_ACCURACY.REASONABLE,
+    }
+    return [answer]
+  }
+  const state = stateOfPark(reference, locationDesc)
   if (!park?.grid6) {
     return state ? [{ call: callInfo.call, source: 'pota', scope: 'qso', locationScope: 'portable', state }] : []
   }
