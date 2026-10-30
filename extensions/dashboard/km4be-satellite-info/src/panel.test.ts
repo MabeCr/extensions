@@ -94,7 +94,10 @@ test("the panel is a scene of controls, with its settings and a minute's tick", 
   const { kind, scene } = await p.render(cfg, t0)
   assert.equal(kind, "scene")
   // The list is drawn as text in one monospaced face: the titles and the five rows, each with a hit area over it.
-  assert.deepEqual((scene.layers as { id: string }[]).map((l) => l.id), ["columns", "row0", "row1", "row2", "row3", "row4"])
+  const ids = (scene.layers as { id: string }[]).map((l) => l.id)
+  assert.deepEqual(ids.filter((id) => /^(columns|row\d)$/.test(id)), ["columns", "row0", "row1", "row2", "row3", "row4"])
+  // The marks of AMSAT's reports are icons, with a title over their column and a key under the rows.
+  assert.ok(ids.includes("markTitle") && ids.includes("key-heard") && ids.includes("key-telemetry") && ids.includes("key-notHeard"))
   assert.ok(scene.controls.length <= 64)
   assert.deepEqual([...new Set(scene.controls.map((c) => c.kind))].sort(), ["button", "nativeButton", "nativeSegmented", "nativeSwitch", "nativeText"])
 })
@@ -117,7 +120,7 @@ test("a new install opens on All, and Favorites with nobody followed says how to
   const p = await panel()
   const { scene } = await p.render({ ...cfg, utc: true }, t0)
   assert.match(scene.strings.header, /^EL95vs · min 10° · 2 of 4 satellites tracked$/)
-  assert.match(scene.strings.hint, /^Orbits from CelesTrak/)
+  assert.match(scene.strings.hint, /^(Next: \S+ in .+|\S+ up now, .+ left)/, "what is up and what is next")
   assert.equal(scene.strings.mode, "all")
   assert.deepEqual((scene.controls.find((c) => c.id === "mode") as unknown as { options: { value: string }[] }).options.map((o) => o.value), ["all", "favorites"], "All on the left")
   assert.equal(scene.values.utc, 1, "the setting starts the pane in UTC")
@@ -147,7 +150,7 @@ test("a star follows a satellite without changing the list, and Favorites then s
   // Favorites shows only the followed satellite.
   const only = await p.event(cfg, t0, "mode", "mode", { text: "favorites" })
   assert.ok(rowTexts(only.strings!).every((r) => r.startsWith(name)))
-  assert.match(only.strings!.hint, /^Orbits from CelesTrak/)
+  assert.match(only.strings!.hint, /^(Next: \S+ in .+|\S+ up now, .+ left)/)
 
   // All shows every satellite again, the followed one's star filled.
   await p.event(cfg, t0, "mode", "mode", { text: "all" })
@@ -235,7 +238,8 @@ test("Favorites with nobody followed is an empty page that says how to fill it, 
   const scene = (await p.render(cfg, t0)).scene
   assert.equal(scene.strings.range, "")
   assert.equal(scene.strings.columns, "")
-  assert.equal(scene.strings.legend, "")
+  const ids = (scene.layers as { id: string }[]).map((l) => l.id)
+  assert.ok(!ids.includes("markTitle") && !ids.some((id) => id.startsWith("key-")), "no title over the marks and no key to them, with nothing listed")
   assert.ok(scene.controls.some((c) => c.id === "mode"), "the switch is still there to go back to All")
 
   // The compact pane has a shorter line.

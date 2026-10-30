@@ -48,7 +48,7 @@ async function panel(env?: ReturnType<typeof environment>) {
       },
     },
   })
-  type Layer = { id: string; x: number; y: number; width: number; text: { value: string; size: number; color: string; fontFamily: string } }
+  type Layer = { id: string; x: number; y: number; width: number; icon?: { name: string; color: string }; text: { value?: string; literal?: string; size: number; color: string; fontFamily: string } }
   return async (config: Record<string, unknown> = cfg) =>
     (
       (await ext.runHook(
@@ -88,13 +88,16 @@ test("the look comes from what the host reports, and a host that reports nothing
 test("the titles and the rows are drawn as text in one face at one size, in the colors the host gives", async () => {
   const render = await panel(environment(411, 1.3))
   const scene = await render()
-  assert.deepEqual(scene.layers.map((l) => l.text.value), ["columns", "row0", "row1", "row2", "row3", "row4"])
-  assert.equal(new Set(scene.layers.map((l) => l.text.size)).size, 1)
-  assert.equal(new Set(scene.layers.map((l) => l.text.fontFamily)).size, 1)
-  assert.equal(scene.layers[0].text.fontFamily, "RobotoMono")
-  assert.equal(scene.layers[0].text.color, "#445566")
-  assert.ok(scene.layers.slice(1).every((l) => l.text.color === "#112233"))
-  assert.equal(new Set(scene.layers.map((l) => l.x)).size, 1, "all start at the same place, so the columns line up")
+  // Every piece of text, the key to the marks included, is in the one face at the one size. The icons are not text.
+  const texts = scene.layers.filter((l) => l.text)
+  assert.equal(new Set(texts.map((l) => l.text.size)).size, 1)
+  assert.equal(new Set(texts.map((l) => l.text.fontFamily)).size, 1)
+  const lines = scene.layers.filter((l) => /^(columns|row\d)$/.test(l.id))
+  assert.deepEqual(lines.map((l) => l.text.value), ["columns", "row0", "row1", "row2", "row3", "row4"])
+  assert.equal(lines[0].text.fontFamily, "RobotoMono")
+  assert.equal(lines[0].text.color, "#445566")
+  assert.ok(lines.slice(1).every((l) => l.text.color === "#112233" || l.text.color === "#43a047"), "the primary color, or green for a pass that is up")
+  assert.equal(new Set(lines.map((l) => l.x)).size, 1, "all start at the same place, so the columns line up")
   assert.equal(scene.width, 411 - 16)
 })
 
@@ -106,7 +109,7 @@ test("on a phone with the operator's text enlarged, the text is made smaller to 
   assert.ok(large.layers[0].text.size < normal.layers[0].text.size, "larger text, more shrunk")
   assert.ok(large.layers[0].text.size >= MIN_ROW_SIZE)
   for (const scene of [normal, large]) {
-    assert.match(scene.strings.columns, /^Sat +Type +Start +Max +Path +Len +Rpt$/, "all the columns")
+    assert.match(scene.strings.columns, /^Sat +Type +Start +Max +Path +Len$/, "all the columns")
     assert.ok([0, 1, 2, 3, 4].every((i) => /\d+m/.test(scene.strings[`row${i}`])), "with their lengths")
   }
 })
@@ -114,13 +117,13 @@ test("on a phone with the operator's text enlarged, the text is made smaller to 
 test("when even the smallest readable text will not fit a line, the length goes first, then the transponder's kind", async () => {
   // Seconds on, as the longest lines are.
   const roomy = await (await panel(environment(411, 1)))()
-  assert.match(roomy.strings.columns, /Type +Start +Max +Path +Len +Rpt$/)
+  assert.match(roomy.strings.columns, /Type +Start +Max +Path +Len$/)
   const tight = await (await panel(environment(400, 1.3)))()
   assert.doesNotMatch(tight.strings.columns, /Len/)
   assert.match(tight.strings.columns, /Type/)
   assert.ok(tight.layers[0].text.size >= MIN_ROW_SIZE)
   const tightest = await (await panel(environment(340, 1.3)))()
-  assert.match(tightest.strings.columns, /^Sat +Start +Max +Path +Rpt$/)
+  assert.match(tightest.strings.columns, /^Sat +Start +Max +Path$/)
   assert.equal(tightest.layers[0].text.size, MIN_ROW_SIZE, "and the text is as small as it is allowed to be")
 })
 

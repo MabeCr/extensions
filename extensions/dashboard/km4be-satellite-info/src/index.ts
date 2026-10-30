@@ -31,7 +31,8 @@ import type { Report } from "./report.ts"
 import type { Cells, SatellitePass } from "./passes.ts"
 import { linksFor } from "./radio.ts"
 import { SCRUB_VALUE } from "./scrub.ts"
-import { GLYPH, LEGEND, LEGEND_COMPACT, NO_GLYPH, statusFor, statusHours, statusLines } from "./status.ts"
+import { PREVIEW_SVG } from "./preview.ts"
+import { statusFor, statusHours, statusLines } from "./status.ts"
 import type { Kind, StatusRow } from "./status.ts"
 import {
   PAGE_SIZE,
@@ -57,6 +58,9 @@ import {
 import type { ListLook, Mode, Model, ReportModel } from "./scene.ts"
 
 const REFRESH_SECONDS = 60
+
+/// The pane's tab, short enough to read whole on a phone: the descriptor's own title is longer, for the list of panels.
+const TAB_TITLE = "Satellites"
 
 /// What the operator has filled in on the Report page. The callsign and grid stay from one pass to the
 /// next; the rest starts over with each.
@@ -114,7 +118,7 @@ const empty = (header: string, state: PaneState, compact = false, look: ListLook
   pageCount: 1,
   range: "",
   columns: "",
-  legend: "",
+  legend: false,
   rows: [],
 })
 
@@ -145,13 +149,36 @@ async function gather(args: PanelRenderArgs, ctx: HookContext): Promise<Ready | 
   return { place, satellites, elementsAt, minEl, favorites, passes: upcomingPasses(satellites, place, now, minEl, elementsAt), reports, hours }
 }
 
-const glyphFor = (r: Ready, satellite: Satellite): string => {
-  const status = statusFor(r.reports, satellite)
-  return status ? GLYPH[status.kind] : NO_GLYPH
+/// What AMSAT's reports say of a satellite, for the mark at the end of its row; null when they say nothing.
+const markFor = (r: Ready, satellite: Satellite): Kind | null => statusFor(r.reports, satellite)?.kind ?? null
+
+/// A span of time as a person says it: "less than a minute", "12 min", "2 h 5 min".
+export function span(millis: number): string {
+  const minutes = Math.max(0, Math.ceil(millis / 60_000))
+  if (minutes < 1) return "less than a minute"
+  if (minutes < 90) return `${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  return `${hours} h${minutes % 60 ? ` ${minutes % 60} min` : ""}`
 }
 
-/// What is left out of a line, in this order, when it will not fit the pane at a size that can be read.
-const OMIT_ORDER: (keyof Cells)[][] = [["length"], ["length", "type"]]
+/// The line over the list: which satellite is up now and for how long, and which is next and when. Nothing when the
+/// list has nothing in it that is up or to come.
+export function nowAndNext(passes: SatellitePass[], now: number): string {
+  const up = passes.filter((p) => p.aos <= now && p.los > now)
+  const next = passes.find((p) => p.aos > now)
+  const parts: string[] = []
+  if (up.length) parts.push(`${up[0].satellite.name}${up.length > 1 ? ` and ${up.length - 1} more` : ""} up now, ${span(up[0].los - now)} left`)
+  if (next) parts.push(`Next: ${next.satellite.name} in ${span(next.aos - now)}`)
+  return parts.join(" · ")
+}
+
+/// How old a set of orbits has to be before the pane says so: they are fetched every six hours, so a copy twice that is
+/// stale, which is what an operator offline sees.
+const STALE_ORBITS_MS = 12 * 3_600_000
+
+/// What is left out of a line, in this order, when it will not fit the pane at a size that can be read. The mark is
+/// never in the line: it is an icon, in a column of its own.
+const OMIT_ORDER: (keyof Cells)[][] = [["mark"], ["mark", "length"], ["mark", "length", "type"]]
 
 function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, compact: boolean, look: ListLook): Model {
   const mode = state.mode ?? "all"
@@ -164,12 +191,12 @@ function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, co
   // The mark ends the line, where a mark drawn wider than one character in some font cannot push the columns out of line.
   // On a phone each line has to fit, or it wraps and the row is twice as tall: a single space between columns, and days
   // after today as +1 and not as a date.
-  const cells = page.map((p) => passCells(p, now, state.utc, seconds, glyphFor(r, p.satellite), compact))
+  const cells = page.map((p) => passCells(p, now, state.utc, seconds, "", compact))
   const longest = (t: { columns: string; lines: string[] }) => Math.max(t.columns.length, ...t.lines.map((l) => l.length))
   // All the columns if they fit at a size that can be read; if not, fewer, the length and then the kind of transponder.
-  let laid = table(cells, compact ? " " : "  ")
+  let laid = table(cells, compact ? " " : "  ", OMIT_ORDER[0])
   let size = fitSize(longest(laid), look, compact)
-  for (const omit of OMIT_ORDER) {
+  for (const omit of OMIT_ORDER.slice(1)) {
     if (size >= MIN_ROW_SIZE) break
     laid = table(cells, compact ? " " : "  ", omit)
     size = fitSize(longest(laid), look, compact)
@@ -179,6 +206,8 @@ function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, co
     name: p.satellite.name,
     favorite: r.favorites.includes(p.satellite.name),
     text: lines[i],
+    mark: markFor(r, p.satellite),
+    live: p.aos <= now,
     los: p.los,
   }))
 
@@ -186,7 +215,11 @@ function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, co
   // Favorites with nobody followed is an empty page, so it says how to fill it, rather than showing everything.
   let hint = `No passes of ${r.minEl}° or more in the next 24 hours.`
   if (mode === "favorites" && !followed) hint = compact ? "Add favorites on All, with a star, to see them here." : "Add some favorites to see them here: tap a star on the All page."
-  else if (showing.length) hint = `Orbits from CelesTrak, ${clock(r.elementsAt, now, state.utc)}.`
+  else if (showing.length) {
+    hint = nowAndNext(showing, now)
+    // Orbits are fetched every six hours; a copy much older than that is said, since the passes are only as good as it is.
+    if (r.elementsAt > 0 && now - r.elementsAt > STALE_ORBITS_MS) hint += `${hint ? " · " : ""}Orbits are ${span(now - r.elementsAt)} old.`
+  }
 
   return {
     header: `${r.place.grid} · min ${r.minEl}° · ${tracked} of ${r.satellites.length} satellites tracked`,
@@ -196,9 +229,8 @@ function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, co
     page: state.page,
     pageCount,
     range: showing.length ? `${first + 1}–${first + rows.length} of ${showing.length}` : "",
-    // Under the list, where it explains the marks without being read before the passes are.
     columns: showing.length ? columns : "",
-    legend: showing.length ? (compact ? LEGEND_COMPACT : LEGEND) : "",
+    legend: showing.length > 0,
     compact,
     rows,
     look,
@@ -322,6 +354,7 @@ export const PassesPanel: PanelHook = {
         key: "passes",
         title: "KM4BE Satellite Passes",
         description: "The next amateur satellite passes for where you are",
+        preview: PREVIEW_SVG,
         icon: "satellite-variant",
         on: [`tick:${REFRESH_SECONDS}`],
         form: [
@@ -384,10 +417,13 @@ export const PassesPanel: PanelHook = {
     // The pass's Sky page is redrawn often while something on it moves: every second if the countdown is on, since
     // a countdown that is not fresh is wrong; every two seconds while the satellite is overhead, so it is seen to cross
     // the sky; and not at all otherwise, when the panel's own minute is enough.
-    if (view.kind === "report") return { kind: "scene", scene: buildReportScene(view.model), triggers: [] }
+    if (view.kind === "report") return { kind: "scene", scene: buildReportScene(view.model), triggers: [], title: TAB_TITLE }
     const onSky = view.kind === "detail" && view.model.tab === "sky"
-    const tick = onSky && countdownOn(args.config) ? "tick:1" : onSky && view.model.underWay ? "tick:2" : undefined
-    return { kind: "scene", scene: view.kind === "list" ? buildScene(view.model) : buildDetailScene(view.model), triggers: tick ? [tick] : [] }
+    // The Radio page has the Doppler-corrected frequencies for right now, which are only right for a moment: while the
+    // satellite is up they are redrawn as the plot is.
+    const onRadio = view.kind === "detail" && view.model.tab === "radio"
+    const tick = onSky && countdownOn(args.config) ? "tick:1" : (onSky || onRadio) && view.kind === "detail" && view.model.underWay ? "tick:2" : undefined
+    return { kind: "scene", scene: view.kind === "list" ? buildScene(view.model) : buildDetailScene(view.model), triggers: tick ? [tick] : [], title: TAB_TITLE }
   },
 
   async onEvent(args, ctx): Promise<PanelSceneEventResult> {

@@ -15,6 +15,7 @@ import type { PanelScene, PanelSceneControl, PanelSceneLayoutNode } from "@ham2k
 
 import type { DetailModel } from "./detail.ts"
 import type { Report } from "./report.ts"
+import type { Kind } from "./status.ts"
 
 export const PAGE_SIZE = 5
 
@@ -73,12 +74,13 @@ export interface ListLook {
   family: string
   size: number
   os: number
-  /// The rows' color and the titles'.
+  /// The rows' color, the color of a pass that is up now, and the titles'.
   text: string
+  live: string
   title: string
 }
 
-export const DEFAULT_LOOK: ListLook = { width: 520, family: "monospace", size: 13, os: 1, text: "#4a90d9", title: "#8a8a8a" }
+export const DEFAULT_LOOK: ListLook = { width: 520, family: "monospace", size: 13, os: 1, text: "#4a90d9", live: "#43a047", title: "#8a8a8a" }
 
 /// The list's look from what the host reports of the pane. Without a report it is a phone-wide list in a
 /// size most monospaced faces fit.
@@ -92,6 +94,7 @@ export function listLook(environment: { width: number; colors?: Record<string, s
     size,
     os: mono && mono.fontSize > 0 && mono.scaledFontSize > 0 ? mono.scaledFontSize / mono.fontSize : 1,
     text: environment.colors?.primary ?? DEFAULT_LOOK.text,
+    live: DEFAULT_LOOK.live,
     title: environment.colors?.onSurfaceVariant ?? DEFAULT_LOOK.title,
   }
 }
@@ -105,9 +108,20 @@ export const MIN_ROW_SIZE = 10
 /// and no larger than the face's own. It can come out below `MIN_ROW_SIZE`, which says the line does not fit at a size that
 /// can be read; `rowSize` is what to draw in then.
 export function fitSize(chars: number, look: ListLook, compact: boolean): number {
-  const room = look.width - 2 * densityOf(compact).button - 4
+  const room = look.width - 2 * densityOf(compact).button - 4 - markColumn(compact)
   const fits = Math.floor((room / ((chars + 1) * CHAR_RATIO * look.os)) * 2) / 2
   return Math.min(look.size, fits)
+}
+
+/// The report marks are drawn as icons in a column of their own, between the line and the chevron.
+export const markSize = (compact: boolean): number => (compact ? 16 : 18)
+export const markColumn = (compact: boolean): number => markSize(compact) + 8
+
+/// What each kind of AMSAT report looks like: an icon, and a color that reads on a light or a dark pane.
+export const MARKS: Record<Kind, { icon: string; color: string; label: string }> = {
+  heard: { icon: "check-circle", color: "#43a047", label: "heard" },
+  telemetry: { icon: "circle-half-full", color: "#f9a825", label: "telemetry only" },
+  notHeard: { icon: "close-circle", color: "#e53935", label: "not heard" },
 }
 
 /// The size to draw a line in: the fit, but not so small that it cannot be read, in which case it is cut off instead.
@@ -122,6 +136,10 @@ export interface Row {
   name: string
   favorite: boolean
   text: string
+  /// What AMSAT's reports say of the satellite, drawn as an icon at the end of the line; null when they say nothing.
+  mark: Kind | null
+  /// Whether the pass is under way, which is drawn in its own color.
+  live: boolean
   /// When the pass ends, which with the name says which pass the row is (a pass's end is
   /// steady from one working-out to the next; its start, when under way, is not).
   los: number
@@ -140,8 +158,8 @@ export interface Model {
   range: string
   /// The titles over the rows' columns, set to line up with them; "" when there are no rows.
   columns: string
-  /// What the marks at the end of the rows mean, under the list; "" when there are no rows.
-  legend: string
+  /// Whether there are rows, and so titles over them and a key to the marks under them.
+  legend: boolean
   /// Whether the scene is laid out tightly, for a small pane.
   compact: boolean
   rows: Row[]
@@ -185,19 +203,49 @@ export const rowKey = (i: number): string => `row${i}`
 /// What the scene's text controls and choices hold. A row's text is shown as its button's label;
 /// `row0`… keep it too, as the text of the page's rows.
 export function stringsOf(m: Model): Record<string, string> {
-  const strings: Record<string, string> = { mode: m.mode, header: m.header, hint: m.hint, range: m.range, columns: m.columns, legend: m.legend }
+  const strings: Record<string, string> = { mode: m.mode, header: m.header, hint: m.hint, range: m.range, columns: m.columns }
   slots(m).forEach((row, i) => {
     strings[rowKey(i)] = row.text
   })
   return strings
 }
 
-const BLANK: Row = { name: "", favorite: false, text: "", los: 0 }
+const BLANK: Row = { name: "", favorite: false, text: "", mark: null, live: false, los: 0 }
 
 /// The page's rows, padded to its five slots.
 const slots = (m: Model): Row[] => Array.from({ length: PAGE_SIZE }, (_, i) => m.rows[i] ?? BLANK)
 
 export const valuesOf = (m: Model): Record<string, number> => ({ utc: m.utc ? 1 : 0 })
+
+/// The key to the marks, as the marks themselves: each icon with what it says, in a line under the rows. In a pane too
+/// narrow for the whole words they are shortened, and in one too narrow for those it starts at the pane's edge, under the
+/// star, and keeps its gaps small.
+function keyLayers(m: Model, x0: number, y: number, icon: number, lineH: number, width: number): PanelScene["layers"] {
+  const charW = m.size * m.look.os * CHAR_RATIO
+  const kinds: Kind[] = ["heard", "telemetry", "notHeard"]
+  const short: Record<Kind, string> = { heard: "heard", telemetry: "telemetry", notHeard: "not heard" }
+  const widthOf = (labels: Record<Kind, string>, gap: number) => kinds.reduce((n, k) => n + icon + 4 + Math.ceil(labels[k].length * charW) + 4 + gap, 0) - gap
+  const full: Record<Kind, string> = { heard: MARKS.heard.label, telemetry: MARKS.telemetry.label, notHeard: MARKS.notHeard.label }
+  const fits = (start: number, labels: Record<Kind, string>, gap: number) => start + widthOf(labels, gap) <= width - 4
+  // The roomiest way that fits, and the tightest when none does.
+  const way = fits(x0, full, 14)
+    ? { start: x0, labels: full, gap: 14 }
+    : fits(x0, short, 14)
+      ? { start: x0, labels: short, gap: 14 }
+      : fits(4, short, 10)
+        ? { start: 4, labels: short, gap: 10 }
+        : { start: 4, labels: short, gap: 6 }
+  const { labels, gap } = way
+  const layers: PanelScene["layers"] = []
+  let x = way.start
+  for (const k of kinds) {
+    layers.push({ id: `key-${k}`, x, y: y + Math.floor((lineH + 4 - icon) / 2), width: icon, height: icon, icon: { name: MARKS[k].icon, color: MARKS[k].color } })
+    const w = Math.ceil(labels[k].length * charW) + 4
+    layers.push({ id: `keyText-${k}`, x: x + icon + 4, y, width: w, height: lineH + 4, text: { literal: labels[k], size: m.size, color: m.look.title, fontFamily: m.look.family, lineHeight: 1.3 } })
+    x += icon + 4 + w + gap
+  }
+  return layers
+}
 
 /// The list is one block of artwork: the column titles and the rows, drawn in the monospaced face at one size that fits,
 /// each row with an invisible hit area over it, so that a tap anywhere on the line opens the pass, and the star and the
@@ -226,17 +274,33 @@ export function buildScene(m: Model): PanelScene {
   const W = L.width
   const rowH = rowHeightOf(m.compact)
   const titleH = titleHeightOf(m.size, L.os)
-  const H = titleH + PAGE_SIZE * rowH
   const lineH = Math.ceil(m.size * L.os * 1.3)
+  const keyH = m.legend ? lineH + 10 : 0
+  const H = titleH + PAGE_SIZE * rowH + keyH
   const textX = d.button + 2
+  const icon = markSize(m.compact)
+  // The marks are a column of icons after the text, as near it as the text allows, and no further than the chevron.
+  // In a wide pane they would otherwise be a hand's breadth from the rows they belong to.
+  const chars = Math.max(m.columns.length, ...m.rows.map((r) => r.text.length))
+  const textEnd = textX + Math.ceil((chars + 1) * m.size * L.os * CHAR_RATIO)
+  const markX = Math.min(W - d.button - icon - 6, textEnd + 10)
+  const textW = markX - textX - 4
   const layerText = (value: string, color: string) => ({ value, size: m.size, color, fontFamily: L.family, lineHeight: 1.3 })
 
-  const layers: PanelScene["layers"] = [{ id: "columns", x: textX, y: 2, width: W - textX - d.button, height: titleH - 2, text: layerText("columns", L.title) }]
+  const layers: PanelScene["layers"] = [{ id: "columns", x: textX, y: 2, width: textW, height: titleH - 2, text: layerText("columns", L.title) }]
+  if (m.legend) {
+    // The title of the marks' column, centered over them.
+    layers.push({ id: "markTitle", x: markX + icon / 2 - 20, y: 2, width: 40, height: titleH - 2, text: { literal: "Rpt", size: m.size, color: L.title, fontFamily: L.family, lineHeight: 1.3, align: "center" } })
+  }
   const rows = slots(m)
   rows.forEach((row, i) => {
     const blank = row === BLANK
     const y = titleH + i * rowH
-    layers.push({ id: rowKey(i), x: textX, y: y + Math.floor((rowH - lineH) / 2), width: W - textX - d.button, height: lineH, text: layerText(rowKey(i), L.text) })
+    layers.push({ id: rowKey(i), x: textX, y: y + Math.floor((rowH - lineH) / 2), width: textW, height: lineH, text: layerText(rowKey(i), row.live ? L.live : L.text) })
+    if (row.mark) {
+      const mark = MARKS[row.mark]
+      layers.push({ id: `mark${i}`, x: markX, y: y + Math.floor((rowH - icon) / 2), width: icon, height: icon, icon: { name: mark.icon, color: mark.color } })
+    }
     controls.push(
       {
         id: starId(row.name, i),
@@ -284,8 +348,8 @@ export function buildScene(m: Model): PanelScene {
     { id: "prev", kind: "nativeButton", label: "Previous page", icon: "chevron-left", variant: "tonal", event: "prev", disabled: m.page <= 0 },
     { id: "range", kind: "nativeText", label: "Showing", value: "range", align: "center" },
     { id: "next", kind: "nativeButton", label: "Next page", icon: "chevron-right", variant: "tonal", event: "next", disabled: m.page >= m.pageCount - 1 },
-    { id: "legend", kind: "nativeText", label: "What the marks mean", value: "legend", style: "label" },
   )
+  if (m.legend) layers.push(...keyLayers(m, textX, titleH + PAGE_SIZE * rowH + 4, icon, lineH, W))
 
   const column: PanelSceneLayoutNode[] = [
     { row: [{ control: "mode", flex: 1 }, { control: "utc" }], spacing: d.gap, crossAxisAlignment: "center" },
@@ -294,7 +358,6 @@ export function buildScene(m: Model): PanelScene {
     { scene: true, height: H },
     { spacer: 1 },
     { row: [{ control: "prev" }, { control: "range", flex: 1 }, { control: "next" }], spacing: d.gap, crossAxisAlignment: "center", ...(d.rowHeight ? { height: d.rowHeight } : {}) },
-    { control: "legend" },
   ]
 
   return {

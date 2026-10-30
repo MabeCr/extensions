@@ -33,9 +33,6 @@ export interface Status {
   latestAt: number
 }
 
-export const GLYPH: Record<Kind, string> = { heard: "✔", telemetry: "◐", notHeard: "✘" }
-/// Where a satellite without a status keeps the column of its row.
-export const NO_GLYPH = " "
 
 const KINDS: Record<string, Kind> = { Heard: "heard", "Crew Active": "heard", "Telemetry Only": "telemetry", "Not Heard": "notHeard" }
 /// When two kinds are equally common or equally recent, the more hopeful one counts.
@@ -112,9 +109,3 @@ export function statusHours(config: Record<string, unknown> | undefined): number
   const v = config?.statusHours
   return typeof v === "number" && Number.isFinite(v) && v >= 1 ? Math.min(MAX_STATUS_HOURS, Math.floor(v)) : DEFAULT_STATUS_HOURS
 }
-
-/// Under the list, to say what the `Rpt` column's marks are.
-/// The same, short enough to stay on one line of a phone.
-export const LEGEND_COMPACT = `Rpt: ${GLYPH.heard} heard ${GLYPH.telemetry} telemetry ${GLYPH.notHeard} not heard`
-
-export const LEGEND = `Rpt: ${GLYPH.heard} heard · ${GLYPH.telemetry} telemetry only · ${GLYPH.notHeard} not heard (AMSAT reports)`

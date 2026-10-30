@@ -113,7 +113,7 @@ const rowsOf = (strings: Record<string, string>) => [0, 1, 2, 3, 4].map((i) => s
 test("the list has a Type column next to the name, and every row says what its satellite is", async () => {
   const p = await panel({ width: 1000, height: 700 })
   const { strings } = await p.render(cfg)
-  assert.match(strings.columns, /^Sat +Type +Start +Max +Path +Len +Rpt$/)
+  assert.match(strings.columns, /^Sat +Type +Start +Max +Path +Len$/)
   const rows = rowsOf(strings)
   assert.ok(rows.length > 0)
   // AO-7 and FO-29 are both linear in the list.
