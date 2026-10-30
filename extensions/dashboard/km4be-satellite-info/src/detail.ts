@@ -5,6 +5,8 @@
 // sky, and what to tune to. Two tabs of a small screen, since a scene cannot
 // scroll: the Sky (plot and times) and the Radio (frequencies and Doppler).
 
+import type { PanelSceneLayer } from "@ham2k/extension-sdk"
+
 import type { Satellite } from "./data.ts"
 import { compass, findPasses, lookAt, satrecFromOmm } from "./orbit.ts"
 import type { Observer, Pass } from "./orbit.ts"
@@ -13,7 +15,9 @@ import { liveDoppler, RADIO_LINES, radioLines, shiftText } from "./radio.ts"
 import type { LiveShift } from "./radio.ts"
 import { placeLabels } from "./labels.ts"
 import type { Box, Disc } from "./labels.ts"
-import { arrowSpot, compassLayers, DEFAULT_SKY_COLORS, DOT_RADIUS, liveSpot, READOUT_BOXES, SKY_SIZE, skySvg, skyTrack, skyXY } from "./sky.ts"
+import { arrowSpot, compassLayers, DEFAULT_SKY_COLORS, DOT_RADIUS, liveSpot, READOUT_BOXES, SCRUB_BOX, SKY_SIZE, skySvg, skyTrack, skyXY } from "./sky.ts"
+import { buildScrub, hideWhileScrubbing } from "./scrub.ts"
+import type { Scrub } from "./scrub.ts"
 import type { SkyLook } from "./sky.ts"
 import type { SkyColors } from "./sky.ts"
 
@@ -33,13 +37,19 @@ export interface DetailModel {
   underWay: boolean
   /// Whether the scene is laid out tightly, for a small pane.
   compact: boolean
+  /// The size of the pane, when the host says; the sky plot is made as large as it allows.
+  pane?: { width: number; height: number }
+  /// How much of that the plot takes, as a percent: 100 unless the operator has asked for less.
+  skyPercent?: number
+  /// The slider over the plot that scrubs along the pass, and what it draws; null with no orbit to work from.
+  scrub: Scrub | null
   /// The sky plot, with the compass letters, the times of rise, peak and set, and, while it is
   /// under way, the satellite's elevation and the Doppler shift written on it.
   sky: {
     svg: string
     compass: ReturnType<typeof compassLayers>
     labels: ReturnType<typeof placeLabels>
-    readout: ReturnType<typeof readoutLayers>
+    readout: PanelSceneLayer[]
   }
 }
 
@@ -72,6 +82,7 @@ export function plotLabels(
   letters: ReturnType<typeof compassLayers>,
   here?: SkyLook,
   readout = false,
+  scrub = false,
 ): ReturnType<typeof placeLabels> {
   const rise = skyXY(pass.aosAzimuth, 0)
   const set = skyXY(pass.losAzimuth, 0)
@@ -92,7 +103,8 @@ export function plotLabels(
   const peakCovered = live !== null && Math.hypot(live.x - peak.x, live.y - peak.y) < DOT_RADIUS.now + DOT_RADIUS.peak
 
   const boxes: Box[] = letters.map((l) => ({ x: l.x, y: l.y, width: l.width, height: l.height }))
-  if (readout) boxes.push(...READOUT_BOXES)
+  if (readout || scrub) boxes.push(...READOUT_BOXES)
+  if (scrub) boxes.push(SCRUB_BOX)
   const placed = placeLabels(
     [
       // The satellite's own label first: it is what is being watched, so it has the most choice of place.
@@ -151,7 +163,7 @@ export function buildDetail(
   tab: Tab,
   theme: Theme = DEFAULT_THEME,
   status: string[] = ["", ""],
-  options: { countdown?: boolean; compact?: boolean } = {},
+  options: { countdown?: boolean; compact?: boolean; pane?: { width: number; height: number }; skyPercent?: number } = {},
 ): DetailModel {
   const pass = completePass(satellite, observer, listed, now)
   const at = (t: number) => clock(t, pass.aos, utc)
@@ -164,7 +176,8 @@ export function buildDetail(
   // While it is overhead: exactly where it is, and what the Doppler shift is this instant.
   const here = underWay && satrec ? lookAt(satrec, observer, now) : null
   const live = underWay ? liveDoppler(satellite, observer, now) : null
-  const readout = readoutLayers(live, theme.text)
+  const scrub = buildScrub(satellite, observer, pass, track, utc, theme.text, theme.sky.path)
+  const readout = scrub ? hideWhileScrubbing(readoutLayers(live, theme.text), scrub.rest) : readoutLayers(live, theme.text)
   const radio = radioLines(satellite, observer, pass, now)
   while (radio.length < RADIO_LINES) radio.push("")
   const compassLetters = compassLayers(theme.text)
@@ -182,6 +195,9 @@ export function buildDetail(
     radio,
     underWay,
     compact: options.compact === true,
+    ...(options.pane ? { pane: options.pane } : {}),
+    ...(options.skyPercent !== undefined ? { skyPercent: options.skyPercent } : {}),
+    scrub,
     sky: {
       svg: skySvg(track, pass, theme.sky, now, here ?? undefined),
       compass: compassLetters,
@@ -195,6 +211,7 @@ export function buildDetail(
         compassLetters,
         here ?? undefined,
         readout.length > 0,
+        scrub !== null,
       ),
       readout,
     },

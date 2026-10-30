@@ -123,7 +123,7 @@ async function panel(favorites: string[] = []) {
       getLocation: () => null,
       kvGet: () => null,
       kvSet: () => undefined,
-      getSettings: () => ({ extensions: favorites.length ? { "extension_km4be-satellite-info": { favorites } } : {} }),
+      getSettings: () => ({ extensions: favorites.length ? { "extension_km4be-satellite-info": { favorites, mode: "favorites" } } : {} }),
       fetch: (params) => {
         const url = String(params.url)
         return url === LIST_URL
@@ -158,12 +158,17 @@ test("the list has titles over its columns, which line up with every row, and it
   const lenEnd = columns.indexOf("Len") + 3
   for (const row of rows) assert.equal(row.replace(/ {2}[✔◐✘]$/, "").length, lenEnd, row)
 
-  // In the layout the titles come before the rows, and the legend after the pager.
-  const order = scene.layout.column.map((n) => (n as { control?: string; row?: { control: string }[] }).control ?? (n as { row?: { control: string }[] }).row?.map((c) => c.control)[0] ?? "")
-  assert.ok(order.indexOf("columns") < order.findIndex((c) => c.startsWith("star:")))
+  // The titles are drawn first, over the rows, in the same artwork, so they share its face and its size; the legend is last.
+  const nameOf = (n: { control?: string; row?: { control: string }[]; scene?: boolean }): string => (n.scene ? "artwork" : (n.control ?? n.row?.map((c) => c.control)[0] ?? ""))
+  const order = scene.layout.column.map((n) => nameOf(n as { control?: string; row?: { control: string }[]; scene?: boolean }))
+  assert.ok(order.indexOf("artwork") >= 0)
   assert.equal(order[order.length - 1], "legend")
   assert.ok(order.indexOf("legend") > order.indexOf("prev"))
-  assert.deepEqual((scene.layout.column[order.indexOf("columns")] as { padding?: number[] }).padding, [60, 0, 60, 0])
+  const layers = (scene as unknown as { layers: { id: string; y: number; text: { value: string; size: number; fontFamily: string } }[] }).layers
+  assert.equal(layers[0].id, "columns")
+  assert.ok(layers.every((l) => l.text.size === layers[0].text.size && l.text.fontFamily === layers[0].text.fontFamily), "one face and one size for titles and rows")
+  assert.deepEqual(layers.map((l) => l.text.value), ["columns", "row0", "row1", "row2", "row3", "row4"])
+  assert.ok(layers.slice(1).every((l, i) => l.y > (i ? layers[i].y : layers[0].y)), "the rows follow the titles, one under the next")
 })
 
 test("with no rows there are no titles and no legend to explain, though the controls stay", async () => {
@@ -173,5 +178,5 @@ test("with no rows there are no titles and no legend to explain, though the cont
   assert.match(scene.strings.hint, /No passes of 10° or more/)
   assert.equal(scene.strings.columns, "")
   assert.equal(scene.strings.legend, "")
-  assert.ok(scene.controls.some((c) => c.id === "columns") && scene.controls.some((c) => c.id === "legend"))
+  assert.ok(scene.controls.some((c) => c.id === "legend") && scene.controls.some((c) => c.id === "prev"))
 })

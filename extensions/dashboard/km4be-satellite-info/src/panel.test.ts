@@ -29,11 +29,11 @@ interface Scene {
 }
 
 /// A fresh extension per test, so its panes and favorites start empty.
-async function panel(options: { device?: { latitude: number; longitude: number } | null; offline?: () => boolean } = {}) {
+async function panel(options: { device?: { latitude: number; longitude: number } | null; offline?: () => boolean; settings?: Map<string, unknown> } = {}) {
   forgetAll()
   const id = ++panes
   const storage = new Map<string, unknown>()
-  const settings = new Map<string, unknown>()
+  const settings = options.settings ?? new Map<string, unknown>()
   const fetched: string[] = []
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
@@ -86,16 +86,17 @@ const cfg = { grid: "EL95vs" }
 const rowTexts = (strings: Record<string, string>) => [0, 1, 2, 3, 4].map((i) => strings[`row${i}`]).filter(Boolean)
 const control = (scene: Scene, id: string) => scene.controls.find((c) => c.id === id)!
 
-test("the panel is a scene of native controls, with its settings and a minute's tick", async () => {
+test("the panel is a scene of controls, with its settings and a minute's tick", async () => {
   const p = await panel()
   const d = await p.descriptor()
   assert.deepEqual(d.on, ["tick:60"])
-  assert.deepEqual(d.form.map((f) => f.key), ["minElevation", "grid", "statusHours", "utc", "density", "listSeconds", "countdown"])
+  assert.deepEqual(d.form.map((f) => f.key), ["minElevation", "grid", "statusHours", "utc", "density", "listSeconds", "skySize", "countdown"])
   const { kind, scene } = await p.render(cfg, t0)
   assert.equal(kind, "scene")
-  assert.equal(scene.layers.length, 0, "no artwork")
+  // The list is drawn as text in one monospaced face: the titles and the five rows, each with a hit area over it.
+  assert.deepEqual((scene.layers as { id: string }[]).map((l) => l.id), ["columns", "row0", "row1", "row2", "row3", "row4"])
   assert.ok(scene.controls.length <= 64)
-  assert.ok(scene.controls.every((c) => c.kind.startsWith("native")))
+  assert.deepEqual([...new Set(scene.controls.map((c) => c.kind))].sort(), ["button", "nativeButton", "nativeSegmented", "nativeSwitch", "nativeText"])
 })
 
 test("with no place the panel says so, and fetches nothing", async () => {
@@ -112,12 +113,13 @@ test("the device's location is used, rounded to its grid square", async () => {
   assert.match(scene.strings.header, /^FN31[a-x]{2} · /)
 })
 
-test("with nobody followed, every satellite is shown and the hint says how to follow one", async () => {
+test("a new install opens on All, and Favorites with nobody followed says how to follow one", async () => {
   const p = await panel()
   const { scene } = await p.render({ ...cfg, utc: true }, t0)
   assert.match(scene.strings.header, /^EL95vs · min 10° · 2 of 4 satellites tracked$/)
-  assert.match(scene.strings.hint, /No favorites yet/)
-  assert.equal(scene.strings.mode, "favorites")
+  assert.match(scene.strings.hint, /^Orbits from CelesTrak/)
+  assert.equal(scene.strings.mode, "all")
+  assert.deepEqual((scene.controls.find((c) => c.id === "mode") as unknown as { options: { value: string }[] }).options.map((o) => o.value), ["all", "favorites"], "All on the left")
   assert.equal(scene.values.utc, 1, "the setting starts the pane in UTC")
   const rows = rowTexts(scene.strings)
   assert.equal(rows.length, 5)
@@ -125,21 +127,27 @@ test("with nobody followed, every satellite is shown and the hint says how to fo
   assert.match(scene.strings.range, /^1–5 of \d+$/)
 })
 
-test("a star follows a satellite for good, and Favorites then shows only its passes", async () => {
+test("a star follows a satellite without changing the list, and Favorites then shows only its passes", async () => {
   const p = await panel()
   const first = await p.render(cfg, t0)
   const star = first.scene.controls.find((c) => c.id.startsWith("star:") && c.opacity !== 0)!
   const name = star.id.split(":")[1]
   assert.equal(star.icon, "star-outline")
+  const everyone = new Set(rowTexts(first.scene.strings).map((r) => r.split(/ +/)[0]))
+  assert.ok(everyone.size === 2, "both satellites appear")
 
+  // On All, so that the next satellite can be followed too: the list does not shrink to the one just followed.
   const patch = await p.event(cfg, t0, star.id, "star")
   assert.deepEqual(p.settings.get("favorites"), [name])
-  assert.ok(rowTexts(patch.strings).every((r) => r.startsWith(name)))
-  assert.match(patch.strings.hint, /^Orbits from CelesTrak/)
-
+  assert.equal(patch.strings.mode, "all")
+  assert.equal(new Set(rowTexts(patch.strings).map((r) => r.split(/ +/)[0])).size, 2, "everything is still there")
   const after = await p.render(cfg, t0)
-  assert.ok(after.scene.controls.filter((c) => c.id.startsWith(`star:${name}:`)).every((c) => c.icon === "star"))
-  assert.ok(rowTexts(after.scene.strings).every((r) => r.startsWith(name)))
+  assert.ok(after.scene.controls.filter((c) => c.id.startsWith(`star:${name}:`)).every((c) => c.icon === "star"), "its star is filled")
+
+  // Favorites shows only the followed satellite.
+  const only = await p.event(cfg, t0, "mode", "mode", { text: "favorites" })
+  assert.ok(rowTexts(only.strings!).every((r) => r.startsWith(name)))
+  assert.match(only.strings!.hint, /^Orbits from CelesTrak/)
 
   // All shows every satellite again, the followed one's star filled.
   await p.event(cfg, t0, "mode", "mode", { text: "all" })
@@ -216,4 +224,44 @@ test("feeds are cached, a failed one falls back to what is stored, and a tap doe
   offline = true
   const later = await p.render(cfg, t0 + 30 * 3_600_000)
   assert.match(later.scene.strings.header, /2 of 4 satellites tracked/, "stale orbits are better than none")
+})
+
+test("Favorites with nobody followed is an empty page that says how to fill it, not everything", async () => {
+  const p = await panel()
+  await p.render(cfg, t0)
+  const patch = await p.event(cfg, t0, "mode", "mode", { text: "favorites" })
+  assert.deepEqual(rowTexts(patch.strings!), [])
+  assert.match(patch.strings!.hint, /^Add some favorites to see them here: tap a star on the All page\.$/)
+  const scene = (await p.render(cfg, t0)).scene
+  assert.equal(scene.strings.range, "")
+  assert.equal(scene.strings.columns, "")
+  assert.equal(scene.strings.legend, "")
+  assert.ok(scene.controls.some((c) => c.id === "mode"), "the switch is still there to go back to All")
+
+  // The compact pane has a shorter line.
+  const tight = await p.render({ ...cfg, density: "compact" }, t0)
+  assert.match(tight.scene.strings.hint, /^Add favorites on All, with a star, to see them here\.$/)
+
+  await p.event(cfg, t0, "mode", "mode", { text: "all" })
+  assert.equal(rowTexts((await p.render(cfg, t0)).scene.strings).length, 5)
+})
+
+test("the view chosen is remembered for the next time the app is opened, and a new pane starts on it", async () => {
+  const p = await panel()
+  assert.equal((await p.render(cfg, t0)).scene.strings.mode, "all")
+  assert.equal(p.settings.get("mode"), undefined, "nothing is written for a default nobody chose")
+  await p.event(cfg, t0, "mode", "mode", { text: "favorites" })
+  assert.equal(p.settings.get("mode"), "favorites")
+  await p.event(cfg, t0, "mode", "mode", { text: "all" })
+  assert.equal(p.settings.get("mode"), "all")
+  await p.event(cfg, t0, "mode", "mode", { text: "favorites" })
+
+  // The app is opened again: nothing in memory, the settings kept. A pane of its own starts on Favorites.
+  const again = await panel({ settings: p.settings })
+  assert.equal((await again.render(cfg, t0)).scene.strings.mode, "favorites")
+  // Anything else that was stored is read as All.
+  for (const odd of ["everyone", 3, null]) {
+    const q = await panel({ settings: new Map([["mode", odd]]) })
+    assert.equal((await q.render(cfg, t0)).scene.strings.mode, "all", String(odd))
+  }
 })
