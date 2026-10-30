@@ -7,7 +7,7 @@
 // A panel scene (extension API 5) with two views. The list: the next passes, a
 // page at a time, with a star to follow a satellite, a Favorites / All switch
 // and a UTC switch. The detail, opened from a row: a pass's sky plot and times,
-// and its frequencies with Doppler. Favorites live on the device (favorites.ts);
+// and its frequencies with Doppler, and a Report page to tell AMSAT what was heard (report.ts). Favorites live on the device (favorites.ts);
 // the view, the page and the switches are per pane and start over on a restart.
 //
 // A scene's controls cannot change between a render and the event answered
@@ -15,10 +15,10 @@
 // which both views have, and the host's render after it draws the new view.
 
 import { defineExtension, host } from "@ham2k/extension-sdk"
-import type { HookContext, PanelContent, PanelDescriptor, PanelHook, PanelRenderArgs, PanelSceneEventResult } from "@ham2k/extension-sdk"
+import type { HookContext, PanelContent, PanelDescriptor, PanelHook, PanelRenderArgs, PanelSceneEvent, PanelSceneEventResult } from "@ham2k/extension-sdk"
 
 import manifest from "../manifest.json" with { type: "json" }
-import { loadCatalog, loadStatus } from "./data.ts"
+import { expireStatus, loadCatalog, loadStatus } from "./data.ts"
 import type { Satellite } from "./data.ts"
 import { buildDetail, themeOf } from "./detail.ts"
 import type { DetailModel, Tab } from "./detail.ts"
@@ -26,16 +26,46 @@ import { loadFavorites, setFavorite } from "./favorites.ts"
 import { findPlace } from "./location.ts"
 import type { Place } from "./location.ts"
 import { clock, minElevation, passCells, table, upcomingPasses } from "./passes.ts"
+import { cleanCall, cleanGrid, defaultCall, labelOf, loadSatNames, namesFor, problemWith, sendReport, summaryOf } from "./report.ts"
+import type { Report } from "./report.ts"
 import type { SatellitePass } from "./passes.ts"
 import { linksFor } from "./radio.ts"
 import { GLYPH, LEGEND, LEGEND_COMPACT, NO_GLYPH, statusFor, statusHours, statusLines } from "./status.ts"
-import type { StatusRow } from "./status.ts"
-import { PAGE_SIZE, buildDetailScene, buildScene, detailStrings, detailValues, isCompact, passOfOpen, satelliteOfStar, stringsOf, valuesOf } from "./scene.ts"
-import type { Mode, Model } from "./scene.ts"
+import type { Kind, StatusRow } from "./status.ts"
+import {
+  PAGE_SIZE,
+  buildDetailScene,
+  buildReportScene,
+  buildScene,
+  detailStrings,
+  detailValues,
+  isCompact,
+  passOfOpen,
+  reportStrings,
+  reportValues,
+  satelliteOfStar,
+  stringsOf,
+  valuesOf,
+} from "./scene.ts"
+import type { Mode, Model, ReportModel } from "./scene.ts"
 
 const REFRESH_SECONDS = 60
 
+/// What the operator has filled in on the Report page. The callsign and grid stay from one pass to the
+/// next; the rest starts over with each.
+interface Draft {
+  variant: string
+  kind: Kind | ""
+  call?: string
+  grid?: string
+  confirming: boolean
+  message: string
+}
+
+const freshDraft = (old?: Draft): Draft => ({ variant: "", kind: "", call: old?.call, grid: old?.grid, confirming: false, message: "" })
+
 interface PaneState {
+  draft: Draft
   view: "list" | "detail"
   mode: Mode
   page: number
@@ -49,7 +79,7 @@ const panes = new Map<string, PaneState>()
 const paneState = (args: PanelRenderArgs): PaneState => {
   const id = args.instanceId ?? args.panelKey
   let state = panes.get(id)
-  if (!state) panes.set(id, (state = { view: "list", mode: "favorites", page: 0, utc: args.config?.utc === true }))
+  if (!state) panes.set(id, (state = { draft: freshDraft(), view: "list", mode: "favorites", page: 0, utc: args.config?.utc === true }))
   return state
 }
 
@@ -153,7 +183,37 @@ function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, co
   }
 }
 
-type View = { kind: "list"; model: Model } | { kind: "detail"; model: DetailModel }
+type View = { kind: "list"; model: Model } | { kind: "detail"; model: DetailModel } | { kind: "report"; model: ReportModel }
+
+/// The Report page of a pass: what AMSAT's form offers for the satellite, and what the operator has filled in,
+/// starting from their own callsign and where they are.
+async function reportModel(args: PanelRenderArgs, ctx: HookContext, state: PaneState, satellite: Satellite, place: Place, title: string, compact: boolean, now: number): Promise<ReportModel> {
+  const names = await loadSatNames(ctx, now)
+  const variants = namesFor(names, satellite).map((n) => ({ label: labelOf(n), value: n }))
+  const draft = state.draft
+  const variant = variants.some((v) => v.value === draft.variant) ? draft.variant : (variants[0]?.value ?? "")
+  const call = draft.call ?? defaultCall(args.operation)
+  const grid = draft.grid ?? place.grid
+  const kind = draft.kind
+  const found = problemWith({ name: variant, kind, call, grid })
+  const problem = !names.length ? "Could not read AMSAT's list of satellites. Check the connection." : !variants.length ? "AMSAT's form has no entry for this satellite." : found
+  const report: Report | null = problem || !kind ? null : { name: variant, kind, at: now, call, grid }
+  return {
+    title,
+    utc: state.utc,
+    compact,
+    variants,
+    variant,
+    kind,
+    call,
+    grid,
+    summary: report ? summaryOf(report) : problem,
+    message: draft.message,
+    ready: report !== null,
+    confirming: draft.confirming && report !== null,
+    report,
+  }
+}
 
 /// What the pane shows now, given its state, the favorites and the clock.
 async function snapshot(args: PanelRenderArgs, ctx: HookContext): Promise<View> {
@@ -164,26 +224,69 @@ async function snapshot(args: PanelRenderArgs, ctx: HookContext): Promise<View> 
 
   if (state.view === "detail" && state.detail) {
     const { name, los, tab } = state.detail
+    const compact = isCompact(args.config, args.environment)
     // The pass is looked for by its satellite and its end, which hold steady between workings-out.
     const pass = ready.passes.find((p) => p.satellite.name === name && Math.abs(p.los - los) < 120_000)
-    if (pass) return { kind: "detail", model: buildDetail(
-          pass.satellite,
-          ready.place,
-          pass,
-          now,
-          state.utc,
-          tab,
-          themeOf(args.environment?.colors),
-          statusLines(statusFor(ready.reports, pass.satellite), ready.hours, now, state.utc),
-          { countdown: countdownOn(args.config), compact: isCompact(args.config, args.environment) },
-        ) }
+    if (pass) {
+      const detail = buildDetail(
+        pass.satellite,
+        ready.place,
+        pass,
+        now,
+        state.utc,
+        tab === "report" ? "radio" : tab,
+        themeOf(args.environment?.colors),
+        statusLines(statusFor(ready.reports, pass.satellite), ready.hours, now, state.utc),
+        { countdown: countdownOn(args.config), compact },
+      )
+      if (tab !== "report") return { kind: "detail", model: detail }
+      return { kind: "report", model: await reportModel(args, ctx, state, pass.satellite, ready.place, detail.title, compact, now) }
+    }
     state.view = "list" // it has ended, or the settings no longer list it
   }
   return { kind: "list", model: listModel(ready, state, now, args.config?.listSeconds === true, isCompact(args.config, args.environment)) }
 }
 
 const patchOf = (view: View): PanelSceneEventResult =>
-  view.kind === "list" ? { values: valuesOf(view.model), strings: stringsOf(view.model) } : { values: detailValues(view.model), strings: detailStrings(view.model) }
+  view.kind === "list"
+    ? { values: valuesOf(view.model), strings: stringsOf(view.model) }
+    : view.kind === "report"
+      ? { values: reportValues(view.model), strings: reportStrings(view.model) }
+      : { values: detailValues(view.model), strings: detailStrings(view.model) }
+
+const REPORT_ACTIONS = ["variant", "kind", "call", "grid", "send", "confirm", "cancel"]
+
+/// What the Report page's controls do. Changing anything on it takes back a request to send; sending asks first, so a
+/// stray tap does not put a report on AMSAT's public page.
+async function reportEvent(args: PanelRenderArgs & { event: PanelSceneEvent }, ctx: HookContext, state: PaneState): Promise<PanelSceneEventResult> {
+  const { event } = args
+  const draft = state.draft
+  const text = typeof event.text === "string" ? event.text : ""
+
+  if (event.action === "variant") draft.variant = text
+  if (event.action === "kind" && (text === "heard" || text === "telemetry" || text === "notHeard")) draft.kind = text
+  if (event.action === "call") draft.call = cleanCall(text)
+  if (event.action === "grid") draft.grid = cleanGrid(text)
+  if (event.action !== "send" && event.action !== "confirm") draft.confirming = false
+
+  const view = await snapshot(args, ctx)
+  if (view.kind !== "report") return patchOf(view)
+
+  if (event.action === "send") draft.confirming = view.model.ready
+  if (event.action === "confirm") {
+    const report = draft.confirming ? view.model.report : null
+    draft.confirming = false
+    if (report) {
+      const outcome = await sendReport(report)
+      draft.message = outcome.message
+      if (outcome.ok) {
+        draft.kind = ""
+        expireStatus()
+      }
+    }
+  }
+  return patchOf(await snapshot(args, ctx))
+}
 
 export const PassesPanel: PanelHook = {
   async getPanels(_args: Record<string, never>, _ctx: HookContext): Promise<PanelDescriptor[]> {
@@ -247,6 +350,7 @@ export const PassesPanel: PanelHook = {
     // The pass's Sky page is redrawn often while something on it moves: every second if the countdown is on, since
     // a countdown that is not fresh is wrong; every two seconds while the satellite is overhead, so it is seen to cross
     // the sky; and not at all otherwise, when the panel's own minute is enough.
+    if (view.kind === "report") return { kind: "scene", scene: buildReportScene(view.model), triggers: [] }
     const onSky = view.kind === "detail" && view.model.tab === "sky"
     const tick = onSky && countdownOn(args.config) ? "tick:1" : onSky && view.model.underWay ? "tick:2" : undefined
     return { kind: "scene", scene: view.kind === "list" ? buildScene(view.model) : buildDetailScene(view.model), triggers: tick ? [tick] : [] }
@@ -263,16 +367,18 @@ export const PassesPanel: PanelHook = {
       if (!pass) return stay()
       state.view = "detail"
       state.detail = { ...pass, tab: "sky" }
+      state.draft = freshDraft(state.draft)
       return stay()
     }
     if (event.action === "back") {
       state.view = "list"
       return stay()
     }
-    if (event.action === "tab" && state.detail && (event.text === "sky" || event.text === "radio")) {
+    if (event.action === "tab" && state.detail && (event.text === "sky" || event.text === "radio" || event.text === "report")) {
       state.detail.tab = event.text
       return stay()
     }
+    if (state.view === "detail" && state.detail?.tab === "report" && REPORT_ACTIONS.includes(event.action)) return reportEvent(args, ctx, state)
     if (event.action === "links" && state.detail) {
       const { satellites } = await loadCatalog(ctx, nowMillis(args))
       const satellite = satellites.find((s) => s.name === state.detail?.name)

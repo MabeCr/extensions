@@ -17,7 +17,7 @@ import { arrowSpot, compassLayers, DEFAULT_SKY_COLORS, DOT_RADIUS, liveSpot, REA
 import type { SkyLook } from "./sky.ts"
 import type { SkyColors } from "./sky.ts"
 
-export type Tab = "sky" | "radio"
+export type Tab = "sky" | "radio" | "report"
 
 export interface DetailModel {
   title: string

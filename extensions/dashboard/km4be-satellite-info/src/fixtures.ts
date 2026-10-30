@@ -35,3 +35,17 @@ export const SUMMARY = {
   ],
   meta: { hours: 24, count: 8 },
 }
+
+/// AMSAT's catalog of the satellites it takes reports for, as amsat.org/status/api/v1/catalog.php serves it (cut down).
+export const CATALOG = {
+  data: [
+    { id: 153, name: "AO-123_[FM]", display_name: "AO-123 [FM]", website: "https://www.amsat.org/live-fm-satellites/" },
+    { id: 2, name: "AO-7_[U/v]", display_name: "AO-7 [U/v]", website: "https://www.amsat.org/live-linear-satellites/" },
+    { id: 1, name: "AO-7_[V/a]", display_name: "AO-7 [V/a]", website: "https://www.amsat.org/live-linear-satellites/" },
+    { id: 3, name: "FO-29_[V/u]", display_name: "FO-29 [V/u]", website: "https://www.amsat.org/live-linear-satellites/" },
+    { id: 7, name: "ISS_[FM]", display_name: "ISS [FM]", website: "https://www.amsat.org/live-fm-satellites/" },
+    { id: 8, name: "ISS_[SSTV]", display_name: "ISS [SSTV]", website: "https://www.amsat.org/image-transmitting-satellites/" },
+    { id: 224, name: "ISS_[UHF_Digi]", display_name: "ISS [UHF Digi]", website: "https://www.amsat.org/live-digipeater-satellites/" },
+  ],
+  meta: { count: 7 },
+}
