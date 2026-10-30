@@ -17,7 +17,9 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
-import { adifForExport, contestScorer, defineExtension, exportFilename, startMillisOf } from "@ham2k/extension-sdk"
+import { NO_RESTRICTIONS, rulesNote } from "@ham2k/lib-contest-rules"
+import { stampedExchange } from "@ham2k/lib-contest-exchange"
+import { adifForExport, contestScorer, defineExtension, exportFilename, operationForQso, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
   ExportOption,
@@ -34,7 +36,7 @@ import type {
   TitleSuggestion,
 } from "@ham2k/extension-sdk"
 
-import { EVENTS, eventFor, type VhfEvent } from "./events.ts"
+import { EVENTS, eventFor, nextStartDate, type VhfEvent } from "./events.ts"
 import { gridPatternFor, guessedGrid, trimmedGrid } from "./exchange.ts"
 import { tFor } from "./i18n.ts"
 import { ARRLVHFScorer, contestTitle } from "./scorer.ts"
@@ -63,6 +65,7 @@ const ActivityHook = {
   /// of enabling an extension and hunting through a dropdown (§5.6).
   async suggest({ searchTerm }: SuggestArgs, _ctx: HookContext): Promise<ActivitySuggestion[]> {
     const term = (searchTerm ?? '').trim().toUpperCase()
+    const now = Date.now()
     return EVENTS
       .filter((event) => !term
         || event.key.includes(term)
@@ -71,7 +74,11 @@ const ActivityHook = {
       .map((event) => ({
         type: TYPE,
         ref: event.key,
-        name: event.name,
+        // The date is what an operator scanning the list chooses by — the
+        // same `name • date` line the QSO parties show. Only here: the ref
+        // names the event, not a year's running, so `decorateRef` has no
+        // date to give it.
+        name: `${event.name} • ${nextStartDate(event, now)}`,
         program: 'Contest',
         label: event.name,
         shortLabel: event.short,
@@ -104,6 +111,9 @@ const ActivityHook = {
         value: currentKey || options[0]?.value,
         options,
       },
+      // "All entrants, regardless of category, are permitted to use spotting
+      // assistance ... and to announce (self-spot) their availability" (OPRG.8.1).
+      rulesNote(ctx, NO_RESTRICTIONS),
     ]
 
     return [
@@ -162,24 +172,15 @@ const ActivityHook = {
     const event = eventOn(operation)
     if (!event) return null
 
-    const qsoRef = refOfType(qso, TYPE)
-    // PRESENCE, not truthiness — a present, empty `grid` is the operator
-    // deliberately clearing what they'd typed, and has to survive as that
-    // decision rather than be re-guessed on the next save (§5.4).
-    const decided = qsoRef !== undefined && 'grid' in qsoRef
-    const grid = decided
-      ? trimmedGrid(str(qsoRef.grid), event)
-      : guessedGrid((qso.their as Record<string, JSONValue>) ?? {}, event)
-
     // Our sent exchange is the operation's grid, the same on every QSO, so
     // it is not projected into `our.exchange` — the QSO row would repeat it
     // on every line; the exports read `operation.grid` directly.
-    if (!grid) return decided ? { their: { exchange: '' } } : null
-
-    return {
-      refs: [{ type: TYPE, grid }],
-      their: { exchange: grid },
-    }
+    return stampedExchange(TYPE, refOfType(qso, TYPE), {
+      grid: {
+        read: (value) => trimmedGrid(str(value), event),
+        guess: () => guessedGrid((qso.their as Record<string, JSONValue>) ?? {}, event),
+      },
+    }, ({ grid }) => grid)
   },
 }
 
@@ -311,11 +312,17 @@ const ExportHook = {
           ['GRID-LOCATOR', ourGrid],
         ],
         qsoParts: (qso) => {
+          // A rover's grid changes at each break, so a row states the grid THIS
+          // contact was made from; the GRID-LOCATOR header keeps the base one.
+          const rowGrid = trimmedGrid(
+            str(((qso.our as Record<string, JSONValue>) ?? {}).grid) || str(operationForQso(operation, qso, args.segments).grid),
+            event,
+          )
           const theirGrid = trimmedGrid(str(refOfType(qso, TYPE)?.grid), event)
           return [
             ourCall || '-',
             reportFor(qso, 'our'),
-            ourGrid || '-',
+            rowGrid || '-',
             str(((qso.their as Record<string, JSONValue>) ?? {}).call) || '-',
             reportFor(qso, 'their'),
             theirGrid || '-',

@@ -16,6 +16,9 @@
 // read "Jan 144 FMAC" in app-polo (a copy-paste leftover from the January
 // entry) — fixed here to "Mar 144 FMAC".
 
+import type { JSONValue } from "@ham2k/extension-sdk"
+import { NO_RESTRICTIONS, type ContestRules } from "@ham2k/lib-contest-rules"
+
 export type RsgbBonusKind = 'newGrid' | 'newDistrict' | 'newDXCC'
 
 export interface RsgbVhfEvent {
@@ -162,6 +165,16 @@ const EVENTS_BY_KEY: Record<string, RsgbVhfEvent> = Object.fromEntries(EVENTS.ma
 
 export function eventFor(key: string | undefined | null): RsgbVhfEvent | undefined {
   return key ? EVENTS_BY_KEY[key] : undefined
+}
+
+/// What the RSGB's General Rules allow in the event [key] names. Spotting
+/// networks are "permitted" and entrants "may spot their own station" (4h) —
+/// except in the 144 and 432MHz Low Power contests and every Backpackers, where
+/// "self-spotting is not allowed" (4h) and ON4KST and other live chat are not
+/// allowed "active or passive" (4i).
+export function contestRules(key: JSONValue | undefined): ContestRules {
+  const restricted = typeof key === 'string' && (key.startsWith('RSGB-BACKPACKERS-') || key === 'RSGB-144-LP' || key === 'RSGB-432-LP')
+  return restricted ? { assistance: false, selfSpotting: false } : NO_RESTRICTIONS
 }
 
 export function exchangeShape(event: RsgbVhfEvent): ('number' | 'grid6' | 'district')[] {

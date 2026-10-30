@@ -41,10 +41,14 @@ export interface QsoPartyIdentity {
   /// several. Absent for the Canadian parties, which the tracker does not
   /// carry.
   trackerCode?: string
-  /// The page this party's spots sit on at qsopartyhub.com, without the
-  /// `-table.php` / `-spots.php` suffix. Several parties on one weekend share
-  /// one page (`in7qpne_de`).
-  hubPage: string
+  /// The page that lists this party's spots at qsopartyhub.com, without the
+  /// `-table.php` suffix. Several parties on one weekend share one page
+  /// (`in7qpne_de`).
+  hubTablePage: string
+  /// The page that takes a new spot for this party at qsopartyhub.com, without
+  /// the `-spots.php` suffix. Usually the table's name, but not always: the
+  /// hub takes California's spots on `cqp` and lists them on `caqp`.
+  hubSpotPage: string
   /// The party's operating periods, UTC millis — what decides whether its
   /// feeds are worth reading right now.
   periods: QsoPartyPeriod[]

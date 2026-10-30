@@ -82,6 +82,22 @@ describe("what the log checker reads", () => {
     assert.deepEqual(await adif(activation({ reference: "" }), qsoHunting(["AB-9"])), [{ SIG: "COTA", SIG_INFO: "AB-9" }])
   })
 
+  test("the full ADIF's one record names the first of their references", async () => {
+    // The full export asks only for plain fields, one record per contact. A
+    // hook without them is missing from the operator's backup altogether.
+    const fields = (await extension.runHook("adifFields", "fieldsForOneQSO", { qso: qsoHunting(["AB-9", "CD-7"]), operation: activation() })) as {
+      name: string
+      value: string
+    }[]
+    assert.deepEqual(Object.fromEntries(fields.map((field) => [field.name, field.value])), {
+      MY_SIG: "COTA",
+      MY_SIG_INFO: "XY-1234",
+      SIG: "COTA",
+      SIG_INFO: "AB-9",
+    })
+    assert.deepEqual(await extension.runHook("adifFields", "fieldsForOneQSO", { qso: { refs: [] }, operation: { refs: [] } }), [])
+  })
+
   test("no activation means this extension claims nothing", async () => {
     // Enabling the extension must not write custom fields into an operation
     // that is not a custom activation.

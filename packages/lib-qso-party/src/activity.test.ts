@@ -390,6 +390,33 @@ test('with nothing from this operation, an earlier running of the event is asked
   assert.equal(asked[1].excludeOperation, 'op')
 })
 
+test('an earlier running logged before the parties were split is asked by its legacy claim', async () => {
+  // Every running before this year's sits under `{type: 'qp', ref: 'NY'}` on
+  // the operation and a bare `{type: 'qp', location}` on each contact — asked
+  // by the event's own type alone, last year's log is invisible, and read
+  // without its operation's claim, its bare ref names no party.
+  const LEGACY_NY: QsoPartyParams = { ...NY, legacyRefs: [{ type: 'qp', prefix: 'ny' }] }
+  const asked: Record<string, unknown>[] = []
+  const lastYear = [{ their: { call: 'K2ABC' }, band: '40m', refs: [{ type: 'qp', location: 'ALB' }] }]
+  const history: HookContext = {
+    online: false,
+    getHistoryForCall: (async (_call: string, options: Record<string, unknown>) => {
+      asked.push(options)
+      return options.refType === 'qp' && options.refPrefix === 'ny' ? lastYear : []
+    }) as never,
+  }
+  const call = { their: { call: 'K2ABC', entityPrefix: 'K', guess: { state: 'NY' } } }
+  const { input } = await exchangeInput(LEGACY_NY, call, history)
+  assert.equal(input.suggestedValue, 'ALB')
+  assert.equal(asked.at(-1)!.excludeOperation, 'op', 'never this operation, which was asked first')
+
+  // Still only while it holds: a county another state's party sent is no New
+  // York exchange, whatever log a host that ignores the filters answers from.
+  const elsewhere = [{ their: { call: 'K2ABC' }, band: '40m', refs: [{ type: 'qp', location: 'TRAV' }] }]
+  const moved: HookContext = { online: false, getHistoryForCall: (async () => elsewhere) as never }
+  assert.equal((await exchangeInput(LEGACY_NY, call, moved)).input.suggestedValue, undefined)
+})
+
 test("a Hawaiian in the Hawaii QSO Party is hinted their state, not handed it", async () => {
   // KH6 is not K, so a Hawaiian's field is freeform with no list to reject
   // anything — and their fallback location is `HI`. Prefilled, `HI` would
@@ -443,6 +470,68 @@ test('the exchange is mirrored into the field the rest of the app reads', async 
   }, ctx)
   assert.deepEqual(patch!.their, { exchange: '34 BUTT' })
   assert.deepEqual(patch!.our, { exchange: '12 ALAM' })
+})
+
+/// An operation logged when the parties were one extension: the party's code
+/// on the operation's `qp` ref, and each contact's exchange on a bare one.
+const LEGACY_CA: QsoPartyParams = { ...CA, legacyRefs: [{ type: 'qp', prefix: 'ca' }] }
+const legacyOperation = (location: string): Record<string, JSONValue> =>
+  ({ uuid: 'op', stationCall: 'N0DEV', refs: [{ type: 'qp', ref: 'CA', location }] })
+
+test('on a log kept under the old combined extension, the exchange is typed into the old shape', async () => {
+  // The core admits an exchange field only for a ref type the operation
+  // carries. Published under the party's own type, the fields never appear on
+  // such a log; and a contact typed under it would not match the hundreds
+  // before it, nor continue their serials.
+  const controls = await qsoPartyActivity(LEGACY_CA).loggingControls!({ operation: legacyOperation('ALAM') }, ctx)
+  assert.ok(controls.length > 0)
+  for (const control of controls) {
+    assert.equal((control.input as { refType: string }).refType, 'qp', control.key)
+    // The keys are the operator's stored field order and the serial's name.
+    assert.ok(control.key.startsWith(`${CA.refType}/`), control.key)
+  }
+})
+
+test('on a log kept under the old combined extension, the exchange is mirrored from the bare ref', async () => {
+  const patch = await qsoPartyActivity(LEGACY_CA).processQsoBeforeSave!({
+    qso: { refs: [{ type: 'qp', location: 'butt', theirSerial: '34', ourSerial: 12 }] },
+    operation: legacyOperation('ALAM'),
+  }, ctx)
+  assert.deepEqual(patch!.their, { exchange: '34 BUTT' })
+  assert.deepEqual(patch!.our, { exchange: '12 ALAM' })
+})
+
+test('a contact app-polo logged keeps its serials when it is saved again here', async () => {
+  // app-polo files the serials as `ourNumber`/`theirNumber`. Read under this
+  // engine's names alone, an edit made here re-projects `34 BUTT` as `BUTT`,
+  // and the log loses the number on every device it syncs to.
+  const patch = await qsoPartyActivity(LEGACY_CA).processQsoBeforeSave!({
+    qso: { refs: [{ type: 'qp', location: 'BUTT', theirNumber: '34', ourNumber: '12' }] },
+    operation: legacyOperation('ALAM'),
+  }, ctx)
+  assert.deepEqual(patch!.their, { exchange: '34 BUTT' })
+  assert.deepEqual(patch!.our, { exchange: '12 ALAM' })
+})
+
+test('on a log kept under the old combined extension, what a station sent earlier in it is offered', async () => {
+  // This operation's contacts are asked for under the type they carry, and
+  // read as bare refs. Asked under the party's own type, or read by code, the
+  // county a station sent on 40m is not offered when they turn up on 20m.
+  const asked: Record<string, unknown>[] = []
+  const history: HookContext = {
+    online: false,
+    getHistoryForCall: (async (_call: string, options: Record<string, unknown>) => {
+      asked.push(options)
+      return options.operation ? [{ their: { call: 'W6ABC' }, band: '40m', refs: [{ type: 'qp', location: 'BUTT' }] }] : []
+    }) as never,
+  }
+  const controls = await qsoPartyActivity(LEGACY_CA).loggingControls!(
+    { operation: legacyOperation('ALAM'), qso: { their: { call: 'W6ABC', entityPrefix: 'K' } } },
+    history,
+  )
+  const input = controls.find((c) => c.key === `${CA.refType}/location`)!.input as OptionsInputDescriptor
+  assert.equal(asked[0].refType, 'qp')
+  assert.equal(input.suggestedValue, 'BUTT')
 })
 
 test('a contact with nothing of ours on it is left alone', async () => {
@@ -536,9 +625,9 @@ test('our location suggests counties, then everything that may only stand alone'
   assert.equal(byCode.NY, undefined)
   assert.deepEqual(field.multiValue, { separator: '/' })
   assert.equal(field.uppercase, true)
-  // The scorer reads `ALB,SCH` as a line; without the rewrite the field would
-  // flag as unknown what the score counts.
-  assert.deepEqual(field.transforms, [{ pattern: ',', replacement: '/', flags: 'g' }])
+  // The scorer reads `ALB,SCH`, `ALB+SCH` and `ALB.SCH` as lines; without the
+  // rewrite the field would flag as unknown what the score counts.
+  assert.deepEqual(field.transforms, [{ pattern: '[,+.]', replacement: '/', flags: 'g' }])
 })
 
 test('a party without county lines takes one location, and no separator', async () => {
@@ -566,4 +655,42 @@ test('a station outside the US and Canada starts out as DX', async () => {
   } finally {
     registerEntityLookup(() => undefined)
   }
+})
+
+test("the ref states the party's rules: its own on self-spotting, and no assistance for a single operator where an assisted class exists", async () => {
+  const decorate = async (params: QsoPartyParams, ref: Record<string, JSONValue>) =>
+    (await qsoPartyRefHandler(params).decorateRef!({ ref: { type: params.refType, ...ref } }, ctx)) as Record<string, JSONValue>
+
+  // California publishes SINGLE-OP-ASSISTED, so plain SINGLE-OP is the claim
+  // of operating without spots.
+  const single = await decorate(CA, { operator: 'SINGLE-OP' })
+  assert.equal(single.assistance, false)
+  assert.equal(single.selfSpotting, false)
+  // Changing class drops the `false` the old one left on the ref.
+  assert.equal('assistance' in (await decorate(CA, { operator: 'SINGLE-OP-ASSISTED', assistance: false })), false)
+
+  // New York has no assisted class, so its single operator may use spots, and
+  // its rules leave self-spotting to the operator.
+  const ny = await decorate(NY, { operator: 'SINGLE-OP' })
+  assert.equal('assistance' in ny || 'selfSpotting' in ny, false)
+
+  // A suggestion is stored without being decorated, so it says what holds
+  // for every entry.
+  const [suggestion] = await qsoPartyActivity(CA).suggest!({ operation: {}, searchTerm: 'CQP' }, ctx)
+  assert.equal((suggestion as Record<string, JSONValue>).selfSpotting, false)
+  assert.equal('assistance' in suggestion, false)
+})
+
+test("the setup form's rules line follows the operator class, ahead of the entry questions", async () => {
+  const form = await setupForm(CA)
+  const notes = form.elements.filter((el) => el.type === 'markdown' && (el as { visibleWhen?: unknown }).visibleWhen) as unknown as
+    { text: string; visibleWhen: { equals: JSONValue[] } }[]
+  const shownFor = (operator: string) => notes.filter((el) => el.visibleWhen.equals.includes(operator)).map((el) => el.text)
+  assert.deepEqual(shownFor('SINGLE-OP'), ['🔴 Assistance: OFF, 🔴 Self-spotting: OFF'])
+  assert.deepEqual(shownFor('MULTI-ONE'), ['🟢 Assistance: ON, 🔴 Self-spotting: OFF'])
+  assert.ok(form.elements.indexOf(notes[0] as never) < form.elements.indexOf(fieldOf(form, 'operator')))
+
+  // A party whose rules restrict nothing still shows the line, unconditionally.
+  const ny = await setupForm(NY)
+  assert.ok(ny.elements.some((el) => el.type === 'markdown' && el.text === '🟢 Assistance: ON, 🟢 Self-spotting: ON'))
 })

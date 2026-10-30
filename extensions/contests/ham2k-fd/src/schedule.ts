@@ -39,6 +39,15 @@ export function endOfFieldDay(year: number): number {
   return startOfFieldDay(year) - 18 * 60 * 60 * 1000 + DAY + 21 * 60 * 60 * 1000
 }
 
+/// `2026-06-27` — the UTC day [year]'s running opens. Written out rather than
+/// localized, the same form the QSO parties use: these are the sponsor's UTC
+/// dates, and an operator checks them against the rules.
+export function fieldDayDate(year: number): string {
+  const at = new Date(startOfFieldDay(year))
+  const pad = (value: number) => `${value}`.padStart(2, '0')
+  return `${at.getUTCFullYear()}-${pad(at.getUTCMonth() + 1)}-${pad(at.getUTCDate())}`
+}
+
 /// The YEAR whose running is the next one — the single source for "which
 /// running is this?".
 ///

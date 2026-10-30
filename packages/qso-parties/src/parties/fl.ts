@@ -29,6 +29,7 @@ export const PARTY: QsoPartyParams = {
   stateCountsForInState: true,
   dxLocationIsPrefix: true,
   multsPerMode: true,
+  selfSpotting: false,
   pointsByMode: { PHONE: 1, CW: 2 },
   powerMultipliers: { QRP: 3, LOW: 2, HIGH: 1 },
   entryClasses: {

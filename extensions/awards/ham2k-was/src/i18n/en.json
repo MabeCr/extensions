@@ -1,0 +1,5 @@
+{
+  "oneState": "1 State",
+  "manyStates": "{{formatted}} States",
+  "confirmed": "{{formatted}} confirmed"
+}

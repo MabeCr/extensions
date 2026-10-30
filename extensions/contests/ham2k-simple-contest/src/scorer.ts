@@ -12,7 +12,7 @@
 // don't share a rule vocabulary, so only notices, alerts and points cross the
 // boundary.
 
-import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
+import { contestArithmetic, contestSummary, modesMatchForDupe } from "@ham2k/extension-sdk"
 import type { ContestScorer, HookContext, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
 
 import { tFor } from "./i18n.ts"
@@ -55,7 +55,13 @@ export const SimpleContestScorer: ContestScorer<SimpleContestScoresheet> = {
 
     const key = bandModeKey(qso)
     const seen = base.worked[call] ?? []
-    const isDupe = seen.includes(key)
+    const band = str(qso.band)
+    const mode = str(qso.mode)
+    // Modes compared as the host's core scorer compares them: `USB` and `SSB`
+    // are one emission. This verdict replaces core's (see `dupe: false`
+    // below), so a coarser rule here would let a repeat through as new.
+    const sameMode = (combo: string) => modesMatchForDupe(combo.slice(combo.indexOf('|') + 1), mode)
+    const isDupe = seen.some((combo) => combo.startsWith(`${band}|`) && sameMode(combo))
 
     let score: QsoScoreVerdict
     if (isDupe) {
@@ -65,12 +71,13 @@ export const SimpleContestScorer: ContestScorer<SimpleContestScoresheet> = {
       // same notices app-polo raises.
       const notices: string[] = []
       if (seen.length > 0) {
-        const band = str(qso.band)
-        const mode = str(qso.mode)
-        if (!seen.some((combo) => combo.endsWith(`|${mode}`))) notices.push('newMode')
+        if (!seen.some(sameMode)) notices.push('newMode')
         if (!seen.some((combo) => combo.startsWith(`${band}|`))) notices.push('newBand')
       }
-      score = notices.length > 0 ? { value: 1, notices } : { value: 1 }
+      // `dupe: false` says this contact passed the contest's own duplicate
+      // test, which is what makes the host's core scorer step aside rather
+      // than mark it a second time by its own rule.
+      score = notices.length > 0 ? { value: 1, dupe: false, notices } : { value: 1, dupe: false }
     }
 
     const points = score.value

@@ -1,0 +1,11 @@
+{
+  "entitiesTotals": "DXCC: {{current}} Current, {{all}} All",
+  "challengeTotals": "Challenge: {{current}} Current, {{all}} All",
+  "confirmedTotals": "Confirmed: {{current}} Current, {{all}} All",
+  "noticeNewRef": "DXCC ATNO",
+  "noticeNewMode": "DXCC in {{mode}}",
+  "noticeNewBand": "DXCC in {{band}}",
+  "modeCW": "CW",
+  "modePHONE": "Phone",
+  "modeDIGITAL": "Digital"
+}

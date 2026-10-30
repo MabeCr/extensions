@@ -67,7 +67,18 @@ test('a rover working the same call from a NEW our-grid is not a dupe', () => {
     { scoresheet: sheet, qso: qso('G4ABC', '2m', 'IO91ab'), operation: { grid: 'IO80xx' }, ref, isNewDay: false },
     ctx,
   )
-  assert.equal(second.score.dupe, undefined, 'a different our-grid makes this a fresh contact, not a dupe')
+  assert.equal(second.score.dupe, false, 'a different our-grid makes this a fresh contact, not a dupe')
+  assert.equal(second.score.notices, undefined, 'the same band is not a new one')
+})
+
+// `dupe: false` makes the host's core scorer step aside, and with it goes the
+// "New Band" it would raise for a station worked before on another band — so
+// the contest raises it itself.
+test('a station worked before on another band is a new band', () => {
+  const ref = { type: 'rsgb-vhf-tests', ref: 'RSGB-144-432-MARCH' }
+  const { scores } = run([qso('G4ABC', '2m', 'IO91ab'), qso('G4ABC', '70cm', 'IO91ab'), qso('G4XYZ', '70cm', 'IO91ab')], { grid: 'IO91wo' }, ref)
+  assert.deepEqual(scores[1].notices, ['newBand'])
+  assert.equal(scores[2].notices, undefined, 'a station never worked is not a new band')
 })
 
 test('same call, same band, same our-grid, same their-grid twice is a dupe', () => {

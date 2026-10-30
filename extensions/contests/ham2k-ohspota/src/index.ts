@@ -17,7 +17,8 @@
 // scorer.ts, and what each side's park is, in parks.ts.
 
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
-import { contestScorer, defineExtension, exportFilename, exportTypeDefinition, startMillisOf } from "@ham2k/extension-sdk"
+import { stampedExchange } from "@ham2k/lib-contest-exchange"
+import { contestScorer, defineExtension, exportFilename, exportTypeDefinition, operationForQso, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
   ExportOption,
@@ -40,7 +41,7 @@ import {
   PARKS, PARK_BY_ABBREVIATION, POWER_CLASSES, START_MILLIS, TYPE, URL,
 } from "./event.ts"
 import { tFor } from "./i18n.ts"
-import { configuredOurPark, eventRefIn, ourPark, theirExchange, theirPark, theirParkWasDecided } from "./parks.ts"
+import { configuredOurPark, eventRefIn, exchangeRefIn, guessedPark, ourPark, theirExchange, theirPark } from "./parks.ts"
 import { OhspotaScorer } from "./scorer.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
@@ -233,25 +234,13 @@ const ActivityHook = {
   ): Promise<Record<string, JSONValue> | null> {
     if (!eventRefIn(operation)) return null
 
-    // PRESENCE, not truthiness — `theirParkWasDecided`/`theirExchange` own that
-    // rule, so the save path, the ADIF and the Cabrillo cannot disagree about
-    // whether a blank field was a decision.
-    const decided = theirParkWasDecided(qso)
-    const park = theirExchange(qso)
-
-    if (!park) {
-      // A deliberate blank still projects, so clearing an exchange on an edit
-      // clears the QSO row's column too.
-      return decided ? { their: { exchange: '' } } : null
-    }
-
-    // Under OUR type, whichever shape the operation's own ref has: a patch ref
-    // of a type this extension does not publish is dropped by the app, and the
-    // readers look for this one first.
-    return {
-      refs: [{ type: TYPE, park }],
-      their: { exchange: park },
-    }
+    // Read from whichever shape the contact's ref has, and stamped under OUR
+    // type: a patch ref of a type this extension does not publish is dropped
+    // by the app, and the readers look for this one first. Read as typed, not
+    // validated — `theirExchange` and the exports show it the same way.
+    return stampedExchange(TYPE, exchangeRefIn(qso), {
+      park: { read: (value) => str(value).toUpperCase(), guess: () => guessedPark(qso) },
+    }, ({ park }) => park)
   },
 }
 
@@ -391,10 +380,10 @@ const ExportHook = {
         ['GRID-LOCATOR', str(operation.grid)],
       ],
       // The sponsor's own layout: no signal reports, and a location column each
-      // side.
+      // side. Ours is the park THIS contact was made from, which a segment moves.
       qsoParts: (qso) => [
         (ourCall || '-').padEnd(18, ' '),
-        ours.padEnd(12, ' '),
+        (ourPark(operationForQso(operation, qso, args.segments)) || NOT_IN_A_PARK).padEnd(12, ' '),
         (str(((qso.their as Record<string, JSONValue>) ?? {}).call) || '-').padEnd(17, ' '),
         theirCabrilloLocation(qso).padEnd(12, ' '),
       ],

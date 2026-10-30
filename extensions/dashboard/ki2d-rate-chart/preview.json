@@ -1,0 +1,10 @@
+{
+  "defaults": { "contacts": { "minutes": 150, "rate": 60 } },
+  "cases": [
+    { "config": { "theme": "teal", "goal": 90 } },
+    { "config": { "theme": "teal", "perOperator": true }, "contacts": { "minutes": 150, "rate": 80, "operators": ["KI2D", "N2ABC"] } },
+    { "config": { "theme": "dark", "goal": 90 } },
+    { "config": { "theme": "light" }, "app": "dark" },
+    { "label": "no contacts", "contacts": { "minutes": 0, "rate": 1 } }
+  ]
+}

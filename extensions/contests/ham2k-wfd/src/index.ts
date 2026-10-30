@@ -3,8 +3,9 @@
 //
 // Winter Field Day — the exchange, the setup, and the one export.
 //
-// ADIF alone, unlike `fd`: the organizers ask entrants not to submit
-// Cabrillo, so there is no Cabrillo option to offer.
+// ADIF alone, unlike `fd`: the organizers' upload form asks for every entry
+// detail itself and ignores the Cabrillo header, so a log needs only the
+// QSOs, and the ADIF export already carries the class and section.
 //
 // A near-duplicate of `fd` by choice, not by accident: see `scorer.ts`.
 //
@@ -35,9 +36,10 @@ import type {
   TitleSuggestion,
 } from "@ham2k/extension-sdk"
 
+import { rulesNote, withRules, type ContestRules } from "@ham2k/lib-contest-rules"
 import { ALL_SECTIONS, CALL_AREA_FOR_SECTION, PREFIX_TO_LOCATION } from "./sections.ts"
 import { CLASS_REGEX, OBJECTIVE_KEYS, TYPE, WFDScorer, contestTitle, refOfType } from "./scorer.ts"
-import { nextRunningYear, relevanceFor } from "./schedule.ts"
+import { nextRunningYear, relevanceFor, winterFieldDayDate } from "./schedule.ts"
 import { tFor } from "./i18n.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
@@ -127,6 +129,12 @@ async function ourSectionDefault(): Promise<string> {
   return lastKnownSection
 }
 
+/// What the rules allow every entry. Spotting clusters, the RBN, APRS and
+/// Winlink "may be used as long as the originating transmission is sent out
+/// via RF", but "QSOs may be solicited during the event only over RF" — and a
+/// self-spot from the app goes out over the internet.
+const RULES: ContestRules = { assistance: true, selfSpotting: false }
+
 const ActivityHook = {
   async operationControls(
     _args: { operation: Record<string, JSONValue> },
@@ -183,6 +191,7 @@ const ActivityHook = {
                 uppercase: true,
                 value: profileSection,
               },
+              rulesNote(ctx, RULES),
               { type: 'header', title: t('objectivesHeader') },
               // Each objective adds its OWN weight, 1 to 6 — Winter Field Day
               // has no power multiplier and no separate bonus points, so these
@@ -225,7 +234,7 @@ const ActivityHook = {
     const year = nextRunningYear(now)
 
     return [
-      {
+      withRules({
         type: TYPE,
         // The YEAR of the running. The picker's duplicate guard compares
         // type+ref, and the setup form writes the same key, so both add-paths
@@ -241,14 +250,16 @@ const ActivityHook = {
         // activity puts its reference's real name here (a park's name); an
         // event has no such name, so it describes itself instead.
         program: 'Contest',
-        name: t('activityDescription'),
+        // The day it opens, so the row says WHEN as well as what — the same
+        // `description • date` line the QSO parties show.
+        name: `${t('activityDescription')} • ${winterFieldDayDate(year)}`,
         label: `${t('activityLabel')} ${year}`,
         // Must match what `decorateRef` composes: the same running added by
         // tapping this suggestion and by the setup form has to read the same
         // on every surface.
         shortLabel: `WFD ${year}`,
         relevance: relevanceFor(now),
-      },
+      }, RULES),
     ]
   },
 
@@ -343,7 +354,7 @@ const RefHandler = {
     // `name` for the row's second line, which is where the exchange belongs.
     // A `shortLabel` of "3A ENY" leaves those surfaces with no clue which
     // contest they are showing.
-    return {
+    return withRules({
       ...ref,
       // Every other contest sets this here, and the QSO list needs it: it is
       // the signal that survives the extension being switched off, when there
@@ -353,7 +364,7 @@ const RefHandler = {
       name: own || t('notConfigured'),
       label: [t('activityLabel'), year].filter((part) => part).join(' '),
       shortLabel: ['WFD', year].filter((part) => part).join(' '),
-    }
+    }, RULES)
   },
 
   async suggestOperationTitle({ ref }: { ref: Ref }, _ctx: HookContext): Promise<TitleSuggestion | null> {
@@ -405,8 +416,8 @@ const ExportHook = {
   },
 
   async generateExport(args: ExportRequest, _ctx: HookContext): Promise<ExportResult> {
-    // ADIF only: Winter Field Day asks entrants NOT to submit Cabrillo, so
-    // offering it by default would hand over a file the organizers reject.
+    // ADIF only: Winter Field Day takes a Cabrillo file too, but reads only
+    // its QSO lines, which the ADIF export carries in full.
     if (args.exportType !== `${TYPE}-adif`) {
       return { filename: '', mimeType: '', content: '' }
     }

@@ -105,19 +105,27 @@ test("five different callsigns activate a site", async () => {
   assert.equal(result.operationSummary.activation.activated, true)
 })
 
-test("four callsigns do not, however many times each is worked on other bands and modes", async () => {
-  // HOTA counts callsigns, not band/mode slots: the fifth contact here is a
-  // station already in the log.
+test("a station worked again on another band or mode is no duplicate, but no new callsign either", async () => {
+  // Contacts are unique per band, mode and day, as in POTA; the activation
+  // still counts callsigns: the last two here are a station already in it.
   const result = await score([
     contact(0, "W1AW"),
     contact(1, "SP9ABC"),
     contact(2, "G4ABC"),
     contact(3, "DL1ABC"),
-    contact(4, "W1AW", { band: "40m", mode: "CW" }),
+    contact(4, "W1AW", { band: "40m" }),
+    contact(5, "W1AW", { mode: "CW" }),
   ])
-  assert.equal(result.qsoScores.q4.dupe, true)
+  assert.notEqual(result.qsoScores.q4.dupe, true)
+  assert.notEqual(result.qsoScores.q5.dupe, true)
   assert.equal(result.operationSummary.activation.activated, false)
   assert.equal(result.operationSummary.activation.summary, "4/5")
+})
+
+test("a station worked again on the same band and mode is a duplicate", async () => {
+  const result = await score([contact(0, "W1AW"), contact(1, "W1AW")])
+  assert.equal(result.qsoScores.q1.dupe, true)
+  assert.equal(result.operationSummary.activation.summary, "1/5")
 })
 
 test("the same station at a second site is a new hunted site, but not a second callsign", async () => {

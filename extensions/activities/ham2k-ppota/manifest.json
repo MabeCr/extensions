@@ -1,0 +1,61 @@
+{
+  "key": "ham2k-ppota",
+  "name": "PPOTA: Pueblos y Parajes On The Air (Beta)",
+  "shortName": "PPOTA",
+  "version": "0.1.4",
+  "description": "Activate and chase villages, hamlets and small rural localities — Argentina, Spain, Portugal, Uruguay, Chile and more; spots on ppota.app",
+  "category": "activity",
+  "icon": "home-group",
+  "accentColor": "#8B2F2F",
+  "api": 1,
+  "keywords": [
+    "villages",
+    "hamlets",
+    "towns",
+    "rural",
+    "pueblos",
+    "parajes",
+    "vota",
+    "activation",
+    "hunting",
+    "ppota"
+  ],
+  "hooks": [
+    "activity",
+    "adifFields",
+    "adifImport",
+    "dataFile",
+    "export",
+    "ref:ppota",
+    "ref:ppotaActivation",
+    "scoring",
+    "spots"
+  ],
+  "domains": [
+    "ppota.app"
+  ],
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  },
+  "translations": {
+    "es": {
+      "name": "PPOTA: Pueblos y Parajes On The Air (Beta)",
+      "description": "Activa y caza pueblos, parajes y pequeñas localidades rurales — Argentina, España, Portugal, Uruguay, Chile y más; spots en ppota.app",
+      "keywords": [
+        "pueblos",
+        "parajes",
+        "localidades",
+        "rural",
+        "activación",
+        "cacería"
+      ]
+    }
+  }
+}

@@ -28,14 +28,28 @@ test("every party has one identity, and it agrees with the party's own module", 
   }
 })
 
-test("the feed names come from the fixtures: the sponsor's APRS token and hub page where stated, the party's own otherwise", () => {
+/// The hub's own names where they are not the party's short, as its index at
+/// qsopartyhub.com links them: [the page listing spots, the page taking one].
+const HUB_NAMES: Record<string, [string, string]> = {
+  CA: ["caqp", "cqp"],
+  FL: ["flqp", "fqp"],
+  HI: ["hiqp", "hqp"],
+  MD: ["mdcqp", "mdcqp"],
+  NS: ["nsqp", "nsqp"],
+  WA: ["waqp", "wasr"],
+}
+
+test("the feed names come from the fixtures: the sponsor's APRS token and hub page where stated, the hub's own names where it differs, the party's own otherwise", () => {
   for (const file of readdirSync(FIXTURES_DIR).filter((name) => name.endsWith(".json"))) {
     const raw = JSON.parse(readFileSync(join(FIXTURES_DIR, file), "utf8"))
     const key = String(raw.key).toUpperCase()
     const identity = PARTY_IDENTITIES.find((i) => i.legacyPrefix === key.toLowerCase())!
     assert.ok(identity, key)
     assert.equal(identity.aprsShort, raw.aprsShort ?? identity.short, `${key} aprsShort`)
-    assert.equal(identity.hubPage, raw.qsoPartyHubName ?? identity.short.toLowerCase(), `${key} hubPage`)
+    const ownPage = raw.qsoPartyHubName ?? identity.short.toLowerCase()
+    const [tablePage, spotPage] = HUB_NAMES[key] ?? [ownPage, ownPage]
+    assert.equal(identity.hubTablePage, tablePage, `${key} hubTablePage`)
+    assert.equal(identity.hubSpotPage, spotPage, `${key} hubSpotPage`)
     // The tracker files a state party under its state and a multi-state one
     // under its token; the Canadian parties are not on it at all.
     const canadian = raw.options?.entity?.toUpperCase() === "VE"

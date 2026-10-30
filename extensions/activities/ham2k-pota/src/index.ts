@@ -30,6 +30,9 @@ import type {
   PostSelfSpotRequest,
   PostOtherSpotRequest,
   DataFileDefinition,
+  DynamicSettingsPanel,
+  FormDefinition,
+  SettingsPanelDescriptor,
   SuggestArgs,
   ActivitySuggestion,
   LookupRow,
@@ -38,6 +41,7 @@ import type {
 import { REFERENCE_REGEX, normalizeReference, entityPrefixForCall, transformsForPrefix, hunterDefaultPrefix, activationDefaultPrefix, parkOutlineUrl } from "./refFormatting.ts"
 import { suggestOperationTitleForPota } from "./titleSuggestion.ts"
 import { tFor } from "./i18n.ts"
+import { potaHunterProgram } from "./chasing.ts"
 import { looksLikeReference } from "@ham2k/extension-sdk"
 
 import manifest from "../manifest.json" with { type: "json" }
@@ -52,6 +56,26 @@ const ACTIVATION_TYPE = 'potaActivation'
 // single-area park sits in one meaningful state/province worth surfacing on
 // the guess; elsewhere the area code isn't a useful "state", so we skip it.
 const COUNTRIES_WHERE_STATES_MATTER = new Set(['US', 'CA', 'AU'])
+
+/// Whether a park spans more than one `{country}-{state}` area — a trail, a
+/// forest across a state line. Its one published point stands for the whole
+/// of it, so it is `largeArea` (`Ref.largeArea`): the app draws it as usual
+/// but never places an operation there. app-polo makes the same call by
+/// withholding such a park's grid.
+function spansSeveralAreas(locationDesc: string | undefined): boolean {
+  return (locationDesc ?? '').split(',').filter((area) => area.trim() !== '').length > 1
+}
+
+/// The state a park's ref carries (`Ref.state`), as a spread: the one state
+/// it lies in, where states matter, so a contact with the park is placed in
+/// that state rather than at the callbook's home address. The key is always
+/// present, as `largeArea` is, so a re-decoration clears a stale state — a
+/// park across several states, or no park at all, carries none. Typed apart
+/// from `Ref` until the SDK this builds against declares the field.
+function refState(reference: string, locationDesc: string | undefined): { state?: string } {
+  const state = stateOfPark(reference, locationDesc)
+  return { state }
+}
 
 // Nearby suggestions use a ~150km bounding box (dbLookupSelectByLocation is a
 // rectangular query, not a true radius); results are then given a real
@@ -85,9 +109,32 @@ interface POTAParkInfo {
   lon?: number
 }
 
+const POTA_API = 'https://api.pota.app'
+
+/// POTA's test server, with spots and parks of its own. The "Use POTA Dev
+/// Servers" developer setting sends spots and park network lookups here, so a
+/// spot posted while testing never reaches a real hunter.
+const POTA_DEV_API = 'https://devapi.pota.app'
+
+/// Only in developer mode: the switch is hidden outside it, and a switch left
+/// on where nobody can see it would send an operator's spots where no hunter
+/// ever reads them.
+async function usingDevServers(): Promise<boolean> {
+  const settings = await host.getSettings()
+  const extensions = settings.extensions as Record<string, JSONValue> | undefined
+  const mine = extensions?.[`extension_${manifest.key}`] as Record<string, JSONValue> | undefined
+  return settings.developerMode === true && mine?.useDevServers === true
+}
+
+async function potaApi(): Promise<string> {
+  return (await usingDevServers()) ? POTA_DEV_API : POTA_API
+}
+
 const parkCache = new Map<string, POTAParkInfo | null>()
 
-async function fetchPark(ref: string): Promise<POTAParkInfo | null> {
+/// [online] false reads the local parks database alone: a park missing from it
+/// is not fetched, and not cached as missing either.
+async function fetchPark(ref: string, { online = true }: { online?: boolean } = {}): Promise<POTAParkInfo | null> {
   const cached = parkCache.get(ref)
   if (cached !== undefined) return cached
 
@@ -112,9 +159,10 @@ async function fetchPark(ref: string): Promise<POTAParkInfo | null> {
   }
 
   // 2. Fall back to network fetch
+  if (!online) return null
   let park: POTAParkInfo | null = null
   try {
-    const response = await host.fetch(`https://api.pota.app/park/${encodeURIComponent(ref)}`)
+    const response = await host.fetch(`${await potaApi()}/park/${encodeURIComponent(ref)}`)
     if (response.status === 200 && response.body && response.body !== 'null') {
       park = JSON.parse(response.body) as POTAParkInfo
       // The live API names these `latitude`/`longitude` (matching the CSV
@@ -158,6 +206,8 @@ const RefHandler = {
       lon: undefined,
       location: undefined,
       retired: undefined,
+      largeArea: undefined,
+      ...refState(reference, undefined),
     })
 
     if (!REFERENCE_REGEX.test(reference)) return undecorated(t('invalidReference'))
@@ -173,6 +223,7 @@ const RefHandler = {
       lat: park.lat,
       lon: park.lon,
       location: park.locationDesc,
+      ...refState(reference, park.locationDesc),
       program: 'POTA',
       label: `POTA ${reference}: ${park.name}`,
       shortLabel: `POTA ${reference}`,
@@ -184,6 +235,9 @@ const RefHandler = {
       // unconditionally is also what lets a re-decoration CLEAR a stale mark
       // once POTA reinstates a park.
       retired: park.active === 0,
+      // Always a boolean, here and in `suggest`, for the same reason as
+      // `retired`: a re-decoration has to be able to clear it.
+      largeArea: spansSeveralAreas(park.locationDesc),
     }
   },
 
@@ -307,6 +361,8 @@ const ActivityHook = {
         lat: row.lat,
         lon: row.lon,
         location: data.locationDesc,
+        largeArea: spansSeveralAreas(data.locationDesc),
+        ...refState(row.key, data.locationDesc),
         program: 'POTA',
         label: `POTA ${row.key}: ${row.name ?? ''}`,
         shortLabel: `POTA ${row.key}`,
@@ -370,6 +426,8 @@ const ActivityHook = {
         lat: resolved?.lat,
         lon: resolved?.lon,
         location: resolved?.locationDesc,
+        largeArea: spansSeveralAreas(resolved?.locationDesc),
+        ...refState(typedSearch, resolved?.locationDesc),
         program: 'POTA',
         label: `POTA ${typedSearch}: ${name}`,
         shortLabel: `POTA ${typedSearch}`,
@@ -400,28 +458,47 @@ const TEST_OPERATION_REF: Ref = { type: ACTIVATION_TYPE, ref: 'K-TEST' }
 /// be large, so its single-point grid may be off by a few grids); the merge
 /// keeps whichever same-scope result is most accurate, so this doesn't have
 /// to bail when a grid already exists — a more precise SOTA summit on the same
-/// qso still wins. Skips when there's no POTA ref or
-/// this pass is offline (the network fallback in `fetchPark` needs online).
+/// qso still wins. Skips when there's no POTA ref.
+///
+/// Offline it answers from the local parks database alone, and failing that
+/// from the `location` a spot's ref carries: what a spot board asks about
+/// every park spotted, for the state the park is in.
 async function lookupCall(
   { callInfo, qso }: { callInfo: AnnotatedCallInfo; qso: Record<string, JSONValue>; operation: Record<string, JSONValue> },
   ctx: HookContext,
 ): Promise<LookupResult> {
   const refs = refsOfType(qso, HUNTING_TYPE)
   if (refs.length === 0) return []
-  if (!ctx.online) return []
 
-  const park = await fetchPark(refs[0].ref!.toUpperCase())
-  if (!park?.grid6) return []
-
-  // In state-relevant countries, a park whose locationDesc names exactly one
-  // area sits in a single state — surface it (the area's second, post-`-`
-  // part) both on the guess and in the location text.
-  const country = park.reference.split('-')[0]
-  const areas = park.locationDesc.split(',').map((a) => a.trim()).filter((a) => a)
-  let state: string | undefined
-  if (COUNTRIES_WHERE_STATES_MATTER.has(country) && areas.length === 1) {
-    const s = areas[0].split('-')[1]
-    if (s) state = s
+  const reference = refs[0].ref!.toUpperCase()
+  const park = await fetchPark(reference, { online: ctx.online })
+  const locationDesc = park?.locationDesc || refs[0].location
+  // A park across several states is one point standing for all of it: the
+  // station is away from its home address, but on the trail or in the
+  // forest, nobody knows where — so the answer says that, and places nothing
+  // (`largeArea` on a lookup result, the app's lookup pipeline).
+  //
+  // The park's name and an accuracy ride along for an app that predates
+  // `largeArea`, whose merge would otherwise let a callbook's home address
+  // fill the location this answer leaves empty: a located answer with a
+  // declared accuracy locks out a same-scope source that declares none. An
+  // app that reads `largeArea` drops both.
+  if (spansSeveralAreas(locationDesc)) {
+    const name = park?.name ? `: ${park.name}` : ''
+    const answer: LookupResult[number] & { largeArea: boolean } = {
+      call: callInfo.call,
+      source: 'pota',
+      scope: 'qso',
+      locationScope: 'portable',
+      largeArea: true,
+      location: `${reference}${name}`,
+      locAccuracy: LOCATION_ACCURACY.REASONABLE,
+    }
+    return [answer]
+  }
+  const state = stateOfPark(reference, locationDesc)
+  if (!park?.grid6) {
+    return state ? [{ call: callInfo.call, source: 'pota', scope: 'qso', locationScope: 'portable', state }] : []
   }
 
   const namePart = park.name ? `: ${park.name}` : ''
@@ -438,6 +515,15 @@ async function lookupCall(
   }
   if (state) result.state = state
   return [result]
+}
+
+/// In state-relevant countries, a park whose `locationDesc` names exactly one
+/// area sits in a single state: the area's second, post-`-` part.
+function stateOfPark(reference: string, locationDesc: string | undefined): string | undefined {
+  const country = reference.split('-')[0]
+  const areas = (locationDesc ?? '').split(',').map((a) => a.trim()).filter((a) => a)
+  if (!COUNTRIES_WHERE_STATES_MATTER.has(country) || areas.length !== 1) return undefined
+  return areas[0].split('-')[1] || undefined
 }
 
 const AdifFieldsHook = {
@@ -515,40 +601,51 @@ interface POTAApiSpot {
   count: number
 }
 
+/// One POTA server's activator spots, QRT spots dropped.
+async function fetchSpotsFrom(api: string): Promise<Spot[]> {
+  const response = await host.fetch(`${api}/spot/activator`)
+  if (response.status !== 200) throw new Error(`POTA API returned HTTP ${response.status}`)
+  const apiSpots = JSON.parse(response.body) as POTAApiSpot[]
+
+  return apiSpots
+    .filter((spot) => !spot.comments?.match(/QRT/i))
+    .map((spot) => {
+      const freq = parseFloat(spot.frequency)
+      return {
+        their: { call: spot.activator },
+        freq: freq || undefined,
+        band: freq ? bandForFrequency(freq) : undefined,
+        mode: spot.mode,
+        refs: [{ ref: spot.reference, type: HUNTING_TYPE, ...(spot.locationDesc ? { location: spot.locationDesc } : {}) }],
+        spot: {
+          timeInMillis: Date.parse(spot.spotTime + 'Z'),
+          source: 'pota',
+          label: `${spot.reference}: ${[simplifyStates(spot.locationDesc), spot.name].filter((x) => x).join(' • ')}`,
+          sourceInfo: {
+            source: spot.source,
+            id: spot.spotId,
+            comments: spot.comments,
+            spotter: spot.spotter,
+            count: spot.count,
+          },
+        },
+      }
+    })
+}
+
 const SpotsHook = {
   sourceName: 'POTA.app',
 
   async fetchSpots(_args: Record<string, never>, ctx: HookContext): Promise<Spot[]> {
     if (!ctx.online) return []
+    if (!(await usingDevServers())) return fetchSpotsFrom(POTA_API)
 
-    const response = await host.fetch('https://api.pota.app/spot/activator')
-    if (response.status !== 200) throw new Error(`POTA API returned HTTP ${response.status}`)
-    const apiSpots = JSON.parse(response.body) as POTAApiSpot[]
-
-    return apiSpots
-      .filter((spot) => !spot.comments?.match(/QRT/i))
-      .map((spot) => {
-        const freq = parseFloat(spot.frequency)
-        return {
-          their: { call: spot.activator },
-          freq: freq || undefined,
-          band: freq ? bandForFrequency(freq) : undefined,
-          mode: spot.mode,
-          refs: [{ ref: spot.reference, type: HUNTING_TYPE }],
-          spot: {
-            timeInMillis: Date.parse(spot.spotTime + 'Z'),
-            source: 'pota',
-            label: `${spot.reference}: ${[simplifyStates(spot.locationDesc), spot.name].filter((x) => x).join(' • ')}`,
-            sourceInfo: {
-              source: spot.source,
-              id: spot.spotId,
-              comments: spot.comments,
-              spotter: spot.spotter,
-              count: spot.count,
-            },
-          },
-        }
-      })
+    // Both servers, not just the dev one: a developer testing spots still
+    // hunts the live activators. All or nothing — a failing dev server
+    // fails the fetch, so its outage never passes for a spot that didn't
+    // post, and the board keeps the spots it already had.
+    const [live, dev] = await Promise.all([fetchSpotsFrom(POTA_API), fetchSpotsFrom(POTA_DEV_API)])
+    return [...live, ...dev]
   },
 
   async isSelfSpotEnabled({ operation }: { operation: Record<string, JSONValue> }, _ctx: HookContext): Promise<SpotEligibility> {
@@ -568,7 +665,7 @@ const SpotsHook = {
     // TEST_OPERATION_REF's doc.
     const refs = isTestOperation(call) ? [TEST_OPERATION_REF] : refsOfType(operation, ACTIVATION_TYPE)
     if (refs.length === 0) return { ok: false, message: 'No POTA activation on this operation' }
-    return postSpotToPOTA({ call, spotter: call, freq, mode, refs, comment, appName: ctx.appName })
+    return postSpotToPOTA({ api: await potaApi(), call, freq, mode, refs, comment, appName: ctx.appName }, ctx)
   },
 
   async postOtherSpot({ qso, comment, spotterCall }: PostOtherSpotRequest, ctx: HookContext): Promise<PostResult> {
@@ -579,30 +676,66 @@ const SpotsHook = {
     const their = (qso.their ?? {}) as Record<string, JSONValue>
     const our = (qso.our ?? {}) as Record<string, JSONValue>
     return postSpotToPOTA({
+      api: await potaApi(),
       call: String(their.call ?? ''),
-      spotter: String(our.call ?? spotterCall ?? ''),
+      // `||`, not `??`: the core sends an empty `our.call` as readily as it
+      // leaves the key out, and an empty spotter posts a spot nobody spotted.
+      spotter: String(our.call || spotterCall || '').split(',')[0].trim(),
       freq,
       mode: qso.mode ? String(qso.mode) : undefined,
       refs,
       comment,
       appName: ctx.appName,
-    })
+    }, ctx)
   },
 }
 
 /// Posts directly to the POTA API — no authentication required (unlike
 /// SOTA's spot API, which needs a logged-in account). Ported from
 /// app-polo's POTAPostSpotAPI.js.
+///
+/// One spot per call (`KI2D,NK2Y` is two), each spotted by itself unless
+/// [spotter] names one, as app-polo posts them. POTA would take the list as
+/// one activator, but a hunter clicking that spot gets the whole list as the
+/// call to log, and the spotter field takes a single call either way.
+///
+/// Every failure is named, and the spots that did go out are counted: a
+/// resend after a partial failure posts the landed calls a second time, and a
+/// call left unspotted with nothing saying which is the failure worth
+/// reporting.
 async function postSpotToPOTA(
-  { call, spotter, freq, mode, refs, comment, appName }: { call: string; spotter: string; freq: number; mode?: string; refs: Ref[]; comment?: string; appName?: string },
+  { api, call, spotter, freq, mode, refs, comment, appName }: { api: string; call: string; spotter?: string; freq: number; mode?: string; refs: Ref[]; comment?: string; appName?: string },
+  ctx: HookContext,
 ): Promise<PostResult> {
+  const t = tFor(ctx)
+  const calls = call.split(',').map((c) => c.trim()).filter((c) => c)
+  if (calls.length === 0) return { ok: false, message: 'No call to spot' }
+  const reasons = await Promise.all(
+    calls.map((activator) => postOneSpotToPOTA({ api, activator, spotter: spotter ?? activator, freq, mode, refs, comment, appName }, t)),
+  )
+  const failed = calls.flatMap((activator, i) => (reasons[i] ? [{ activator, reason: reasons[i] }] : []))
+  if (failed.length === 0) return { ok: true }
+  if (calls.length === 1) return { ok: false, message: failed[0].reason }
+  const posted = calls.length - failed.length
+  const message = t('postRefused', { calls: failed.map((f) => `${f.activator} (${f.reason})`).join(', ') })
+  return { ok: false, message: posted > 0 ? `${message} ${t('alreadyPosted', { count: posted })}` : message }
+}
+
+/// Why POTA did not take the spot, or `undefined` when it did. The server's
+/// own words ride along with the status, since they are what tells a refused
+/// call or park from an outage — cut short, so a proxy's HTML error page does
+/// not bury the rest of the message.
+async function postOneSpotToPOTA(
+  { api, activator, spotter, freq, mode, refs, comment, appName }: { api: string; activator: string; spotter: string; freq: number; mode?: string; refs: Ref[]; comment?: string; appName?: string },
+  t: ReturnType<typeof tFor>,
+): Promise<string | undefined> {
   const refComment = refs.length > 1 ? `${refs.length}-fer: ${refs.map((r) => r.ref).join(' ')}` : ''
   try {
-    const response = await host.fetch('https://api.pota.app/spot', {
+    const response = await host.fetch(`${api}/spot`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        activator: call,
+        activator,
         spotter,
         frequency: freq,
         reference: refs[0].ref,
@@ -611,20 +744,60 @@ async function postSpotToPOTA(
         comments: [comment, refComment].filter((x) => x).join(' '),
       }),
     })
-    if (response.status !== 200) {
-      return { ok: false, message: `POTA API returned HTTP ${response.status}` }
-    }
-    return { ok: true }
+    if (response.status === 200) return undefined
+    const body = String(response.body ?? '').trim().slice(0, MAX_ERROR_BODY)
+    const status = t('httpError', { status: response.status })
+    return body ? `${status}: ${body}` : status
   } catch (e) {
-    return { ok: false, message: e instanceof Error ? e.message : String(e) }
+    return e instanceof Error ? e.message : String(e)
   }
 }
+
+/// The most of the server's error body a failure message carries.
+const MAX_ERROR_BODY = 200
 
 function simplifyStates(locationDesc: string): string {
   if (!locationDesc) return ''
   const states = locationDesc.split(',')
   const oneState = states[0].split('-', 2)[1]?.trim()
   return states.length > 1 ? `${oneState}+${states.length - 1}` : (oneState ?? '')
+}
+
+/// Exists only to carry the developer switch to the test servers: a row in
+/// Settings' Activities section (as the manifest's `settings` declares), its
+/// one field `devMode`, and targeted at the Developer panel.
+const SettingsPanel: DynamicSettingsPanel = {
+  kind: 'dynamic',
+
+  async getPanels(_args: Record<string, never>, _ctx: HookContext): Promise<SettingsPanelDescriptor[]> {
+    return [{ key: manifest.key, title: manifest.shortName, icon: manifest.icon, sidebar: false, section: 'activities' }]
+  },
+
+  async getDefinition(_args: { panelKey: string }, ctx: HookContext): Promise<FormDefinition> {
+    const t = tFor(ctx)
+    return {
+      elements: [
+        {
+          type: 'field',
+          fieldType: 'checkbox',
+          key: 'useDevServers',
+          label: t('useDevServers'),
+          description: t('useDevServersDescription'),
+          value: await usingDevServers(),
+          devMode: true,
+          target: 'developer',
+        },
+      ],
+    }
+  },
+
+  async onChangeField({ fieldKey, value }: { fieldKey: string; value: unknown }, _ctx: HookContext): Promise<void> {
+    if (fieldKey !== 'useDevServers') return
+    await host.setSettings({ useDevServers: value === true })
+    // After the write, not before: a lookup between the two would read the
+    // old setting and cache the other server's answer.
+    parkCache.clear()
+  },
 }
 
 const potaDataFile: DataFileDefinition = {
@@ -732,7 +905,9 @@ defineExtension({
       }),
       key: manifest.key,
     })
+    registerHook('chasing', { hook: potaHunterProgram(HUNTING_TYPE), key: manifest.key })
     registerHook('spots', { hook: SpotsHook, key: manifest.key })
+    registerHook('settingsPanel', { hook: SettingsPanel, key: manifest.key })
     // Priority 100 — higher than every lookup source (QRZ 99, ...), so the
     // POTA park's grid is resolved BEFORE a home-QTH lookup can set
     // callInfo.grid; the `if (callInfo.grid) return []` guard below would

@@ -97,6 +97,19 @@ function tag(xml: string, name: string): string | undefined {
   return match?.[1]?.trim() || undefined
 }
 
+function numberTag(xml: string, name: string): number | undefined {
+  const value = Number.parseFloat(tag(xml, name) ?? '')
+  return Number.isFinite(value) ? value : undefined
+}
+
+/// `tz` reads as a UTC offset with its ordinary sign: "GMT-5" is five hours
+/// behind UTC. QRZ's GMTOffset is the standard-time offset; its separate DST
+/// flag is not applied.
+function utcOffset(offset: number | undefined): string | undefined {
+  if (offset === undefined) return undefined
+  return offset > 0 ? `GMT+${offset}` : `GMT${offset}`
+}
+
 async function testLogin(username: string, password: string): Promise<string> {
   const url = `${API}?username=${encodeURIComponent(username)};password=${encodeURIComponent(password)};agent=${AGENT}`
   const response = await host.fetch(url)
@@ -204,10 +217,14 @@ async function lookupCall(
     const city = tag(xml, 'addr2')
     const state = tag(xml, 'state')
     const [lat, lon] = cleanLocationParams(tag(xml, 'lat'), tag(xml, 'lon'))
-    // `image` rides along as an extra field CallInfoLookup's fixed shape
-    // doesn't declare (same widening pattern as the app's `annotate` extension's `flag`) — QRZ's
-    // profile/QSL-card photo URL, shown in the call-info detail panel.
-    const result: CallInfoLookup & { image?: string; online?: boolean } = {
+    // `image`, `email`, `street`, `postal`, `qslVia` and `url` ride along as extra fields
+    // CallInfoLookup's fixed shape doesn't declare (same widening pattern as
+    // the app's `annotate` extension's `flag`). `image` is QRZ's
+    // profile/QSL-card photo URL, shown in the call-info detail panel;
+    // `street` is the street line of the mailing address alone (`addr1`), the
+    // town being `city`; `postal` is its postal code. The app's ADIF export
+    // composes them into ADDRESS.
+    const result: CallInfoLookup & { image?: string; email?: string; street?: string; postal?: string; qslVia?: string; url?: string; online?: boolean } = {
       call: tag(xml, 'call') ?? call,
       source: 'qrz.com',
       scope: 'general',
@@ -221,13 +238,22 @@ async function lookupCall(
       // goes by on the air, and QRZ is the only source that reports one.
       name: [fname, nickname && `“${nickname}”`, tag(xml, 'name')].filter((x) => x).join(' '),
       location: [city, state].filter((x) => x).join(', '),
+      street: tag(xml, 'addr1'),
       city,
       state,
+      postal: tag(xml, 'zip'),
+      county: tag(xml, 'county'),
       country: tag(xml, 'country'),
       grid: tag(xml, 'grid'),
       lat,
       lon,
+      cqZone: numberTag(xml, 'cqzone'),
+      ituZone: numberTag(xml, 'ituzone'),
+      tz: utcOffset(numberTag(xml, 'GMTOffset')),
       image: tag(xml, 'image'),
+      email: tag(xml, 'email'),
+      qslVia: tag(xml, 'qslmgr'),
+      url: tag(xml, 'url'),
     }
     // Only the negative half is remembered, and only on an answer we actually
     // got: an error above returned already, so reaching here means QRZ spoke.

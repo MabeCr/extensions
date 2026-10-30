@@ -66,6 +66,16 @@ test("outside a party the beacon names the operation's references and the operat
   assert.equal(requests[0].body, 'KI2D>APRS,TCPIP*:!4230.00N/07100.00W>7.235 US-1234/KFF-0001 QRV until 1600')
 })
 
+test("a gateway that takes the beacon with nothing to say back (204) is a sent spot, not a refusal", async () => {
+  gatewayStatus = 204
+  try {
+    const result = await ext.runHook('spots', 'postSelfSpot', { operation: fixtureOperation({ grid: 'FN42' }), freq: 7235 })
+    assert.deepEqual(result, { ok: true })
+  } finally {
+    gatewayStatus = 200
+  }
+})
+
 test("a station with no position is refused before anything is sent, and a gateway error is a failed spot", async () => {
   requests.length = 0
   const refused = (await ext.runHook('spots', 'postSelfSpot', { operation: fixtureOperation(), freq: 7235 })) as any

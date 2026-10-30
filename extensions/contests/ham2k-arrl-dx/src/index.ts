@@ -11,8 +11,10 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
-import { adifForExport, contestScorer, defineExtension, exportFilename, startMillisOf } from "@ham2k/extension-sdk"
+import { rulesNotes, withRules } from "@ham2k/lib-contest-rules"
+import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
+  ActivitySuggestion,
   ExportOption,
   ExportOptionsRequest,
   ExportRequest,
@@ -22,10 +24,14 @@ import type {
   LoggingControlDescriptor,
   Ref,
   RefLink,
+  SuggestArgs,
 } from "@ham2k/extension-sdk"
 
 import { tFor } from "./i18n.ts"
+import { cabrilloLocation, normalizeSection } from "./location.ts"
+import { MODES, nearestMode, nextContestDate, relevanceFor } from "./schedule.ts"
 import { ARRLDXScorer, POWER_PATTERN, contestTitle, isWveCall, weAreWve } from "./scorer.ts"
+import { BAND_CLASSES, OPERATOR_CLASSES, POWER_CLASSES, cabrilloCategories, contestRules, declaredClub, declaredOperators } from "./entry.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
 
@@ -33,6 +39,11 @@ import manifest from "../manifest.json" with { type: "json" }
 /// stays what the app's own built-in wrote there whatever this package is
 /// called: the manifest key names the package, `TYPE` names the activation.
 const TYPE = 'arrl-dx'
+
+/// What a search has to contain to offer these contests. Matched as "does the
+/// alias contain what was typed", so "arrl" finds them and the date ranking
+/// decides which running comes first.
+const ALIASES = ['ARRL DX', 'ARRLDX', 'ARRL INTERNATIONAL DX', 'INTERNATIONAL DX']
 
 function refOfType(container: Record<string, JSONValue>, type: string): Record<string, JSONValue> | undefined {
   return (((container.refs as Record<string, JSONValue>[] | undefined) ?? [])).find((r) => r?.type === type)
@@ -42,7 +53,85 @@ function str(value: JSONValue | undefined): string {
   return typeof value === 'string' ? value : ''
 }
 
+/// Our section from the operator's profile, for the setup form's `value`.
+/// STICKY ON FAILURE, as in `arrl-ss`: the form re-applies a field's value
+/// whenever it is rebuilt, so a host that answers once and then fails must not
+/// blank the field in front of the operator.
+let lastKnownSection = ''
+
+async function ourSectionDefault(): Promise<string> {
+  try {
+    const settings = (await host.getSettings()) as Record<string, JSONValue> | undefined
+    lastKnownSection = normalizeSection(settings?.operatorSection)
+  } catch (e) {
+    console.warn(`[arrl-dx] profile settings unavailable, keeping the last section read:`, e)
+  }
+  return lastKnownSection
+}
+
+/// The operator's name, email and club from their profile, for the Cabrillo
+/// header. All optional and free-form in the profile, so each may be ''. A
+/// host that cannot answer costs these lines, never the log itself.
+async function profileDetails(): Promise<{ name: string; email: string; club: string }> {
+  try {
+    const settings = (await host.getSettings()) as Record<string, JSONValue> | undefined
+    const line = (value: JSONValue | undefined) => str(value).replace(/\s+/g, ' ').trim()
+    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail), club: line(settings?.operatorClub) }
+  } catch (e) {
+    console.warn(`[arrl-dx] profile settings unavailable, exporting without name, email and profile club:`, e)
+    return { name: '', email: '', club: '' }
+  }
+}
+
+/// One select per axis of the entry, "Not declared" first.
+function entrySelects(t: (key: string) => string) {
+  const select = (key: string, options: readonly string[]) => ({
+    type: 'field' as const,
+    fieldType: 'select' as const,
+    key,
+    label: t(`${key}Label`),
+    value: '',
+    options: [{ value: '', label: t('notDeclared') }, ...options.map((value) => ({ value, label: t(`${key}_${value}`) }))],
+  })
+  return [
+    select('operator', OPERATOR_CLASSES),
+    select('band', BAND_CLASSES),
+    select('power', POWER_CLASSES),
+  ]
+}
+
 const ActivityHook = {
+  /// Offered in the activity search by NAME and by NEARNESS — both runnings,
+  /// each ranked by its own weekend, so in February CW leads and after it
+  /// Phone.
+  ///
+  /// Nothing is offered to an operation that already runs ARRL DX: as in CQ
+  /// WW, the mode lives on the ref as `mode`, not `ref`, so the picker's
+  /// duplicate guard would let a tapped suggestion REPLACE the configured ref
+  /// and lose its exchange.
+  async suggest({ operation, searchTerm }: SuggestArgs, ctx: HookContext): Promise<ActivitySuggestion[]> {
+    if (refOfType(operation ?? {}, TYPE)) return []
+    const t = tFor(ctx)
+    const term = (searchTerm ?? '').trim().toUpperCase()
+    if (term && !ALIASES.some((alias) => alias.includes(term))) return []
+
+    const now = Date.now()
+    return MODES.map((mode) => ({
+      type: TYPE,
+      mode,
+      // A suggestion is persisted VERBATIM and never runs through
+      // `decorateRef`, so everything the operation row reads has to be here,
+      // and the labels must match what `decorateRef` composes.
+      program: 'Contest',
+      // The date is what tells the runnings apart at a glance — the same
+      // `description • date` line the QSO parties show.
+      name: `${t('activityDescription')} • ${nextContestDate(now, mode)}`,
+      label: `ARRL DX ${mode}`,
+      shortLabel: `ARRL DX ${mode}`,
+      relevance: relevanceFor(now, mode),
+    }))
+  },
+
   async operationControls(
     args: { operation: Record<string, JSONValue> },
     ctx: HookContext,
@@ -70,6 +159,8 @@ const ActivityHook = {
                 fieldType: 'radio',
                 key: 'mode',
                 label: t('modeLabel'),
+                // Seeds a new setup only; a configured ref keeps its own mode.
+                value: nearestMode(Date.now()),
                 options: [{ value: 'CW', label: 'CW' }, { value: 'Phone', label: 'Phone' }],
               },
               {
@@ -93,6 +184,36 @@ const ActivityHook = {
                 label: ours ? t('ourStateLabel') : t('ourPowerLabel'),
                 placeholder: ours ? t('ourStatePlaceholder') : t('ourPowerPlaceholder'),
                 uppercase: true,
+              },
+              // What the rules allow, following the operator class below.
+              ...rulesNotes(ctx, 'operator', OPERATOR_CLASSES, contestRules),
+              // The entry we are making, for the Cabrillo header. Each starts
+              // undeclared: see entry.ts.
+              ...entrySelects(t),
+              // For the Cabrillo LOCATION, US and Canadian stations only.
+              {
+                type: 'field',
+                fieldType: 'text',
+                key: 'section',
+                label: t('ourSectionLabel'),
+                placeholder: t('ourSectionPlaceholder'),
+                uppercase: true,
+                value: await ourSectionDefault(),
+              },
+              {
+                type: 'field',
+                fieldType: 'text',
+                key: 'operators',
+                label: t('operatorsLabel'),
+                placeholder: t('operatorsPlaceholder'),
+                uppercase: true,
+              },
+              {
+                type: 'field',
+                fieldType: 'text',
+                key: 'club',
+                label: t('clubLabel'),
+                placeholder: t('clubPlaceholder'),
               },
             ],
           },
@@ -183,7 +304,8 @@ const RefHandler = {
     const mode = str(r.mode)
     const label = mode ? `ARRL DX ${mode}` : tFor(ctx)('unconfigured')
     const sent = str(r.exchange)
-    return { ...ref, program: 'Contest', label, shortLabel: label, name: sent || tFor(ctx)('notConfigured') }
+    const decorated = { ...ref, program: 'Contest', label, shortLabel: label, name: sent || tFor(ctx)('notConfigured') }
+    return withRules(decorated, contestRules((ref as Record<string, JSONValue>).operator))
   },
 
   /// Same reasoning as CQ WW: what we send goes in the subtitle. For ARRL DX
@@ -303,12 +425,22 @@ const ExportHook = {
     const ourCall = str(operation.stationCall)
 
     if (args.exportType === `${TYPE}-cabrillo`) {
+      const profile = await profileDetails()
       const content = qsonToCabrillo(args.qsos, {
         headers: [
           ['CONTEST', mode === 'Phone' ? 'ARRL-DX-SSB' : mode ? `ARRL-DX-${mode}` : 'ARRL-DX'],
           ['CALLSIGN', ourCall],
-          ['OPERATORS', str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          // The calls listed at setup — required for a multioperator entry —
+          // else the app's own operator call.
+          ['OPERATORS', declaredOperators(opRef) || str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          // Our section, or DX: see location.ts.
+          ['LOCATION', cabrilloLocation(ourCall, opRef)],
+          ...cabrilloCategories(opRef),
           ['GRID-LOCATOR', str(operation.grid)],
+          // The club typed at setup, else the profile's.
+          ['CLUB', declaredClub(opRef) || profile.club],
+          ['NAME', profile.name],
+          ['EMAIL', profile.email],
         ],
         qsoParts: (qso) => [
           ourCall || '-',

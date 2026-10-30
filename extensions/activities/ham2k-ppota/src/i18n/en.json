@@ -1,0 +1,14 @@
+{
+  "invalidReference": "Invalid reference",
+  "unknownReference": "Unknown PPOTA reference",
+  "activationControl": "PPOTA activation",
+  "huntingControl": "PPOTA",
+  "dataFileName": "PPOTA: All References",
+  "dataFileDescription": "Database of all PPOTA villages and hamlets",
+  "reference": "village",
+  "referencesPlural": "villages",
+  "keyRejected": "PPOTA did not accept Ham2K's spotting key ({{code}}) — please let Ham2K know",
+  "unknownReferenceOnPost": "PPOTA does not know {{ref}}, or it is not active",
+  "postRefused": "PPOTA refused the spot for {{refs}}",
+  "alreadyPosted": "{{count}} other spot(s) did go out."
+}

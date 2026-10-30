@@ -431,6 +431,10 @@ export interface QsoPartyParams {
   /// Valid exchange values and offered in the picker, but never in-party and
   /// never part of the county sweep. Default `{}`.
   otherCounties?: Record<string, string>
+  /// County code → the county ADIF's `CNTY` names it by, for a party whose own
+  /// units are not counties (HI's districts). Default `{}`: every other party's
+  /// county IS the county, by its own name.
+  adifCounties?: Record<string, string>
   /// Super-mode (`CW`, `PHONE`, `DATA`) → points for one contact. Default `{}`,
   /// and an unlisted mode is worth 1: no sponsor lists every mode it allows,
   /// and zeroing a contact is a rules claim a missing entry does not make.
@@ -448,6 +452,9 @@ export interface QsoPartyParams {
   powerMultipliers?: Partial<Record<PowerClass, number>>
   /// The classes this party publishes. Default: no axis is asked about.
   entryClasses?: QsoPartyEntryClasses
+  /// `false` where the sponsor's rules forbid spotting yourself, for every
+  /// entry. Default: the rules leave it to the operator.
+  selfSpotting?: boolean
   /// What the entry row asks for besides the location. Default: neither.
   exchange?: QsoPartyExchangeFields
 

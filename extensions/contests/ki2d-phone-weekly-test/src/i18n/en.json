@@ -1,0 +1,23 @@
+{
+  "activityLabel": "Phone Weekly Test",
+  "setupLabel": "Phone Weekly Test Setup",
+  "sessionLabel": "Session",
+  "noSession": "No session",
+  "ourNameLabel": "Our Name",
+  "ourNamePlaceholder": "e.g. SEB",
+  "ourLocationLabel": "Our Location",
+  "ourLocationPlaceholder": "e.g. NY (blank outside North America)",
+  "rulesLink": "Single operator, 100 W at most, SSB. Stations outside North America send their name only, and are logged as DX. No logs to send: post the score on [3830scores.com](https://3830scores.com/) within 48 hours. [Official rules](http://www.perluma.com/Phone_Fray_Contest_Rules.pdf)",
+  "nameLabel": "Name",
+  "locationLabel": "Loc",
+  "notConfigured": "Not configured!",
+  "notALocation": "{{location}} isn't a location!",
+  "ourExchangeSubtitle": "Sending {{exchange}}",
+  "adifExport": "ADIF for {{contest}}",
+  "stateOne": "1 state",
+  "stateMany": "{{formatted}} states",
+  "provinceOne": "1 province",
+  "provinceMany": "{{formatted}} provinces",
+  "countryOne": "1 country",
+  "countryMany": "{{formatted}} countries"
+}

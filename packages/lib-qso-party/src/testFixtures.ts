@@ -285,7 +285,8 @@ export const WA = party({
   counties: { KING: 'King', ASO: 'Asotin' },
 })
 
-/// California: the party whose exchange carries a serial each way.
+/// California: the party whose exchange carries a serial each way, and whose
+/// rules forbid self-spotting.
 export const CA = party({
   refType: 'ca-qso-party',
   short: 'CQP',
@@ -296,6 +297,7 @@ export const CA = party({
   stateCountsForInState: true,
   countiesAreMultipliersInParty: false,
   inStateMultiplierMax: 58,
+  selfSpotting: false,
   exchange: { number: true },
   pointsByMode: { PHONE: 3, CW: 3 },
   counties: { ALAM: 'Alameda', BUTT: 'Butte', LASS: 'Lassen' },

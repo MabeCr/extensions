@@ -19,16 +19,19 @@ process.env.TZ = "Australia/Sydney"
 interface FetchParams {
   url: string
   method?: string
+  headers?: Record<string, string>
   body?: string
 }
 
 let sent: FetchParams[] = []
 let reply = { status: 200, body: "[]" }
+let unreachable: Error | undefined
 
 const pnp = await loadExtension(() => import("./index.ts"), {
   hostCalls: {
     fetch: (params) => {
       sent.push(params as unknown as FetchParams)
+      if (unreachable) throw unreachable
       return reply
     },
   },
@@ -36,6 +39,7 @@ const pnp = await loadExtension(() => import("./index.ts"), {
 
 function respond(body: string, status = 200) {
   sent = []
+  unreachable = undefined
   reply = { status, body }
 }
 
@@ -82,6 +86,9 @@ function spotJson({
 test("reads MHz strings as kHz and the unmarked timestamp as UTC", async () => {
   const spots = await fetchSpots(`[${spotJson({ call: "vk2ozo" })}]`)
 
+  // The worldwide feed is hundreds of rows of US POTA; this source is for VK
+  // and ZL.
+  assert.match(sent[0].url, /\/api\/ALL\?continent=OC$/)
   assert.equal(spots.length, 1)
   // Everything downstream is kHz; a missed conversion puts the spot 1000x off
   // and on no band at all.
@@ -110,6 +117,14 @@ test("keeps only WWFF and SiOTA, dropping the awards that arrive from their own 
 
   assert.deepEqual(spots.map((s) => s.their.call), ["VK1AA", "VK1BB"])
   assert.deepEqual(spots.map((s) => s.refs[0].type), ["wwff", "siota"])
+})
+
+test("reads the class whatever its case, as the rewritten site spells SiOTA 'SIOTA'", async () => {
+  // The October 2026 site publishes 'SIOTA' where the old one published
+  // 'SiOTA'; matched exactly, every silo vanished from the feed.
+  const spots = await fetchSpots(`[${spotJson({ call: "vk3sio", cls: "SIOTA", site: "VK-SI0042" })}]`)
+  assert.equal(spots.length, 1)
+  assert.deepEqual(spots[0].refs[0], { ref: "VK-SI0042", type: "siota" })
 })
 
 test("a spot with an unreadable time never evicts a good one, in either feed order", async () => {
@@ -172,13 +187,17 @@ const operation = () => ({
   refs: [{ type: "wwffActivation", ref: "VKFF-1997" }],
 })
 
+const OK = JSON.stringify({ success: true, message: "" })
+
 const postedBody = () => {
   assert.equal(sent.length, 1)
-  return JSON.parse(sent[0].body ?? "") as Record<string, unknown>
+  assert.match(sent[0].url, /\/api\/spots$/)
+  assert.equal(sent[0].method, "POST")
+  return Object.fromEntries(new URLSearchParams(sent[0].body ?? ""))
 }
 
-test("posts the callsign, class and MHz-shaped frequency the API expects", async () => {
-  respond("Success")
+test("posts the activator, reference and kHz frequency the API expects", async () => {
+  respond(OK)
   const result = (await pnp.runHook(
     "spots",
     "postSelfSpot",
@@ -188,24 +207,42 @@ test("posts the callsign, class and MHz-shaped frequency the API expects", async
 
   assert.equal(result.ok, true)
   const body = postedBody()
-  assert.equal(body.actCallsign, "VK2ABC")
-  // The class comes from the ref TYPE; posting the raw type files the spot
-  // under an award the service does not know.
-  assert.equal(body.actClass, "WWFF")
-  assert.equal(body.actSite, "VKFF-1997")
-  // 7160 or 7.16 spots a different frequency.
-  assert.equal(body.freq, "7.160")
+  assert.equal(body.activator, "VK2ABC")
+  assert.equal(body.spotter, "VK2ABC")
+  assert.equal(body.reference, "VKFF-1997")
+  // kHz since the October 2026 rewrite: the old MHz '7.160' spots 7 kHz.
+  assert.equal(body.frequency, "7160")
+  assert.equal(body.mode, "SSB")
+  assert.equal(body.comments, "up 5")
   assert.equal(body.userID, "vk2abc")
   assert.equal(body.APIKey, "k")
+  // Without it, a silo inside a park is spotted as a park activation too.
+  assert.equal(body.do_not_lookup, "true")
+})
+
+test("an operation on two awards posts one spot carrying both references", async () => {
+  respond(OK)
+  await pnp.runHook(
+    "spots",
+    "postSelfSpot",
+    {
+      operation: { stationCall: "VK2ABC", refs: [{ type: "wwffActivation", ref: "VKFF-1997" }, { type: "siotaActivation", ref: "VK-SI0042" }, { type: "potaActivation", ref: "AU-0001" }] },
+      freq: 7160,
+    },
+    { ctx: { account: LOGIN } },
+  )
+  // POTA has its own source and is not this one's to spot.
+  assert.equal(postedBody().reference, "VKFF-1997,VK-SI0042")
 })
 
 test("spotting someone else reads the HUNTING ref a QSO carries", async () => {
   // A logged contact with a park carries `wwff`, never `wwffActivation` — that
   // one is the operation's. Matching the activation type here leaves the
   // whole other-spot path dead with no error anywhere.
-  respond("Success")
+  respond(OK)
   const qso = {
     their: { call: "VK5DEF" },
+    our: { call: "VK2ABC" },
     freq: 14310,
     mode: "SSB",
     refs: [{ type: "wwff", ref: "VKFF-0100" }],
@@ -217,26 +254,27 @@ test("spotting someone else reads the HUNTING ref a QSO carries", async () => {
   const result = (await pnp.runHook("spots", "postOtherSpot", { qso, comment: "" }, { ctx: { account: LOGIN } })) as { ok: boolean }
   assert.equal(result.ok, true)
   const body = postedBody()
-  assert.equal(body.actCallsign, "VK5DEF")
-  assert.equal(body.actClass, "WWFF")
-  assert.equal(body.actSite, "VKFF-0100")
+  assert.equal(body.activator, "VK5DEF")
+  assert.equal(body.spotter, "VK2ABC")
+  assert.equal(body.reference, "VKFF-0100")
+  assert.equal(body.frequency, "14310")
 })
 
-test("a frequency off a whole kHz still posts a well-formed MHz string", async () => {
-  // A radio reporting 7160.5 kHz is ordinary. A thousands-grouping formatter
-  // emits '7.160.' for it, and '475' on 630m, which the service reads as MHz.
-  respond("Success")
+test("a frequency off a whole kHz still posts a plain kHz string", async () => {
+  // A radio reporting 7160.5 kHz is ordinary, and float noise off a VFO is
+  // not something to publish.
+  respond(OK)
   await pnp.runHook("spots", "postSelfSpot", { operation: operation(), freq: 7160.5 }, { ctx: { account: LOGIN } })
-  assert.equal(postedBody().freq, "7.160")
+  assert.equal(postedBody().frequency, "7160.5")
 
-  respond("Success")
-  await pnp.runHook("spots", "postSelfSpot", { operation: operation(), freq: 475 }, { ctx: { account: LOGIN } })
-  assert.equal(postedBody().freq, "0.475")
+  respond(OK)
+  await pnp.runHook("spots", "postSelfSpot", { operation: operation(), freq: 14074.000000001 }, { ctx: { account: LOGIN } })
+  assert.equal(postedBody().frequency, "14074")
 })
 
-test("a rejected spot answers HTTP 200, so the body decides", async () => {
+test("a rejected spot answers HTTP 200, so the body decides, and its reason is shown", async () => {
   // Trusting the status reports success for a spot nobody can see.
-  respond("Failure: bad API key")
+  respond(JSON.stringify({ success: false, message: "Authentication failed!" }))
   const result = (await pnp.runHook(
     "spots",
     "postSelfSpot",
@@ -246,6 +284,99 @@ test("a rejected spot answers HTTP 200, so the body decides", async () => {
 
   assert.equal(result.ok, false)
   assert.match(result.message ?? "", /VKFF-1997/)
+  assert.match(result.message ?? "", /Authentication failed!/)
+  // Logins saved before the move are the likely cause, so it says where to
+  // fix one.
+  assert.match(result.message ?? "", /Settings › Accounts, Services & Data Sources › ParksnPeaks/)
+})
+
+test("a refusal of the spot itself is not blamed on the login", async () => {
+  respond(JSON.stringify({ success: false, message: "Unknown reference VKFF-9999" }))
+  const result = (await pnp.runHook("spots", "postSelfSpot", { operation: operation(), freq: 7160 }, { ctx: { account: LOGIN } })) as { ok: boolean; message?: string }
+  assert.equal(result.ok, false)
+  assert.match(result.message ?? "", /Unknown reference VKFF-9999/)
+  assert.doesNotMatch(result.message ?? "", /Settings/)
+})
+
+const selfSpot = async () =>
+  (await pnp.runHook("spots", "postSelfSpot", { operation: operation(), freq: 7160 }, { ctx: { account: LOGIN } })) as { ok: boolean; message?: string }
+
+test("an answer that is not the service's JSON verdict is not a spot that landed, nor called a refusal", async () => {
+  // An error page served with 200 has confirmed nothing — but the spot may
+  // have landed, so the operator is told to look rather than that it was
+  // refused, which invites a duplicate.
+  respond("<!DOCTYPE html><html>Something went wrong</html>")
+  const result = await selfSpot()
+  assert.equal(result.ok, false)
+  assert.doesNotMatch(result.message ?? "", /rejected/)
+  assert.match(result.message ?? "", /check its spot list/)
+})
+
+test("a spot with no answer is not called refused, and may have gone out", async () => {
+  // The host also gives up on a request it already sent, once the answer is
+  // slow; telling the operator it never left invites a duplicate spot.
+  respond("")
+  unreachable = new Error("TimeoutException after 0:00:15.000000: Future not completed")
+  const result = await selfSpot()
+  assert.equal(result.ok, false)
+  assert.doesNotMatch(result.message ?? "", /rejected/)
+  assert.match(result.message ?? "", /No answer.*TimeoutException.*check before posting again/)
+})
+
+test("an answer of the wrong shape is unreadable, not a refusal", async () => {
+  // A redirect to the spot list after a spot was created is followed as a GET
+  // and reads back as the list itself.
+  for (const body of ["[]", JSON.stringify({ id: 123 }), JSON.stringify({ success: "true" })]) {
+    respond(body)
+    const result = await selfSpot()
+    assert.equal(result.ok, false, body)
+    assert.match(result.message ?? "", /check its spot list/, body)
+  }
+})
+
+test("a plain refusal with no reason still says it was refused", async () => {
+  respond(JSON.stringify({ success: false }))
+  assert.match((await selfSpot()).message ?? "", /rejected the spot for VKFF-1997$/)
+})
+
+test("any 2xx carrying success is a spot that landed", async () => {
+  respond(JSON.stringify({ success: true, message: "Spot created" }), 201)
+  assert.equal((await selfSpot()).ok, true)
+})
+
+test("an HTTP error names its status, or the service's reason when it gives one", async () => {
+  respond("<html>Service Unavailable</html>", 503)
+  assert.match((await selfSpot()).message ?? "", /HTTP 503.*check its spot list/)
+
+  // A server error that explains itself keeps its status: it is no refusal.
+  respond(JSON.stringify({ success: false, message: "Something went wrong" }), 500)
+  const serverError = (await selfSpot()).message ?? ""
+  assert.match(serverError, /HTTP 500.*Something went wrong/)
+  assert.doesNotMatch(serverError, /rejected/)
+
+  respond(JSON.stringify({ success: false, message: "Authentication failed!" }), 401)
+  assert.match((await selfSpot()).message ?? "", /Authentication failed!.*Settings/)
+
+  respond("<html>Unauthorized</html>", 401)
+  assert.match((await selfSpot()).message ?? "", /HTTP 401.*Settings/)
+
+  // The site's firewall answers 403 with a page of its own; the login was
+  // never looked at, so it is not blamed.
+  respond("<html>Attention Required! | Cloudflare</html>", 403)
+  const blocked = (await selfSpot()).message ?? ""
+  assert.match(blocked, /HTTP 403/)
+  assert.doesNotMatch(blocked, /Settings/)
+
+  // A 500 is no confirmation, whatever its body claims.
+  respond(JSON.stringify({ success: true }), 500)
+  assert.equal((await selfSpot()).ok, false)
+})
+
+test("a self-spot with no frequency is not posted", async () => {
+  respond(OK)
+  const result = (await pnp.runHook("spots", "postSelfSpot", { operation: operation(), freq: 0 }, { ctx: { account: LOGIN } })) as { ok: boolean }
+  assert.equal(result.ok, false)
+  assert.equal(sent.length, 0)
 })
 
 test("offers spotting only once a whole login is stored", async () => {

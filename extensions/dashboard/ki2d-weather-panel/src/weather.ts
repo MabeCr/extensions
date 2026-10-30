@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 import { icons, weatherIcon } from './icons.ts'
 import { gridToLocation } from '@ham2k/lib-geo-tools'
+import { panelTheme, themeColors, themeField } from '@ham2k/lib-panel-themes'
 import type { FetchOptions, FetchResponse, HookContext, PanelEnvironment, PanelHook, PanelRenderArgs, SvgScene, SvgSceneLayer } from '@ham2k/extension-sdk'
 
 type Fetch = (url: string, options?: FetchOptions) => Promise<FetchResponse>
@@ -87,7 +88,7 @@ export function createWeatherPanel(fetch: Fetch): PanelHook {
       const t = words(ctx.locale)
       return [{ key: 'weather', title: t.title, description: t.description, icon: 'weather-partly-cloudy',
         multiple: true, on: ['operation', 'tick:60'],
-        form: [{ type: 'field', key: 'location', fieldType: 'text', label: t.location, description: t.locationHelp }],
+        form: [{ type: 'field', key: 'location', fieldType: 'text', label: t.location, description: t.locationHelp }, themeField(ctx.locale)],
       }]
     },
     async render(args, ctx) {
@@ -133,7 +134,7 @@ export function createWeatherPanel(fetch: Fetch): PanelHook {
       }
       if (entry.pending) await entry.pending
       if (!entry.reading) return { kind: 'markdown', content: t.failed }
-      return { kind: 'svgScene', scene: weatherDocument(environment, entry.reading, args.clock.nowMillis, entry.fetchedAt!, !!entry.failed, ctx) }
+      return { kind: 'svgScene', scene: weatherDocument({ ...environment, colors: themeColors(panelTheme(args.config), environment.colors) }, entry.reading, args.clock.nowMillis, entry.fetchedAt!, !!entry.failed, ctx) }
     },
   }
 }

@@ -1,0 +1,18 @@
+{
+  "defaults": { "operation": { "grid": "FN30" }, "qso": { "freq": 14074, "band": "20m" } },
+  "cases": [
+    { "label": "no location", "operation": {} },
+    { "label": "40 m: foF2 above", "qso": { "freq": 7074, "band": "40m" } },
+    { "label": "6 m: MUF below", "qso": { "freq": 50313, "band": "6m" } },
+    { "label": "2 m: no warning", "qso": { "freq": 144200, "band": "2m" } },
+    { "config": { "theme": "teal" }, "qso": { "freq": 50313, "band": "6m" } },
+    { "config": { "theme": "teal" }, "qso": { "freq": 7074, "band": "40m" } },
+    { "config": { "theme": "dark" } },
+    { "config": { "theme": "light" }, "app": "dark" },
+    { "config": { "days": "3" } },
+    { "config": { "days": "1" } },
+    { "config": { "metrics": false, "bands": false } },
+    { "config": { "sfi": false, "wind": false, "bands": false } },
+    { "locale": "es", "config": { "theme": "teal" } }
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "key": "ham2k-qrz",
   "name": "QRZ.com Callsign Lookups",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "api": 1,
   "description": "Looks up callsign details with a QRZ.com account",
   "category": "lookup",

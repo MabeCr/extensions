@@ -12,7 +12,8 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
-import { adifForExport, contestScorer, defineExtension, exportFilename, startMillisOf } from "@ham2k/extension-sdk"
+import { NO_RESTRICTIONS, rulesNote } from "@ham2k/lib-contest-rules"
+import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
   ExportOption,
@@ -30,12 +31,19 @@ import type {
 } from "@ham2k/extension-sdk"
 
 import { tFor } from "./i18n.ts"
-import { nextRunningYear, relevanceFor } from "./schedule.ts"
+import { fieldDayDate, nextRunningYear, relevanceFor } from "./schedule.ts"
 import { NFDScorer, TYPE, contestTitle, nfdMode, refOfType } from "./scorer.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
 
 const RULES_URL = 'https://nrrl.no/tema/field-day/regler-for-nasjonal-fieldday/'
+
+/// The contest's name in the Cabrillo log, the ADIF CONTEST_ID and file names.
+/// Neither Cabrillo nor ADIF registers one for NFD — NRRL asks for "en ren
+/// Cabrillo-fil" and reads it with its own Field Day Manager — so this is the
+/// name NRRL's own N1MM setup guide shows N1MM writing
+/// (nrrl.no/wp-content/uploads/NRRL_Field_Day_Oppsett_av_N1MM.pdf).
+const CONTEST_ID = 'NRRL-FIELDDAY'
 
 /// What a search has to contain to offer this event. Matched as "does the
 /// alias contain what was typed", so "fd" finds every field day and the date
@@ -93,6 +101,34 @@ function classDesignation(ref: Record<string, JSONValue> | undefined): string {
   return cls ? `${cls}${str(ref?.ourShelter).toUpperCase()}` : ''
 }
 
+/// `OPERATORS`: the calls typed at setup, uppercased and space-separated, with
+/// an `@station` kept as written. NRRL's summary sheet names every operator,
+/// and a Class A entry has at least two. Empty when nothing was typed, so the
+/// caller can fall back to the app's operator call.
+function declaredOperators(ref: Record<string, JSONValue> | undefined): string {
+  const typed = typeof ref?.operators === 'string' ? ref.operators : ''
+  return typed.toUpperCase().split(/[\s,;]+/).filter((call) => call).join(' ')
+}
+
+/// `CLUB`: the club or group name as typed, on one line.
+function declaredClub(ref: Record<string, JSONValue> | undefined): string {
+  return typeof ref?.club === 'string' ? ref.club.replace(/\s+/g, ' ').trim() : ''
+}
+
+/// The operator's name, email and club from their profile, for the Cabrillo
+/// header. All optional and free-form in the profile, so each may be ''. A
+/// host that cannot answer costs these lines, never the log itself.
+async function profileDetails(): Promise<{ name: string; email: string; club: string }> {
+  try {
+    const settings = (await host.getSettings()) as Record<string, JSONValue> | undefined
+    const line = (value: JSONValue | undefined) => str(value).replace(/\s+/g, ' ').trim()
+    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail), club: line(settings?.operatorClub) }
+  } catch (e) {
+    console.warn(`[nrrl-nfd] profile settings unavailable, exporting without name, email and profile club:`, e)
+    return { name: '', email: '', club: '' }
+  }
+}
+
 const ActivityHook = {
   /// Offered in the activity search by NAME and by NEARNESS. The date is a rule
   /// rather than a data file (`schedule.ts`), so this needs no download and is
@@ -117,7 +153,9 @@ const ActivityHook = {
         // A suggestion is persisted VERBATIM and never runs through
         // `decorateRef`, so everything the operation row reads has to be here.
         program: 'Contest',
-        name: t('activityDescription'),
+        // The day it opens, so the row says WHEN as well as what — the same
+        // `description • date` line the QSO parties show.
+        name: `${t('activityDescription')} • ${fieldDayDate(year)}`,
         label: `${t('activityLabel')} ${year}`,
         shortLabel: `NFD ${year}`,
         relevance: relevanceFor(now),
@@ -147,6 +185,8 @@ const ActivityHook = {
         label: t('runningLabel'),
         value: currentYear || String(nextRunningYear(Date.now())),
       },
+      // The rules say nothing of spotting assistance or self-spotting.
+      rulesNote(ctx, NO_RESTRICTIONS),
       {
         type: 'field',
         fieldType: 'select',
@@ -160,6 +200,21 @@ const ActivityHook = {
         key: 'ourShelter',
         label: t('shelterLabel'),
         options: SHELTERS.map((s) => ({ value: s.value, label: t(s.labelKey) })),
+      },
+      {
+        type: 'field',
+        fieldType: 'text',
+        key: 'operators',
+        label: t('operatorsLabel'),
+        placeholder: t('operatorsPlaceholder'),
+        uppercase: true,
+      },
+      {
+        type: 'field',
+        fieldType: 'text',
+        key: 'club',
+        label: t('clubLabel'),
+        placeholder: t('clubPlaceholder'),
       },
 
       { type: 'header', title: t('bonusesHeader') },
@@ -319,7 +374,7 @@ const AdifFieldsHook = {
     if (!refOfType(operation, TYPE)) return []
 
     const fields: { name: string; value: string }[] = [
-      { name: 'CONTEST_ID', value: 'NRRL-NFD' },
+      { name: 'CONTEST_ID', value: CONTEST_ID },
     ]
     const sent = ourSerial(qso)
     const received = theirExchange(qso)
@@ -346,7 +401,7 @@ function filenameFor(
 ): string {
   return exportFilename({
     stationCall: operation.stationCall,
-    activity: 'NRRL-NFD',
+    activity: CONTEST_ID,
     startAtMillis: startMillisOf(operation, qsos),
     extension,
     compact,
@@ -365,7 +420,7 @@ const ExportHook = {
     return [
       {
         exportType: `${TYPE}-adif`,
-        templateData: { activity: 'NRRL-NFD' },
+        templateData: { activity: CONTEST_ID },
         format: 'adif',
         label: t('adifExport', { contest: manifest.shortName }),
         filename: named('adi'),
@@ -374,7 +429,7 @@ const ExportHook = {
       },
       {
         exportType: `${TYPE}-cabrillo`,
-        templateData: { activity: 'NRRL-NFD' },
+        templateData: { activity: CONTEST_ID },
         format: 'cabrillo',
         label: t('cabrilloExport', { contest: manifest.shortName }),
         filename: named('log'),
@@ -399,12 +454,10 @@ const ExportHook = {
     if (args.exportType === `${TYPE}-cabrillo`) {
       const cls = str(opRef?.ourClass).toUpperCase()
       const designation = classDesignation(opRef)
+      const profile = await profileDetails()
       const content = qsonToCabrillo(args.qsos, {
         headers: [
-          // NFD has no REGISTERED Cabrillo contest name — NRRL asks for "en ren
-          // Cabrillo-fil" and reads it with their own Field Day Manager — so
-          // this is a descriptive identifier rather than one a checker knows.
-          ['CONTEST', 'NRRL-NFD'],
+          ['CONTEST', CONTEST_ID],
           ['CALLSIGN', ourCall],
           // Only the parts of the class that Cabrillo has fields for: the
           // letter is how many operators, the digit is the power bracket.
@@ -413,9 +466,16 @@ const ExportHook = {
           // Always: NFD is portable-only, mains power forbidden.
           ['CATEGORY-STATION', 'PORTABLE'],
           ['CATEGORY-MODE', 'MIXED'],
-          ['LOCATION', str(operation.grid)],
-          ['OPERATORS', str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          // "For foreign stations LOCATION must be 'DX'" (Cabrillo v3), as NRRL's
+          // own N1MM sample writes it; the locator has GRID-LOCATOR.
+          ['LOCATION', 'DX'],
+          // The calls listed at setup, else the app's own operator call.
+          ['OPERATORS', declaredOperators(opRef) || str((operation.local as Record<string, JSONValue>)?.operatorCall)],
           ['GRID-LOCATOR', str(operation.grid)],
+          // The club typed at setup, else the profile's.
+          ['CLUB', declaredClub(opRef) || profile.club],
+          ['NAME', profile.name],
+          ['EMAIL', profile.email],
           // The shelter subcategory has no Cabrillo field at all, so the full
           // NFD designation goes here — which is what NRRL's own contest
           // guidance suggests for the A–D class.

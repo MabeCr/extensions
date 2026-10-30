@@ -188,7 +188,9 @@ describe('finding it in the activity search', () => {
     }
   })
 
-  test('the suggestion carries everything the operation row shows', async () => {
+  test('the suggestion carries everything the operation row shows', async (t) => {
+    // October 2026: the next running is next year's.
+    t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 9, 19) })
     // A suggestion is persisted VERBATIM and never runs through
     // `decorateRef`, so a missing field reads as a blank row.
     const [suggestion] = await suggest('field day')
@@ -201,9 +203,13 @@ describe('finding it in the activity search', () => {
     // depending on how it was added.
     assert.equal(suggestion.shortLabel, `WFD ${suggestion.ref}`)
     // The row's second line says what the event IS — not a not-configured
-    // warning about something not yet added, and not the label again.
-    assert.ok(suggestion.name)
-    assert.ok(!String(suggestion.name).includes(String(suggestion.ref)))
+    // warning about something not yet added, and not the label again — and
+    // the day this running opens.
+    const [description, date] = String(suggestion.name).split(' • ')
+    assert.ok(description)
+    assert.ok(!description.includes(String(suggestion.ref)))
+    assert.equal(suggestion.ref, '2027')
+    assert.equal(date, '2027-01-30')
     assert.notEqual(suggestion.name, suggestion.label)
     assert.equal(typeof suggestion.relevance, 'number')
   })
@@ -243,4 +249,18 @@ describe('how a configured entry names itself', () => {
     // place those refs get one.
     assert.equal((await decorate(configured)).program, 'Contest')
   })
+})
+
+test("Winter Field Day rules out self-spotting for every entry, and leaves assistance to the operator", async () => {
+  const decorated = (await wfd.runHook("ref:wfd", "decorateRef", { ref: { type: "wfd", ref: "2027", ourClass: "1O", assistance: false } })) as Record<string, unknown>
+  assert.equal(decorated.selfSpotting, false)
+  assert.equal("assistance" in decorated, false)
+  // A suggestion is stored without being decorated, so it says the same.
+  const suggestions = (await wfd.runHook("activity", "suggest", { searchTerm: "winter" })) as Record<string, unknown>[]
+  assert.ok(suggestions.length > 0 && suggestions.every((s) => s.selfSpotting === false))
+
+  const controls = (await wfd.runHook("activity", "operationControls", { operation: { refs: [] } })) as {
+    input: { form: { elements: { type: string; text?: string }[] } }
+  }[]
+  assert.ok(controls[0].input.form.elements.some((el) => el.text === "🟢 Assistance: ON, 🔴 Self-spotting: OFF"))
 })

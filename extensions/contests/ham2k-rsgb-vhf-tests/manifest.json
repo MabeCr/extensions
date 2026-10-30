@@ -2,7 +2,7 @@
   "key": "ham2k-rsgb-vhf-tests",
   "name": "RSGB VHF Contests",
   "shortName": "RSGB VHF",
-  "version": "0.2.4",
+  "version": "0.2.7",
   "description": "RSGB's VHF/UHF/microwave contest family",
   "category": "contest",
   "icon": "flag-checkered",

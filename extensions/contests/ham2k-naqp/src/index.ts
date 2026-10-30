@@ -8,13 +8,16 @@
 // a name
 // and a location, and both are typed on every QSO.
 //
-// Its location set is inline (`locations.ts`), per docs/design/contests.md
-// §5.3's dataset table.
+// Its location set and lookup guesses are `@ham2k/lib-naqp-exchange`, which the
+// Phone Weekly Test shares; the set is bundled, not looked up, per
+// docs/design/contests.md §5.3's dataset table.
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
-import { adifForExport, annotateCallAgainstCountryFile, contestScorer, defineExtension, exportFilename, startMillisOf } from "@ham2k/extension-sdk"
+import { stampedExchange } from "@ham2k/lib-contest-exchange"
+import { adifForExport, annotateCallAgainstCountryFile, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
+  ActivitySuggestion,
   ExportOption,
   ExportOptionsRequest,
   ExportRequest,
@@ -24,11 +27,13 @@ import type {
   LoggingControlDescriptor,
   Ref,
   RefLink,
+  SuggestArgs,
 } from "@ham2k/extension-sdk"
+import { LOCATION_PATTERN, VALID_LOCATIONS, firstName, guessedLocation, guessedName, normalizeLocation, ourExchange } from "@ham2k/lib-naqp-exchange"
 
 import { tFor } from "./i18n.ts"
-import { firstName, guessedLocation, guessedName, normalizeLocation, ourExchange } from "./exchange.ts"
-import { LOCATION_PATTERN, VALID_LOCATIONS } from "./locations.ts"
+import { OPERATOR_CLASSES, POWER_CLASSES, cabrilloCategories, declaredOperators } from "./entry.ts"
+import { MODES, nearestMode, nextContestDate, relevanceFor } from "./schedule.ts"
 import { NAQPScorer, contestTitle } from "./scorer.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
@@ -38,6 +43,11 @@ import manifest from "../manifest.json" with { type: "json" }
 /// called: the manifest key names the package, `TYPE` names the activation.
 const TYPE = 'naqp'
 
+/// What a search has to contain to offer these contests. Matched as "does the
+/// alias contain what was typed", so "qso party" finds them among the state
+/// parties and the date ranking decides which mode comes first.
+const ALIASES = ['NAQP', 'NORTH AMERICAN QSO PARTY']
+
 function refOfType(container: Record<string, JSONValue>, type: string): Record<string, JSONValue> | undefined {
   return (((container.refs as Record<string, JSONValue>[] | undefined) ?? [])).find((r) => r?.type === type)
 }
@@ -46,7 +56,65 @@ function str(value: JSONValue | undefined): string {
   return typeof value === 'string' ? value : ''
 }
 
+/// The operator's name and email from their profile, for the Cabrillo header.
+/// Both optional and free-form in the profile, so each may be ''. A host that
+/// cannot answer costs these lines, never the log itself.
+async function profileDetails(): Promise<{ name: string; email: string }> {
+  try {
+    const settings = (await host.getSettings()) as Record<string, JSONValue> | undefined
+    const line = (value: JSONValue | undefined) => str(value).replace(/\s+/g, ' ').trim()
+    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail) }
+  } catch (e) {
+    console.warn(`[naqp] profile settings unavailable, exporting without profile name and email:`, e)
+    return { name: '', email: '' }
+  }
+}
+
+/// One select per axis of the entry, "Not declared" first.
+function entrySelects(t: (key: string) => string) {
+  const select = (key: string, options: readonly string[]) => ({
+    type: 'field' as const,
+    fieldType: 'select' as const,
+    key,
+    label: t(`${key}Label`),
+    value: '',
+    options: [{ value: '', label: t('notDeclared') }, ...options.map((value) => ({ value, label: t(`${key}_${value}`) }))],
+  })
+  return [select('operator', OPERATOR_CLASSES), select('power', POWER_CLASSES)]
+}
+
 const ActivityHook = {
+  /// Offered in the activity search by NAME and by NEARNESS — all three
+  /// modes, each ranked by its own next running, so in January CW leads and
+  /// in February RTTY.
+  ///
+  /// Nothing is offered to an operation that already runs NAQP: as in CQ WW,
+  /// the mode lives on the ref as `mode`, not `ref`, so the picker's duplicate
+  /// guard would let a tapped suggestion REPLACE the configured ref and lose
+  /// the name and location set up on it.
+  async suggest({ operation, searchTerm }: SuggestArgs, ctx: HookContext): Promise<ActivitySuggestion[]> {
+    if (refOfType(operation ?? {}, TYPE)) return []
+    const t = tFor(ctx)
+    const term = (searchTerm ?? '').trim().toUpperCase()
+    if (term && !ALIASES.some((alias) => alias.includes(term))) return []
+
+    const now = Date.now()
+    return MODES.map((mode) => ({
+      type: TYPE,
+      mode,
+      // A suggestion is persisted VERBATIM and never runs through
+      // `decorateRef`, so everything the operation row reads has to be here,
+      // and the labels must match what `decorateRef` composes.
+      program: 'Contest',
+      // The date is what tells the runnings apart at a glance — the same
+      // `description • date` line the QSO parties show.
+      name: `${t('activityDescription')} • ${nextContestDate(now, mode)}`,
+      label: `NAQP ${mode}`,
+      shortLabel: `NAQP ${mode}`,
+      relevance: relevanceFor(now, mode),
+    }))
+  },
+
   async operationControls(
     _args: { operation: Record<string, JSONValue> },
     ctx: HookContext,
@@ -70,6 +138,8 @@ const ActivityHook = {
                 fieldType: 'radio',
                 key: 'mode',
                 label: t('modeLabel'),
+                // Seeds a new setup only; a configured ref keeps its own mode.
+                value: nearestMode(Date.now()),
                 // NAQP runs these as separate contests on separate weekends.
                 options: [{ value: 'CW', label: 'CW' }, { value: 'SSB', label: 'SSB' }, { value: 'RTTY', label: 'RTTY' }],
               },
@@ -91,6 +161,17 @@ const ActivityHook = {
                 key: 'ourLocation',
                 label: t('ourLocationLabel'),
                 placeholder: t('ourLocationPlaceholder'),
+                uppercase: true,
+              },
+              // The entry we are making, for the Cabrillo header. Each starts
+              // undeclared: see entry.ts.
+              ...entrySelects(t),
+              {
+                type: 'field',
+                fieldType: 'text',
+                key: 'operators',
+                label: t('operatorsLabel'),
+                placeholder: t('operatorsPlaceholder'),
                 uppercase: true,
               },
               { type: 'markdown', text: t('rulesLink') },
@@ -171,41 +252,11 @@ const ActivityHook = {
     _ctx: HookContext,
   ): Promise<Record<string, JSONValue> | null> {
     if (!refOfType(args.operation, TYPE)) return null
-
     const their = ((args.qso.their as Record<string, JSONValue>) ?? {})
-    const qsoRef = refOfType(args.qso, TYPE)
-
-    // PRESENCE of each field, not its truthiness. The core writes `field: ''`
-    // when the operator empties one on purpose, and drops the key entirely when
-    // it was never filled in — so a present key, blank or not, is a decision,
-    // and guessing over it would put back what they just removed. The two
-    // halves decide independently: clearing a name doesn't re-guess a location.
-    const nameDecided = qsoRef !== undefined && 'name' in qsoRef
-    const locationDecided = qsoRef !== undefined && 'location' in qsoRef
-    const name = nameDecided ? firstName(qsoRef.name) : guessedName(their)
-    const location = locationDecided ? normalizeLocation(qsoRef.location) : guessedLocation(their)
-
-    if (!name && !location) {
-      // A deliberate blank still projects, so clearing an exchange on an edit
-      // clears the QSO row's column too instead of leaving the old value there.
-      return nameDecided || locationDecided ? { their: { exchange: '' } } : null
-    }
-
-    // Only the halves that actually carry something, or that the operator
-    // already decided. An object literal would put BOTH keys on the ref every
-    // time — stamping `location: ''` onto a QSO whose location simply couldn't
-    // be guessed yet, which the presence rule above then reads back forever as
-    // "the operator emptied this". The half would never be guessed again, and
-    // the state multiplier would be lost for good.
-    const refPatch: Record<string, JSONValue> = { type: TYPE }
-    if (name || nameDecided) refPatch.name = name
-    if (location || locationDecided) refPatch.location = location
-
-    return {
-      // Field-wise into our own ref; the core allows this extension no other.
-      refs: [refPatch],
-      their: { exchange: [name, location].filter((x) => x).join(' ') },
-    }
+    return stampedExchange(TYPE, refOfType(args.qso, TYPE), {
+      name: { read: firstName, guess: () => guessedName(their) },
+      location: { read: normalizeLocation, guess: () => guessedLocation(their) },
+    }, ({ name, location }) => [name, location].filter((x) => x).join(' '))
   },
 }
 
@@ -345,14 +396,20 @@ const ExportHook = {
     const ours = ourExchange(opRef)
 
     if (args.exportType === `${TYPE}-cabrillo`) {
+      const profile = await profileDetails()
       const content = qsonToCabrillo(args.qsos, {
         headers: [
           ['CONTEST', mode ? `NAQP-${mode}` : 'NAQP'],
           ['CALLSIGN', ourCall],
-          ['NAME', ours.name],
+          // The calls listed at setup, else the app's own operator call.
+          ['OPERATORS', declaredOperators(opRef) || str((operation.local as Record<string, JSONValue>)?.operatorCall)],
           ['LOCATION', ours.location],
-          ['OPERATORS', str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          ...cabrilloCategories(opRef),
           ['GRID-LOCATOR', str(operation.grid)],
+          // The sponsor's template has the operator's full name here, which
+          // the profile holds; the name we send stands in without one.
+          ['NAME', profile.name || ours.name],
+          ['EMAIL', profile.email],
         ],
         qsoParts: (qso) => {
           const qsoRef = refOfType(qso, TYPE)

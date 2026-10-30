@@ -19,6 +19,7 @@ const bunkers: Record<string, string[]> = { VE: ["B/CA-0001", "B/CA-0002"] }
 const wwbota = await loadExtension(() => import("./index.ts"), {
   hostCalls: {
     dbLookupSelectAll: (params) => (bunkers[params.subCategory as string] ?? []).map((key) => ({ key, name: key })),
+    dbLookupSelectOne: (params) => ({ key: params.key, name: "A bunker", lat: 50, lon: 14 }),
   },
 })
 
@@ -169,4 +170,16 @@ test("ADIF import keeps a reference that does not match the pattern", async () =
   assert.deepEqual(await importOne({ my_sig: "WWBOTA", my_sig_info: "not a reference" }), {
     refs: [{ type: "wwbotaActivation", ref: "NOT A REFERENCE", for: "operation" }],
   })
+})
+
+test("each national scheme's bunkers carry that scheme's own radius, and an unread scheme none", async () => {
+  // WWBOTA has no worldwide rule: a Czech bunker drawn at the UK's 1 km would
+  // put an activator 700 m outside what OKBOTA counts, and a guessed circle
+  // for a scheme nobody has read is worse than none.
+  const radius = async (ref: string) =>
+    ((await wwbota.runHook("ref:wwbotaActivation", "decorateRef", { ref: { type: "wwbotaActivation", ref } })) as Record<string, unknown>)
+      .activationRadiusInMeters
+  assert.equal(await radius("B/GM-0001"), 1000, "every UK prefix is UKBOTA's")
+  assert.equal(await radius("B/OK-0001"), 300)
+  assert.equal(await radius("B/S5-0001"), undefined)
 })

@@ -76,6 +76,8 @@ const { refHandler, activityHook, adifFieldsHook, adifImportHook } = referenceAc
   // Derived from the scorer's own rule, not a separate flag — the UI control
   // and the scorer can't disagree about whether this award allows n-fers.
   allowsMultiple: SIOTA_SCORING.allowsMultipleReferences,
+  // "The activation zone is within 1km of the silo" (silosontheair.com/rules.html).
+  activationRadius: { activationRadiusInMeters: 1000 },
 })
 
 const siotaDataFile: DataFileDefinition = {

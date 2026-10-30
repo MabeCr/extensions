@@ -116,7 +116,18 @@ test('a rover working the same call from a NEW grid is not a dupe — the trap t
   )
   assert.equal(first.score.value, 1)
   assert.equal(second.score.value, 1, 'a different our-grid makes this a fresh contact, not a dupe')
-  assert.equal(second.score.dupe, undefined)
+  assert.equal(second.score.dupe, false)
+  assert.equal(second.score.notices, undefined, 'the same band is not a new one')
+})
+
+// `dupe: false` makes the host's core scorer step aside, and with it goes the
+// "New Band" it would raise for a station worked before on another band — so
+// the contest raises it itself.
+test('a station worked before on another band is a new band', () => {
+  const ref = { type: 'arrl-vhf-tests', ref: 'ARRL-VHF-JAN' }
+  const { scores } = run([qso('K1ABC', '6m', 'FM18'), qso('K1ABC', '2m', 'FM18'), qso('K1XYZ', '2m', 'FM18')], { grid: 'FN31' }, ref)
+  assert.deepEqual(scores[1].notices, ['newBand'])
+  assert.equal(scores[2].notices, undefined, 'a station never worked is not a new band')
 })
 
 test('a malformed operation grid scores zero rather than throwing (gridToLocation throws on bad input)', () => {
@@ -154,7 +165,7 @@ test('10 GHz: a call re-worked on the same band from a NEW location earns distan
     { grid: 'FN31aa' },
     TEN_GIG,
   )
-  assert.equal(scores[1].dupe, undefined)
+  assert.equal(scores[1].dupe, false)
   assert.equal(scores[1].alerts, undefined)
   assert.equal(scores[1].value, scores[1].distance)
   assert.equal(sheet.qsoPoints, 100)

@@ -1,0 +1,38 @@
+{
+  "name": "@ham2k/lib-naqp-exchange",
+  "version": "0.1.0",
+  "description": "NAQP's exchange, a name and a location: the states, provinces and North American entities it accepts, which of them are multipliers, and the guesses from the callsign lookup and the country file",
+  "author": "Sebastian Delmont <sd@ham2k.com>",
+  "license": "MIT",
+  "type": "module",
+  "//exports": [
+    "Consumed as TypeScript source: the only consumers are extensions, which",
+    "esbuild bundles, so there is no build step and no dist/ to point at."
+  ],
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "node --import ../../scripts/sdk-node-resolve.mjs --experimental-strip-types --test 'src/**/*.test.ts'",
+    "typecheck": "tsc --noEmit"
+  },
+  "//peerDependencies": [
+    "The SDK is provided by the extension that consumes this package: its own",
+    "bundle carries one copy, rewritten to the host's instance at build time."
+  ],
+  "peerDependencies": {
+    "@ham2k/extension-sdk": "^1.12.0"
+  },
+  "devDependencies": {
+    "@ham2k/extension-sdk": "^1.12.0"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

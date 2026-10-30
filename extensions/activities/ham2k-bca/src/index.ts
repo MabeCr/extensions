@@ -41,6 +41,8 @@ const { refHandler, activityHook, adifFieldsHook, adifImportHook } = referenceAc
   linkUrl: (reference: string) => `https://www.gma.rocks/zinfo.php?ref=${encodeURIComponent(reference)}`,
   // One operation can activate several castles at once.
   allowsMultiple: true,
+  // "Within a distance of maximum 500m around the castle" (wcagroup.org/?page_id=358).
+  activationRadius: { activationRadiusInMeters: 500 },
 })
 
 /// 50 contacts activate a castle; a repeat counts again on a new band, mode or

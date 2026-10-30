@@ -1,8 +1,8 @@
 {
   "key": "ki2d-aprs-spotting",
-  "name": "APRS Self-Spotting",
+  "name": "KI2D’s APRS Self-Spotting",
   "shortName": "APRS",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "api": 1,
   "description": "Self-spots become an APRS position beacon naming your frequency and what you are activating — for aprs.fi and the QSO party mobile trackers",
   "category": "spots",
@@ -36,7 +36,7 @@
   },
   "translations": {
     "es": {
-      "name": "Auto-spots por APRS",
+      "name": "Auto-spots por APRS de KI2D",
       "description": "Cada auto-spot se convierte en una baliza de posición APRS con tu frecuencia y lo que estás activando — para aprs.fi y los rastreadores de móviles de los QSO parties",
       "keywords": [
         "spots",

@@ -115,6 +115,20 @@ const WWBOTA_SCORING = {
   p2pLabel: (ctx: HookContext) => tFor(ctx)('b2b'),
 }
 
+/// How far from a bunker each national scheme lets an activator be, by the
+/// reference's own country segment — each segment belongs to exactly one
+/// scheme in the list. WWBOTA publishes no worldwide rule, so a scheme whose
+/// rules have not been read draws no circle rather than a guessed one.
+/// UKBOTA (ukbota.net/rules), USBOTA and HBBOTA (wwbota.net), EIBOTA: 1 km;
+/// OKBOTA (okbota.cz rules, 2025-02): 300 m.
+const RADIUS_BY_SEGMENT: Record<string, number> = {
+  'B/G': 1000, 'B/GD': 1000, 'B/GI': 1000, 'B/GJ': 1000, 'B/GM': 1000, 'B/GU': 1000, 'B/GW': 1000,
+  'B/US': 1000,
+  'B/HB': 1000,
+  'B/EI': 1000,
+  'B/OK': 300,
+}
+
 const { refHandler, activityHook, adifFieldsHook, adifImportHook } = referenceActivity({
   key: 'wwbota',
   label: 'WWBOTA',
@@ -134,6 +148,10 @@ const { refHandler, activityHook, adifFieldsHook, adifImportHook } = referenceAc
   // Derived from the scorer's own rule, not a separate flag — the UI control
   // and the scorer can't disagree about whether this award allows n-fers.
   allowsMultiple: WWBOTA_SCORING.allowsMultipleReferences,
+  activationRadius: (row) => {
+    const meters = RADIUS_BY_SEGMENT[row.key.toUpperCase().split('-')[0]]
+    return meters ? { activationRadiusInMeters: meters } : undefined
+  },
 })
 
 function refsOfType(container: Record<string, unknown>, type: string): Ref[] {

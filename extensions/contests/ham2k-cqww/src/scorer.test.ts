@@ -159,9 +159,113 @@ test('the summary is titled as the operation is, over arithmetic that multiplies
   assert.equal((summary.cqww.longSummary as string).split('\n')[0], '2 QSOs, 6 pts × 4 mults (2 zones, 2 countries)')
 })
 
+test('the band table counts each band\'s zones and countries apart', () => {
+  // Two DL stations in zone 14 on 20m are one zone and one country there; a
+  // JA adds a second of each. 40m gets only the one DL.
+  const { sheet } = run([
+    qso('DL1ABC', '20m', 'SSB', '14'),
+    qso('DL2ABC', '20m', 'SSB', '14'),
+    qso('JA1ABC', '20m', 'SSB', '25'),
+    qso('DL1ABC', '40m', 'SSB', '14'),
+  ])
+  const summary = CQWWScorer.summarizeScore({ scoresheet: sheet, operation: usOperation, ref: ssbRef, scope: 'operation' }, ctx)
+  const lines = (summary.cqww.longSummary as string).split('\n')
+  assert.ok(lines.includes('| Band | QSOs | Pts | Zones | Ctry |'))
+  assert.ok(lines.includes('| --- | ---: | ---: | ---: | ---: |'), 'the counts are right-aligned')
+  assert.ok(lines.includes('| **20m** | 3 | 9 | 2 | 2 |'))
+  assert.ok(lines.includes('| **40m** | 1 | 3 | 1 | 1 |'))
+  assert.ok(lines.includes('| **10m** | — | — | — | — |'))
+})
+
 test('offers no per-day summary', () => {
   // Multipliers are counted across the whole contest, so a day's share of the
   // score is not a number CQ WW defines.
   const { sheet } = run([qso('DL1ABC')])
   assert.deepEqual(CQWWScorer.summarizeScore({ scoresheet: sheet, operation: usOperation, ref: ssbRef, scope: 'day' }, ctx), {})
+})
+
+// —— Countries as CQ WW counts them: DXCC plus WAE plus IG9/IH9 ——
+
+test('WAE countries and African Italy are countries of their own, on their own continent', () => {
+  const italy = { uuid: 'op', stationCall: 'I1ABC' }
+  const { scores, sheet } = run([qso('IT9ABC'), qso('IG9ABC'), qso('IH9P', '40m')], italy)
+  // Sicily is another country on our continent: 1 point, not the 0 of our own.
+  assert.equal(scores[0].value, 1)
+  // African Italy is in Africa: 3 points from Italy, and zone 33, not 15.
+  assert.equal(scores[1].value, 3)
+  assert.equal(scores[1].zone, '33')
+  assert.ok(Object.keys(sheet.mults).includes('20m|C*IT9'))
+  assert.ok(Object.keys(sheet.mults).includes('20m|C*IG9'))
+  // IH9 is the same multiplier as IG9.
+  assert.ok(Object.keys(sheet.mults).includes('40m|C*IG9'))
+})
+
+test('a maritime mobile station counts only for its zone', () => {
+  // Not "our own country" either, so not the 0 points a US station would be.
+  const { scores, sheet } = run([qso('W1ABC/MM', '20m', 'SSB', '8')])
+  assert.equal(scores[0].value, 2)
+  assert.deepEqual(Object.keys(sheet.mults), ['20m|Z8'])
+})
+
+// —— RTTY: its own points, its own bands, and a third multiplier ——
+
+const rttyRef = { type: 'cqww', mode: 'RTTY' }
+
+function rttyQso(call: string, band = '20m', extra: Record<string, JSONValue> = {}): Record<string, JSONValue> {
+  return { their: { call }, band, mode: 'RTTY', refs: [{ type: 'cqww', ...extra }] }
+}
+
+test('RTTY points: 1 for our own country, 2 on our continent with no NA exception, 3 beyond', () => {
+  const { scores } = run([rttyQso('W1AW'), rttyQso('VE3XYZ'), rttyQso('DL1ABC')], usOperation, rttyRef)
+  assert.deepEqual(scores.map((s) => s.value), [1, 2, 3])
+
+  const euOperation = { uuid: 'op', stationCall: 'DL0ABC' }
+  const { scores: eu } = run([rttyQso('EA4XYZ')], euOperation, rttyRef)
+  assert.equal(eu[0].value, 2)
+})
+
+test('RTTY runs on five bands: no 160m', () => {
+  const { scores } = run([rttyQso('DL1ABC', '160m'), rttyQso('DL1ABC', '80m')], usOperation, rttyRef)
+  assert.deepEqual(scores[0].alerts, ['invalidBand'])
+  assert.equal(scores[1].value, 3)
+})
+
+test('RTTY counts each W/VE QTH once per band, from W/VE stations only', () => {
+  const { sheet } = run(
+    [
+      rttyQso('W1AW', '20m', { theirZone: '5', theirQth: 'CT' }),
+      // A Canadian call area guessed from the prefix when nothing was typed.
+      rttyQso('VE3XYZ', '20m'),
+      // The rules' spelling is the same multiplier as the log's.
+      rttyQso('VE8ABC', '20m', { theirQth: 'NT' }),
+      rttyQso('VE8XYZ', '40m', { theirQth: 'NWT' }),
+      // Alaska is a country multiplier only; a DX station sends no QTH.
+      rttyQso('KL7ABC', '20m', { theirQth: 'AK' }),
+      rttyQso('DL1ABC', '20m', { theirQth: 'MA' }),
+    ],
+    usOperation,
+    rttyRef,
+  )
+  const qths = Object.keys(sheet.mults).filter((key) => key.includes('|Q')).sort()
+  assert.deepEqual(qths, ['20m|QCT', '20m|QNT', '20m|QON', '40m|QNT'])
+})
+
+test('the RTTY summary breaks out the QTH multipliers', () => {
+  const { sheet } = run([rttyQso('W1AW', '20m', { theirZone: '5', theirQth: 'CT' })], usOperation, rttyRef)
+  const summary = CQWWScorer.summarizeScore({ scoresheet: sheet, operation: usOperation, ref: rttyRef, scope: 'operation' }, ctx)
+  assert.equal((summary.cqww.longSummary as string).split('\n')[0], '1 QSO, 1 pt × 3 mults (1 zone, 1 country, 1 W/VE QTH)')
+})
+
+test('the RTTY band table adds the W/VE QTHs', () => {
+  const { sheet } = run([rttyQso('W1AW', '20m', { theirZone: '5', theirQth: 'CT' })], usOperation, rttyRef)
+  const summary = CQWWScorer.summarizeScore({ scoresheet: sheet, operation: usOperation, ref: rttyRef, scope: 'operation' }, ctx)
+  const lines = (summary.cqww.longSummary as string).split('\n')
+  assert.ok(lines.includes('| Band | QSOs | Pts | Zones | Ctry | QTHs |'))
+  assert.ok(lines.includes('| **20m** | 1 | 1 | 1 | 1 | 1 |'))
+  assert.ok(!lines.some((line) => line.startsWith('| **160m**')), 'no 160m on the RTTY weekend')
+})
+
+test('a QTH means nothing on the CW and SSB weekends', () => {
+  const { sheet } = run([qso('W1AW', '20m', 'SSB', '5')].map((q) => ({ ...q, refs: [{ type: 'cqww', theirZone: '5', theirQth: 'CT' }] })))
+  assert.ok(!Object.keys(sheet.mults).some((key) => key.includes('|Q')))
 })

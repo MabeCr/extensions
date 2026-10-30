@@ -36,6 +36,7 @@ export const PARTY: QsoPartyParams = {
   dcCountsAsMaryland: true,
   dxEntityIsMultiplier: true,
   multsPerBandMode: true,
+  selfSpotting: false,
   pointsByMode: { PHONE: 2, CW: 4, DATA: 0 },
   bonusStations: { VA7ODX: 20 },
   entryClasses: {

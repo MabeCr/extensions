@@ -93,6 +93,11 @@ export const RSGBVHFScorer: ContestScorer<RSGBVHFScoresheet> = {
       return { scoresheet: base, score: { value: 0, dupe: true, alerts: ['duplicate'] } }
     }
 
+    // Worked before, never on this band. The host's core scorer would say so,
+    // but steps aside for this verdict (`dupe: false` below), so it says so here.
+    const workedBands = Object.keys(base.worked).filter((k) => k.startsWith(`${call}|`)).map((k) => k.split('|')[1])
+    const newBand = workedBands.length > 0 && !workedBands.includes(band)
+
     // The same square as ours is a real, short-range contact the plain
     // great-circle formula would round down toward nothing — RSGB gives it a
     // flat floor instead.
@@ -140,7 +145,11 @@ export const RSGBVHFScorer: ContestScorer<RSGBVHFScoresheet> = {
       }
     }
 
-    const score: QsoScoreVerdict = { value, band, distance }
+    // `dupe: false` says this contact passed the contest's own duplicate test —
+    // a rover in a new square is not a repeat — which is what makes the host's
+    // core scorer step aside rather than mark it by call, band and mode.
+    const score: QsoScoreVerdict = { value, band, distance, dupe: false }
+    if (newBand) score.notices = ['newBand']
     return { scoresheet: base, score }
   },
 

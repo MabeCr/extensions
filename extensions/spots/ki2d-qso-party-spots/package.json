@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-ki2d-qso-party-spots",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "private": true,
   "description": "Ham2K Logger extension: QSO Party Hub and APRS Tracker spots",
   "author": "Sebastian Delmont <sd@ham2k.com>",
@@ -22,8 +22,8 @@
     "@ham2k/qso-parties": "^0.1.0"
   },
   "devDependencies": {
-    "@ham2k/extension-sdk": "^0.10.1",
-    "@ham2k/extension-tools": "^0.7.0",
+    "@ham2k/extension-sdk": "^1.12.0",
+    "@ham2k/extension-tools": "^1.12.0",
     "@ham2k/lib-format-tools": "^1.0.0",
     "@ham2k/lib-operation-data": "^1.0.0",
     "esbuild": "^0.25.5"

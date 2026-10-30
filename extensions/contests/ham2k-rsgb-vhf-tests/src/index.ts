@@ -36,9 +36,11 @@ import type {
   TitleSuggestion,
 } from "@ham2k/extension-sdk"
 
+import { rulesNotes, withRules } from "@ham2k/lib-contest-rules"
 import { GRID_PATTERN, REG1TEST_BAND, guessedGrid, qsonToReg1test, refOfType, serial as serialFor, str, trimmedGrid } from "@ham2k/lib-vhf-contests"
 
-import { EVENTS, eventFor, hasDistrictExchange, type RsgbVhfEvent } from "./events.ts"
+import { nextStartDate } from "./calendar.ts"
+import { EVENTS, contestRules, eventFor, hasDistrictExchange, type RsgbVhfEvent } from "./events.ts"
 import { tFor } from "./i18n.ts"
 import { RSGBVHFScorer, contestTitle } from "./scorer.ts"
 
@@ -60,19 +62,25 @@ function serial(qso: Record<string, JSONValue>, field: string): string {
 const ActivityHook = {
   async suggest({ searchTerm }: SuggestArgs, _ctx: HookContext): Promise<ActivitySuggestion[]> {
     const term = (searchTerm ?? '').trim().toUpperCase()
+    const now = Date.now()
     return EVENTS
       .filter((event) => !term
         || event.key.includes(term)
         || event.name.toUpperCase().includes(term)
         || event.short.toUpperCase().includes(term))
-      .map((event) => ({
+      .map((event) => withRules({
         type: TYPE,
         ref: event.key,
-        name: event.name,
+        // The date is what an operator scanning the list chooses by — the
+        // same `name • date` line the QSO parties show. Only here: the ref
+        // names the event, not a year's running, so `decorateRef` has no
+        // date to give it. An event the calendar does not date yet shows
+        // its name alone rather than a stale date.
+        name: [event.name, nextStartDate(event.key, now)].filter((part) => part).join(' • '),
         program: 'Contest',
         label: event.name,
         shortLabel: event.short,
-      }))
+      }, contestRules(event.key)))
   },
 
   async operationControls(
@@ -95,6 +103,8 @@ const ActivityHook = {
         value: currentKey || options[0]?.value,
         options,
       },
+      // What the rules allow, following the event above.
+      ...rulesNotes(ctx, 'ref', options.map((option) => option.value), contestRules),
     ]
 
     return [
@@ -216,8 +226,10 @@ const RefHandler = {
 
   async decorateRef({ ref }: { ref: Ref }, ctx: HookContext): Promise<Ref> {
     const event = eventFor(ref.ref)
-    if (!event) return { ...ref, program: 'Contest', label: tFor(ctx)('unconfigured') }
-    return { ...ref, ref: event.key, program: 'Contest', label: event.name, shortLabel: event.short, name: event.name }
+    // Through `withRules` even here: an event this release no longer knows
+    // must not keep the flags a restricted one left on the ref.
+    if (!event) return withRules({ ...ref, program: 'Contest', label: tFor(ctx)('unconfigured') }, contestRules(ref.ref))
+    return withRules({ ...ref, ref: event.key, program: 'Contest', label: event.name, shortLabel: event.short, name: event.name }, contestRules(event.key))
   },
 
   async suggestOperationTitle(

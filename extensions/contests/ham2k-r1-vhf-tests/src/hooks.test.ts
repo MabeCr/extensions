@@ -77,3 +77,25 @@ test('the contest ADIF is handed to the core writer alone, with the privacy choi
     assert.match(result.filename, /\.adi$/)
   }
 })
+
+test("each suggestion names the weekend its next running starts", async (t) => {
+  // New Year's Day: every running is this year's. July's Subregional is the
+  // first full weekend (the 4th) — app-polo's table had it on a Wednesday.
+  t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 0, 1) })
+  const suggestions = (await r1.runHook("activity", "suggest", {})) as { ref: string; name: string }[]
+  assert.deepEqual(Object.fromEntries(suggestions.map((s) => [s.ref, s.name])), {
+    "R1-VHF-SUB1-MARCH": "Subregional 1 - March • 2026-03-07",
+    "R1-VHF-SUB2-MAY": "Subregional 2 - May • 2026-05-02",
+    "R1-VHF-SUB3-JULY": "Subregional 3 - July • 2026-07-04",
+    "R1-VHF-50-JUNE": "50 MHz CW/SSB - June • 2026-06-20",
+    "R1-VHF-70-JULY": "70 MHz CW/SSB - July • 2026-07-18",
+    "R1-VHF-145-SEPTEMBER": "145 MHz CW/SSB - September • 2026-09-05",
+    "R1-VHF-UHF-OCTOBER": "UHF - October • 2026-10-03",
+    "R1-VHF-MARCONI-NOVEMBER": "Marconi Memorial CW 145 MHz - November • 2026-11-07",
+  })
+
+  // A week after a weekend, its suggestion offers next year's.
+  t.mock.timers.setTime(Date.UTC(2026, 9, 12))
+  const uhf = (await r1.runHook("activity", "suggest", { searchTerm: "uhf" })) as { name: string }[]
+  assert.equal(uhf[0].name, "UHF - October • 2027-10-02")
+})

@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/lib-qso-party",
-  "version": "0.1.0",
+  "version": "0.1.3",
   "description": "The shared QSO-party engine: scoring, exchange handling and submittable files for state, provincial and regional QSO parties",
   "author": "Sebastian Delmont <sd@ham2k.com>",
   "license": "MIT",
@@ -28,6 +28,7 @@
     "against an older one finds no writer at runtime."
   ],
   "dependencies": {
+    "@ham2k/lib-contest-rules": "^0.1.0",
     "@ham2k/lib-qson-cabrillo": "^1.2.0"
   },
   "//peerDependencies": [
@@ -35,10 +36,10 @@
     "bundle carries one copy, rewritten to the host's instance at build time."
   ],
   "peerDependencies": {
-    "@ham2k/extension-sdk": "^0.10.1"
+    "@ham2k/extension-sdk": "^1.12.0"
   },
   "devDependencies": {
-    "@ham2k/extension-sdk": "^0.10.1"
+    "@ham2k/extension-sdk": "^1.12.0"
   },
   "engines": {
     "node": ">=24"

@@ -22,11 +22,11 @@ export const HUB_BASE = 'http://qsopartyhub.com'
 export const SPOT_SOURCE = 'qp'
 
 export function hubTableUrl(party: QsoPartyIdentity): string {
-  return `${HUB_BASE}/${party.hubPage}-table.php`
+  return `${HUB_BASE}/${party.hubTablePage}-table.php`
 }
 
 export function hubSpotUrl(party: QsoPartyIdentity): string {
-  return `${HUB_BASE}/${party.hubPage}-spots.php`
+  return `${HUB_BASE}/${party.hubSpotPage}-spots.php`
 }
 
 /// Which of the parties sharing a hub page a county code belongs to. A row

@@ -41,6 +41,8 @@ const { refHandler, activityHook, adifFieldsHook, adifImportHook } = referenceAc
   linkUrl: (reference: string) => `https://www.gma.rocks/zinfo.php?ref=${encodeURIComponent(reference)}`,
   // One operation can activate several castles at once.
   allowsMultiple: true,
+  // "No more than 1km away" from the castle (englishcastlesawards.uk/rules).
+  activationRadius: { activationRadiusInMeters: 1000 },
 })
 
 /// 50 contacts activate a castle. app-polo hand-writes this scorer rather than

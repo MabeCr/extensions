@@ -12,10 +12,10 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 
-import { normalizeLocation } from "./exchange.ts"
-import { NAQPScorer } from "./scorer.ts"
-import { VALID_LOCATIONS, isMultiplier } from "./locations.ts"
 import type { JSONValue } from "@ham2k/extension-sdk"
+import { VALID_LOCATIONS, isMultiplier, normalizeLocation } from "@ham2k/lib-naqp-exchange"
+
+import { NAQPScorer } from "./scorer.ts"
 
 const ctx = { online: false } as never
 

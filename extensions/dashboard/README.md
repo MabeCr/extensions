@@ -1,24 +1,41 @@
 # Dashboard extensions
 
-`ham2k-custom-text` provides the text panel. The three SVG reference panels
-live here rather than being bundled into HaLo:
+`ham2k-custom-text` provides the text panel. The `ki2d-` panels live here
+rather than being bundled into HaLo — three SVG reference panels, and a rate
+chart and a band map drawn as the app's native panel scenes:
 
 - `ki2d-weather-panel`: forecast, hourly inspection and weather icons.
-- `ki2d-solar-panel`: solar conditions, propagation and history charts.
+- `ki2d-solar-panel`: solar conditions, propagation, MUF and foF2 from the
+  nearest ionosonde (KC2G), and history charts, each row and the theme chosen
+  per placement.
 - `ki2d-radio-panel`: a radio front panel, including Modern/LCD displays, radio
   selection, tuning, connection controls and received-signal metering.
   Its manifest declares `requiresRadioWrite`: the host refuses the radio
   calls to an extension that does not, and names the claim at install.
+- `ki2d-rate-chart`: QSO rates over the trailing 10 and 60 minutes and the
+  last 10 contacts, with peaks, lows, a rate goal, and a chart per operator
+  for multi-operator stations.
+- `ki2d-band-map`: the spots on a band along a scale of its frequencies, over
+  the radio's panadapter where its scope is on the band, zoomed and scrolled
+  natively; a click puts the station into the logging fields. Needs extension
+  API 12 (Ham2K Logger with scrolling scenes and `host.suggestQso`).
 
-`km4be-fuzzy-search` is a markdown panel: type part of a callsign and it lists
-the stations in the current operation's log that contain it, as a table with one row each, with
-the matching letters in bold. It is view only,
-since a panel cannot write to the call field, and it searches one operation,
-since the SDK reads the log per operation. Its keys follow the same
-`<callsign>-<name>` convention, so it needs no `--force-name` and can be
-side-loaded for testing.
+The weather, solar and rate panels each offer a theme per placement —
+Automatic, Light, Dark or Teal — from `packages/lib-panel-themes`.
 
-All three SVG panels are published to the extension catalog at
+Three more panels are written by km4be in this fork, and published to the catalog under their own keys:
+
+- `km4be-fuzzy-search`: a markdown panel. Type part of a callsign and it lists the stations in the current
+  operation's log that contain it, as a table with one row each and the matching letters in bold. It is view
+  only, since a panel cannot write to the call field, and it searches one operation, since the SDK reads the
+  log per operation.
+- `km4be-spot-maps`: the spots of POTA activators on a map, in the style of the operation map, that moves and
+  zooms, with a tap on a pin for the activator and the park.
+- `km4be-satellite-info`: the next amateur satellite passes for where the operator is, with a sky plot that
+  can be scrubbed along for the Doppler shift, the frequencies and transponder kind of each satellite,
+  AMSAT's reports, and a page to send a report to AMSAT.
+
+All of them are published to the extension catalog at
 [catalog.ham2k.net](https://catalog.ham2k.net). Their keys follow the
 `<callsign>-<name>` convention, so a packed `.h2kext` also installs from a file
 like any other extension; manage them under Features & Extensions. They need
@@ -40,6 +57,21 @@ npm run pack --workspace @ham2k/ext-ki2d-radio-panel
 ```
 
 The same three scripts exist for `@ham2k/ext-ki2d-weather-panel` and
-`@ham2k/ext-ki2d-solar-panel`. A new release goes to the catalog with
+`@ham2k/ext-ki2d-solar-panel`.
+
+To see a panel while working on it, preview it in a browser:
+
+```sh
+node scripts/preview-panels.mjs extensions/dashboard/ki2d-solar-panel
+```
+
+It serves every panel the extension registers at http://localhost:4417/, at
+several pane sizes in light and dark, and rebuilds and re-renders on each
+change to the source. Hovering a chart inspects it, and buttons send their
+events to the panel. A `preview.json` beside the manifest adds cases (an
+operation, a QSO, a placement's settings, a locale); the script's header
+describes its fields. Network responses are cached for 15 minutes, radio
+panels see a demo radio, and the browser lays out the text, so check spacing
+on a device before calling it final. A new release goes to the catalog with
 `h2kext-publish`, under a new version: a version's bundle is frozen once the
 catalog approves it.

@@ -1,7 +1,7 @@
 {
   "key": "ham2k-lookup",
   "name": "Ham2K Lookup Service",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "api": 1,
   "description": "Free callsign lookups from Ham2K's service, currently covering the US, Canada, Germany and Norway",
   "category": "lookup",

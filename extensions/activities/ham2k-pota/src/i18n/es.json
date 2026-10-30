@@ -8,5 +8,12 @@
   "activationControl": "Activación POTA",
   "park": "parque",
   "parksPlural": "parques",
-  "p2p": "P2P"
+  "p2p": "P2P",
+  "useDevServers": "Usar los servidores de prueba de POTA",
+  "useDevServersDescription": "Los spots y las búsquedas de parques van a devapi.pota.app; los spots se leen de ambos servidores",
+  "oneParkHunted": "1 parque cazado",
+  "manyParksHunted": "{{formatted}} parques cazados",
+  "httpError": "La API de POTA respondió HTTP {{status}}",
+  "postRefused": "POTA rechazó el spot para {{calls}}",
+  "alreadyPosted": "{{count}} spot(s) sí se publicaron."
 }

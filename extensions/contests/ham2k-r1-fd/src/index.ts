@@ -12,7 +12,8 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
-import { adifForExport, contestScorer, defineExtension, exportFilename, startMillisOf } from "@ham2k/extension-sdk"
+import { rulesNotes, withRules, type ContestRules } from "@ham2k/lib-contest-rules"
+import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
   ExportOption,
@@ -30,7 +31,7 @@ import type {
 } from "@ham2k/extension-sdk"
 
 import { tFor } from "./i18n.ts"
-import { MODES, nextRunningYear, relevanceFor } from "./schedule.ts"
+import { MODES, fieldDayDate, nextRunningYear, relevanceFor } from "./schedule.ts"
 import { R1FDScorer, TYPE, contestTitle, modeOfRef, refOfType, yearOfRef } from "./scorer.ts"
 import type { R1FdMode } from "./schedule.ts"
 
@@ -59,6 +60,43 @@ function serial(qso: Record<string, JSONValue>, field: string): string {
   return /^\d+$/.test(digits) ? String(parseInt(digits, 10)) : ''
 }
 
+/// `OPERATORS`: the calls typed at setup, uppercased and space-separated, with
+/// an `@station` kept as written. A club, special or short call has to list
+/// every operator in the log, and a multi-operator entry must use a club call.
+/// Empty when nothing was typed, so the caller can fall back to the app's
+/// operator call.
+function declaredOperators(ref: Record<string, JSONValue> | undefined): string {
+  const typed = typeof ref?.operators === 'string' ? ref.operators : ''
+  return typed.toUpperCase().split(/[\s,;]+/).filter((call) => call).join(' ')
+}
+
+/// `CLUB`: the club name as typed, on one line.
+function declaredClub(ref: Record<string, JSONValue> | undefined): string {
+  return typeof ref?.club === 'string' ? ref.club.replace(/\s+/g, ' ').trim() : ''
+}
+
+/// The operator's name, email and club from their profile, for the Cabrillo
+/// header. All optional and free-form in the profile, so each may be ''. A
+/// host that cannot answer costs these lines, never the log itself.
+async function profileDetails(): Promise<{ name: string; email: string; club: string }> {
+  try {
+    const settings = (await host.getSettings()) as Record<string, JSONValue> | undefined
+    const line = (value: JSONValue | undefined) => str(value).replace(/\s+/g, ' ').trim()
+    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail), club: line(settings?.operatorClub) }
+  } catch (e) {
+    console.warn(`[r1-fd] profile settings unavailable, exporting without name, email and profile club:`, e)
+    return { name: '', email: '', club: '' }
+  }
+}
+
+/// What the rules allow an entry that ticked Assisted [assisted] or not. A
+/// non-assisted station may not use "chat-rooms, DX clusters, the RBN network,
+/// remote receivers, skimmers and other support functions" (DARC rules §6).
+/// The rules say nothing of self-spotting, so they leave it to the operator.
+function contestRules(assisted: JSONValue | undefined): ContestRules {
+  return { assistance: assisted === true, selfSpotting: true }
+}
+
 /// The next running of [mode] as a ref key, "SSB-2026".
 function nextRunningKey(nowMillis: number, mode: R1FdMode): string {
   return `${mode}-${nextRunningYear(nowMillis, mode)}`
@@ -77,6 +115,17 @@ function runningLabel(t: (key: string, args?: Record<string, string>) => string,
   return [t(mode === 'CW' ? 'cwRunning' : 'ssbRunning'), year].filter((part) => part).join(' ')
 }
 
+/// The row's second line: what the event is, and the day this running opens —
+/// the same `description • date` line the QSO parties show. `suggest` and
+/// `decorateRef` both compose it here: a suggestion is persisted verbatim, so
+/// the same running has to read the same however it was added.
+function runningName(t: (key: string, args?: Record<string, string>) => string, refKey: string): string {
+  const mode = modeOfRef(refKey)
+  const year = yearOfRef(refKey)
+  if (!mode || !year) return t('activityDescription')
+  return `${t('activityDescription')} • ${fieldDayDate(Number(year), mode as R1FdMode)}`
+}
+
 const ActivityHook = {
   /// Offered in the activity search by NAME and by NEARNESS — both runnings,
   /// each ranked by its own date, so in August the SSB event leads and typing
@@ -89,7 +138,9 @@ const ActivityHook = {
     const now = Date.now()
     return MODES.map((mode) => {
       const key = nextRunningKey(now, mode)
-      return {
+      // Saved undecorated, and a setup nobody ticked Assisted on is the
+      // non-assisted claim the Cabrillo header makes.
+      return withRules({
         type: TYPE,
         // The picker's duplicate guard compares type+ref, and the setup form
         // writes the same key, so both add-paths produce a ref the core
@@ -98,11 +149,11 @@ const ActivityHook = {
         // A suggestion is persisted VERBATIM and never runs through
         // `decorateRef`, so everything the operation row reads has to be here.
         program: 'Contest',
-        name: t('activityDescription'),
+        name: runningName(t, key),
         label: `${t('activityLabel')} ${runningLabel(t, key)}`,
         shortLabel: `R1FD ${mode}`,
         relevance: relevanceFor(now, mode),
-      }
+      }, contestRules(undefined))
     })
   },
 
@@ -132,6 +183,8 @@ const ActivityHook = {
         value: currentKey || nextRunningKey(now, nearestMode(now)),
         options,
       },
+      // What the rules allow, following the Assisted box below.
+      ...rulesNotes(ctx, 'ourAssisted', [true, false], contestRules),
       // The two-axis entry category. Station type feeds the scorer —
       // fixed-to-fixed is worth zero, so it changes every verdict — while the
       // rest only describe the entry to the Cabrillo CATEGORY headers.
@@ -150,7 +203,7 @@ const ActivityHook = {
         type: 'field',
         fieldType: 'select',
         key: 'ourOperators',
-        label: t('operatorsLabel'),
+        label: t('operatorClassLabel'),
         options: [
           { value: 'SINGLE-OP', label: t('operatorsSingle') },
           { value: 'MULTI-OP', label: t('operatorsMulti') },
@@ -172,6 +225,21 @@ const ActivityHook = {
         fieldType: 'checkbox',
         key: 'ourAssisted',
         label: t('assistedLabel'),
+      },
+      {
+        type: 'field',
+        fieldType: 'text',
+        key: 'operators',
+        label: t('operatorsLabel'),
+        placeholder: t('operatorsPlaceholder'),
+        uppercase: true,
+      },
+      {
+        type: 'field',
+        fieldType: 'text',
+        key: 'club',
+        label: t('clubLabel'),
+        placeholder: t('clubPlaceholder'),
       },
       { type: 'markdown', text: t('rulesLink', { url: RULES_URL }) },
     ]
@@ -265,13 +333,13 @@ const RefHandler = {
     const t = tFor(ctx)
     const key = str(ref.ref as JSONValue)
     const mode = modeOfRef(key)
-    return {
+    return withRules({
       ...ref,
       program: 'Contest',
-      name: t('activityDescription'),
+      name: runningName(t, key),
       label: [t('activityLabel'), runningLabel(t, key)].filter((part) => part).join(' '),
       shortLabel: mode ? `R1FD ${mode}` : 'R1FD',
-    }
+    }, contestRules(ref.ourAssisted))
   },
 
   async suggestOperationTitle({ ref }: { ref: Ref }, ctx: HookContext): Promise<TitleSuggestion | null> {
@@ -384,6 +452,7 @@ const ExportHook = {
       // The CATEGORY block the DARC's sample logs show; the checker reads the
       // entry class from these lines, not from a claimed-category name.
       const mode = modeOfRef(str(opRef?.ref))
+      const profile = await profileDetails()
       const content = qsonToCabrillo(args.qsos, {
         headers: [
           ['CONTEST', contestIdFor(operation)],
@@ -393,8 +462,13 @@ const ExportHook = {
           ['CATEGORY-POWER', str(opRef?.ourPower)],
           ['CATEGORY-ASSISTED', opRef?.ourAssisted === true ? 'ASSISTED' : 'NON-ASSISTED'],
           ['CATEGORY-MODE', mode],
-          ['OPERATORS', str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          // The calls listed at setup, else the app's own operator call.
+          ['OPERATORS', declaredOperators(opRef) || str((operation.local as Record<string, JSONValue>)?.operatorCall)],
           ['GRID-LOCATOR', str(operation.grid)],
+          // The club typed at setup, else the profile's.
+          ['CLUB', declaredClub(opRef) || profile.club],
+          ['NAME', profile.name],
+          ['EMAIL', profile.email],
         ],
         qsoParts: (qso) => [
           ourCall || '-',

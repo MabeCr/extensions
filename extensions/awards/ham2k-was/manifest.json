@@ -1,0 +1,39 @@
+{
+  "key": "ham2k-was",
+  "name": "WAS: Worked All States",
+  "shortName": "WAS",
+  "version": "0.1.0",
+  "description": "Chase ARRL's Worked All States: the states you have worked, confirmed and had credited, by band and mode",
+  "category": "award",
+  "icon": "map",
+  "accentColor": "#1f5fa8",
+  "api": 9,
+  "keywords": [
+    "was",
+    "states",
+    "award",
+    "arrl"
+  ],
+  "hooks": [
+    "chasing"
+  ],
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  },
+  "translations": {
+    "es": {
+      "description": "Persigue el Worked All States de ARRL: los estados trabajados, confirmados y acreditados, por banda y modo",
+      "keywords": [
+        "estados",
+        "diploma"
+      ]
+    }
+  }
+}

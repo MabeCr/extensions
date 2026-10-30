@@ -70,7 +70,7 @@ const Hook: SpotsHook = {
     // is an error, which is what a hub outage during a party looks like.
     // Hub pages are fetched once each — four May parties share `in7qpne_de`.
     const hubPages = new Map<string, QsoPartyIdentity[]>()
-    for (const party of parties) hubPages.set(party.hubPage, [...(hubPages.get(party.hubPage) ?? []), party])
+    for (const party of parties) hubPages.set(party.hubTablePage, [...(hubPages.get(party.hubTablePage) ?? []), party])
     const results = await Promise.allSettled([
       ...[...hubPages.values()].map((sharing) => fetchHubSpots(sharing)),
       ...parties.map((party) => fetchTrackerSpots(party, now)),

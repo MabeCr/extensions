@@ -10,7 +10,7 @@ import assert from "node:assert/strict"
 
 import type { JSONValue } from "@ham2k/extension-sdk"
 
-import { eventRefIn, isOurRef, ourPark, theirExchange, theirPark, theirParkWasDecided } from "./parks.ts"
+import { eventRefIn, isOurRef, ourPark, theirExchange, theirPark } from "./parks.ts"
 
 test("ours is our own type, or the combined extension's ref naming Ohio", () => {
   assert.equal(isOurRef({ type: 'ohspota' }), true)
@@ -43,7 +43,7 @@ test("a typed exchange that is not a park claims nothing, and is still what was 
 })
 
 test("a deliberate blank is a decision; a missing field is not", () => {
-  assert.equal(theirParkWasDecided({ refs: [{ type: 'ohspota', park: '' }] }), true)
-  assert.equal(theirParkWasDecided({ refs: [{ type: 'ohspota' }] }), false)
+  assert.equal(theirExchange({ refs: [{ type: 'ohspota', park: '' }, { type: 'pota', ref: 'US-1932' }] }), '')
+  assert.equal(theirExchange({ refs: [{ type: 'ohspota' }, { type: 'pota', ref: 'US-1932' }] }), 'ADA')
   assert.equal(theirPark({ refs: [{ type: 'pota', ref: 'US-1932' }] }), 'ADA')
 })

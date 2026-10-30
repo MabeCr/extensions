@@ -27,13 +27,15 @@ const BEERSEL = {
   data: { location: "Vlaams-Brabant", grid: "JO20eq" },
 }
 
+const PIERREFONDS = { key: "F-00134", name: "Château de Pierrefonds", lat: 49.347, lon: 2.98, flags: 1, data: {} }
+
 let lookups = 0
 
 const wca = await loadExtension(() => import("./index.ts"), {
   hostCalls: {
     dbLookupSelectOne: (params) => {
       lookups++
-      return params.key === BEERSEL.key ? BEERSEL : null
+      return params.key === BEERSEL.key ? BEERSEL : params.key === PIERREFONDS.key ? PIERREFONDS : null
     },
   },
 })
@@ -171,4 +173,12 @@ test("fifty contacts activate a castle, and there is no hunting tally", async ()
   assert.equal(result.operationSummary.activation?.summary, "50 ✓")
   assert.equal(result.operationSummary.activation?.activated, true)
   assert.equal(result.operationSummary.hunting, undefined)
+})
+
+test("a Belgian castle keeps its national 500 m; every other castle is WCA's 1 km", async () => {
+  // WCA's own rule is 1 km, but it keeps the rules national programs had
+  // before it — and Belgium's castles were activated within 500 m. Drawn at
+  // 1 km, a Belgian activator could set up where BCA would not count it.
+  assert.equal((await decorate("wcaActivation", "ON-00558")).activationRadiusInMeters, 500)
+  assert.equal((await decorate("wcaActivation", "F-00134")).activationRadiusInMeters, 1000)
 })
