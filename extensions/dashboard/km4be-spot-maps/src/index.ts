@@ -16,7 +16,7 @@ import type { HookContext, JSONValue, PanelContent, PanelDescriptor, PanelHook, 
 
 import manifest from "../manifest.json" with { type: "json" }
 import { loadBoard } from "./board.ts"
-import { geometryOf, openingView, regionView, REGIONS, scrollIn, zoomedBy, ZOOM_STEP } from "./geo.ts"
+import { geometryOf, openingView, pannedBy, regionOf, regionView, scrollIn, zoomedBy, ZOOM_STEP } from "./geo.ts"
 import type { Pane, View } from "./geo.ts"
 import { PREVIEW_SVG } from "./preview.ts"
 import { buildScene, chromeOf, DOT_PREFIX, linesOf } from "./scene.ts"
@@ -80,12 +80,9 @@ async function snapshot(args: PanelRenderArgs, ctx: HookContext): Promise<MapMod
   const chosen = shown.find((s) => s.call === state.selected)
 
   const view = state.view ?? openingView(pane, chrome, args.operation?.grid)
-  const g = geometryOf(pane, chrome, view.zoom)
+  const g = geometryOf(pane, chrome, view.zoom, view.cy)
   const scroll = scrollIn(g, view.scroll)
-  const region = REGIONS.find((r) => {
-    const v = regionView(pane, chrome, r.value)
-    return v && Math.abs(v.zoom - g.zoom) < 0.001 && Math.abs(v.scroll - scroll) < 1
-  })
+  const region = regionOf(pane, chrome, { zoom: g.zoom, scroll, cy: g.cy })
 
   const said = board.available
     ? summary(shown.length, board.spots.length, board.total - board.spots.length, state.band)
@@ -152,7 +149,8 @@ export const SpotMapPanel: PanelHook = {
     const chrome = chromeOf(linesOf(args.environment))
     const current = (): View => {
       const view = state.view ?? openingView(pane, chrome, args.operation?.grid)
-      return { zoom: view.zoom, scroll: scrollIn(geometryOf(pane, chrome, view.zoom), view.scroll) }
+      const g = geometryOf(pane, chrome, view.zoom, view.cy)
+      return { zoom: g.zoom, scroll: scrollIn(g, view.scroll), cy: g.cy }
     }
     let moved = false
 
@@ -161,7 +159,7 @@ export const SpotMapPanel: PanelHook = {
     // Where the operator has scrolled to, once it has come to rest: kept, and not sent back as a change.
     if (event.action === "scrolled" && typeof event.value === "number" && Number.isFinite(event.value)) {
       const view = current()
-      state.view = { zoom: view.zoom, scroll: scrollIn(geometryOf(pane, chrome, view.zoom), event.value) }
+      state.view = { ...view, scroll: scrollIn(geometryOf(pane, chrome, view.zoom, view.cy), event.value) }
       return { values: {} }
     }
     // A drag along the strip, come to rest: the zoom changes by the factor it says, about the middle of the pane.
@@ -171,6 +169,9 @@ export const SpotMapPanel: PanelHook = {
     }
     if (event.action === "zoomIn") (state.view = zoomedBy(pane, chrome, current(), ZOOM_STEP)), (moved = true)
     if (event.action === "zoomOut") (state.view = zoomedBy(pane, chrome, current(), 1 / ZOOM_STEP)), (moved = true)
+    // The band of latitudes moves up or down; across, the scene's own scroll does that.
+    if (event.action === "panUp") (state.view = pannedBy(pane, chrome, current(), -1)), (moved = true)
+    if (event.action === "panDown") (state.view = pannedBy(pane, chrome, current(), 1)), (moved = true)
     if (event.action === "region" && event.text !== undefined) {
       const view = regionView(pane, chrome, event.text)
       if (view) (state.view = view), (moved = true)

@@ -56,6 +56,10 @@ export const WORLD_SVG =
   `<path d="${LAND_PATH}" fill="#2b3f4f" stroke="none"/>` +
   `<path d="${BORDER_PATH}" fill="none" stroke="#4d6577" stroke-width="0.3"/></svg>`
 
+/// The world cut to a band of latitudes: the map units from `top` down, `height` of them.
+export const worldSvg = (top: number, height: number): string =>
+  WORLD_SVG.replace(`viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}"`, `viewBox="0 ${+top.toFixed(2)} ${MAP_WIDTH} ${+height.toFixed(2)}" preserveAspectRatio="none"`)
+
 export interface MapModel {
   pane: Pane
   lines: Lines
@@ -96,11 +100,11 @@ export function buildScene(m: MapModel): PanelScene {
   const H = Math.round(pane.height)
   const chrome = g.chrome
   const bandBottom = H - chrome.bottom
-  const layers: PanelScene["layers"] = [{ id: "world", x: g.x0, y: g.y0, width: g.mapWidth, height: g.mapHeight, stretch: true, svg: WORLD_SVG }]
+  const layers: PanelScene["layers"] = [{ id: "world", x: g.x0, y: g.y0, width: g.mapWidth, height: g.mapHeight, stretch: true, svg: worldSvg(g.winTop, g.winHeight) }]
   const controls: PanelSceneControl[] = []
 
   // The stations, oldest first so that the newest is on top where they overlap, as a layer and a tap area each.
-  const shown = m.spots.slice(0, MAX_DOTS).reverse()
+  const shown = m.spots.filter((s) => sceneOf(g, s.lat, s.lon).inside).slice(0, MAX_DOTS).reverse()
   const size = DOT_RADIUS * 2 + 4
   for (const s of shown) {
     const p = sceneOf(g, s.lat, s.lon)
@@ -130,6 +134,8 @@ export function buildScene(m: MapModel): PanelScene {
     [
       ["zoomIn", "Zoom in", "M11 18h14M18 11v14", g.zoom < g.zoomMax - 0.0001],
       ["zoomOut", "Zoom out", "M11 18h14", g.zoom > 1.0001],
+      ["panUp", "Show farther north", "M11 21l7 -7l7 7", g.canPan && g.winTop > 0.01],
+      ["panDown", "Show farther south", "M11 15l7 7l7 -7", g.canPan && g.winTop + g.winHeight < MAP_HEIGHT - 0.01],
     ] as const
   ).map(([id, label, glyph, on], i) => {
     const y = chrome.top + 4 + i * (ZOOM_BUTTON + 6)

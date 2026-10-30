@@ -232,12 +232,13 @@ test("it opens on the operator's side of the world, zoomed, when the operation h
   assert.equal(none.width, 390)
   assert.equal(none.values.scroll, 0)
   const home = (await (await panel([spot("A1A")], { grid: "FN31pr" })).render()).scene
-  assert.ok(Math.abs(home.width - 780) < 2, `${home.width}: zoom 2`)
+  assert.ok(Math.abs(home.width - 1560) < 2, `${home.width}: zoom 4`)
   assert.ok(home.values.scroll > 0 && home.values.scroll < home.width - 390, "scrolled to somewhere inside the scene")
   assert.equal(home.strings.region, "", "a view of its own, not one of the regions")
-  // A pane on its side has nothing to zoom into, and opens on the world anyway.
+  // A pane on its side opens as far in, and is as tall as the pane.
   const flat = (await (await panel([spot("A1A")], { grid: "FN31pr", environment: sideways })).render()).scene
-  assert.equal(flat.width, 800)
+  assert.ok(flat.width > 800 && flat.height === sideways.height)
+  assert.ok(flat.layers.some((l) => l.id === "dot:A1A"), "the operator's own side of the world has its stations in view")
 })
 
 test("each dot is a layer and a tap area of its own, a fingertip wide and inside the scene", async () => {
@@ -255,10 +256,10 @@ test("each dot is a layer and a tap area of its own, a fingertip wide and inside
 
 test("the controls stay where they are as the map scrolls, and the dropdowns, text and button are among them", async () => {
   const { scene } = await (await panel([spot("A1A")])).render()
-  for (const id of ["band", "region", "summary", "details", "log", "zoomIn", "zoomOut"]) assert.equal(scene.controls.find((c) => c.id === id)!.fixed, true, `${id} stays`)
+  for (const id of ["band", "region", "summary", "details", "log", "zoomIn", "zoomOut", "panUp", "panDown"]) assert.equal(scene.controls.find((c) => c.id === id)!.fixed, true, `${id} stays`)
   assert.equal(scene.layers.find((c) => c.id === "chrome")!.fixed, true)
   assert.deepEqual(scene.controls.find((c) => c.id === "band")!.options!.slice(0, 2).map((o) => o.value), ["all", "160m"])
-  assert.deepEqual(scene.controls.find((c) => c.id === "region")!.options!.map((o) => o.value), ["world", "north-america", "south-america", "europe", "africa", "asia", "oceania"])
+  assert.deepEqual(scene.controls.find((c) => c.id === "region")!.options!.map((o) => o.value), ["world", "usa", "north-america", "south-america", "europe", "africa", "asia", "oceania"])
   // Nothing overlaps the map's own band: the dropdowns are above it and the details under it.
   const log = scene.controls.find((c) => c.id === "log")!
   assert.ok(log.y! + log.height! <= scene.height)
@@ -275,10 +276,13 @@ test("there is a strip to zoom on where the pane is tall enough to zoom, and non
   assert.equal(strip.min, 1, "at the whole world there is no zooming out")
   assert.equal(tall.controls.find((c) => c.id === "zoomOut")!.disabled, true)
   assert.equal(tall.controls.find((c) => c.id === "zoomIn")!.disabled, false)
-  // A pane on its side has no height to zoom into: no strip, and nothing to push.
+  // A pane on its side zooms as well: a short pane shows less of the map's height, not less zoom.
   const flat = (await (await panel([spot("A1A")], { environment: sideways })).render()).scene
-  assert.equal(flat.controls.find((c) => c.id === "stretch"), undefined)
-  assert.equal(flat.controls.find((c) => c.id === "zoomIn")!.disabled, true)
+  assert.equal(flat.controls.find((c) => c.id === "stretch")!.kind, "zoom")
+  assert.equal(flat.controls.find((c) => c.id === "zoomIn")!.disabled, false)
+  // At the whole world there is nowhere to pan to.
+  assert.equal(tall.controls.find((c) => c.id === "panUp")!.disabled, true)
+  assert.equal(tall.controls.find((c) => c.id === "panDown")!.disabled, true)
 })
 
 test("a station already worked is the same dot but faint", async () => {
@@ -479,4 +483,20 @@ test("the summary counts the stations on a band and the ones there is no place f
   assert.equal(summary(9, 9, 4, "all"), "9 stations · 4 with no place")
   assert.equal(filterBand([{ band: "20m" }, { band: "40m" }] as MapSpot[], "20m").length, 1)
   assert.equal(filterBand([{ band: "20m" }, { band: "40m" }] as MapSpot[], "all").length, 2)
+})
+
+test("the up and down buttons move the band of latitudes: stations farther north or south leave it and come back", async () => {
+  const p = await panel([spot("A1A"), spot("B2B", {}, "pota/US-0002"), spot("C3C", {}, "pota/DE-0001")])
+  const ids = async () => (await p.render()).scene.layers.filter((l) => l.id.startsWith("dot:")).map((l) => l.id)
+  await p.event("region", "region", { text: "europe" })
+  assert.ok((await ids()).includes("dot:C3C"), "Berlin is in Europe")
+  const before = (await p.render()).scene.layers.find((l) => l.id === "world")!.svg
+  for (let i = 0; i < 4; i++) await p.event("panDown", "panDown")
+  assert.notEqual((await p.render()).scene.layers.find((l) => l.id === "world")!.svg, before, "the band is another one")
+  assert.ok(!(await ids()).includes("dot:C3C"), "south of Berlin by now")
+  const south = (await p.render()).scene
+  assert.equal(south.controls.find((c) => c.id === "panDown")!.disabled, true, "at the bottom of the map")
+  assert.equal(south.controls.find((c) => c.id === "panUp")!.disabled, false)
+  for (let i = 0; i < 6; i++) await p.event("panUp", "panUp")
+  assert.ok((await ids()).includes("dot:C3C"), "and back")
 })

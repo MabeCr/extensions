@@ -96,6 +96,10 @@ test("the map is as the app wants it, on every size of pane, with spots and with
         ["list", "scrolled", { value: 40 }],
         ["region", "region", { text: "europe" }],
         ["region", "region", { text: "world" }],
+        ["panUp", "panUp", {}],
+        ["panDown", "panDown", {}],
+        ["region", "region", { text: "usa" }],
+        ["panDown", "panDown", {}],
         ["zoomOut", "zoomOut", {}],
       ] as const) {
         await p.event(id, action, extra)
