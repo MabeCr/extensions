@@ -135,15 +135,19 @@ test("each thing is asked for again when it is out of date, and only that thing"
   assert.deepEqual(p.counts.fetched, [statusUrl(24)])
   p.reset()
 
-  // Six hours: the orbits as well, which are fetched once, and the passes are worked out again for them.
+  // Six hours, and a day: not the orbits, which are good for days.
   await p.render(cfg, t0 + 6 * HOUR + 1)
-  assert.ok(p.counts.fetched.includes(ELEMENTS_URL))
-  assert.ok(!p.counts.fetched.includes(LIST_URL))
+  assert.ok(!p.counts.fetched.includes(ELEMENTS_URL))
+  p.reset()
+  await p.render(cfg, t0 + 25 * HOUR)
+  assert.ok(!p.counts.fetched.includes(ELEMENTS_URL), "CelesTrak is not asked more often than the orbits need")
+  // A day: the list of satellites.
+  assert.ok(p.counts.fetched.includes(LIST_URL))
   p.reset()
 
-  // A day: the list of satellites.
-  await p.render(cfg, t0 + 25 * HOUR)
-  assert.ok(p.counts.fetched.includes(LIST_URL))
+  // Three days: the orbits, which are fetched once, and the passes are worked out again for them.
+  await p.render(cfg, t0 + 3 * 24 * HOUR + 1)
+  assert.equal(p.counts.fetched.filter((u) => u === ELEMENTS_URL).length, 1)
 })
 
 test("what is stored on the device is read once, when the panel starts, and not again", async () => {
@@ -248,6 +252,6 @@ test("the parsed catalog is built once and handed out again until a feed changes
   const a = await loadCatalog(stub, t0 + MINUTE)
   const b = await loadCatalog(stub, t0 + 2 * MINUTE)
   assert.equal(a, b)
-  const afterSixHours = await loadCatalog(stub, t0 + 6 * HOUR + 1)
-  assert.notEqual(afterSixHours, a, "the orbits were fetched again, so the catalog is rebuilt")
+  const afterThreeDays = await loadCatalog(stub, t0 + 3 * 24 * HOUR + 1)
+  assert.notEqual(afterThreeDays, a, "the orbits were fetched again, so the catalog is rebuilt")
 })

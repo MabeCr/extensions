@@ -26,6 +26,8 @@ interface Script {
   location?: ({ latitude: number; longitude: number } | null)[]
   /// Whether each feed's fetch fails (called in order).
   failing?: Set<string>
+  /// Feeds whose server says no, with a 403, as CelesTrak does to an address it has blocked.
+  refusing?: Set<string>
   /// Holds every answer of the position and the feeds until this many have been asked for: code that asks for one and waits for it before
   /// asking for the next never gets its answer.
   gate?: number
@@ -64,6 +66,7 @@ async function panel(script: Script = {}, online = true) {
         const url = String(params.url)
         calls.push("fetch " + url)
         fetchOptions.push(params)
+        if (script.refusing?.has(url)) return held({ status: 403, body: "" })
         if (script.failing?.has(url)) return held({ status: 503, body: "" })
         return held(
           url === LIST_URL
@@ -140,6 +143,35 @@ test("with the host saying it is offline and nothing to show, the feeds are trie
   const asked = p.fetchOptions.length
   await p.render(cfg, t0 + 3 * 3_600_000)
   assert.equal(p.fetchOptions.length, asked)
+})
+
+test("a server that says no is not asked again for two hours, and one that is only down is asked again in an hour while there is a copy", async () => {
+  const refusing = new Set([ELEMENTS_URL])
+  const p = await panel({ refusing })
+  const asks = () => p.calls.filter((c) => c === "fetch " + ELEMENTS_URL).length
+  await p.render(cfg, t0)
+  assert.equal(asks(), 1)
+  // With nothing to show, a failure is tried again in seconds; a 403 is not, since asking again only prolongs the block.
+  await p.render(cfg, t0 + 10_000)
+  await p.render(cfg, t0 + 30 * 60_000)
+  assert.equal(asks(), 1, "not within two hours")
+  refusing.clear()
+  await p.render(cfg, t0 + 2 * 3_600_000 + 1_000)
+  assert.equal(asks(), 2, "and then it is")
+
+  // With a copy that has gone out of date, a server that is down is tried again in an hour, not in minutes.
+  const failing = new Set<string>()
+  const q = await panel({ failing })
+  const qasks = () => q.calls.filter((c) => c === "fetch " + ELEMENTS_URL).length
+  await q.render(cfg, t0)
+  failing.add(ELEMENTS_URL)
+  const old = t0 + 3 * 24 * 3_600_000 + 1_000
+  await q.render(cfg, old)
+  assert.equal(qasks(), 2)
+  await q.render(cfg, old + 10 * 60_000)
+  assert.equal(qasks(), 2, "the copy is used meanwhile")
+  await q.render(cfg, old + 61 * 60_000)
+  assert.equal(qasks(), 3)
 })
 
 test("AMSAT's reports, which only add to the list, are not tried again every few seconds when they fail", async () => {

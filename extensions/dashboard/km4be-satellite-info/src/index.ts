@@ -186,7 +186,7 @@ export function nowAndNext(passes: SatellitePass[], now: number): string {
 
 /// How old a set of orbits has to be before the pane says so: they are fetched every six hours, so a copy twice that is
 /// stale, which is what an operator offline sees.
-const STALE_ORBITS_MS = 12 * 3_600_000
+const STALE_ORBITS_MS = 7 * 24 * 3_600_000
 
 /// What is left out of a line, in this order, when it will not fit the pane at a size that can be read. The mark is
 /// never in the line: it is an icon, in a column of its own.

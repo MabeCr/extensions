@@ -25,7 +25,14 @@ export const LIST_URL = "https://polo.ham2k.com/data/satellites.json"
 export const ELEMENTS_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=amateur&FORMAT=json"
 export const statusUrl = (hours: number): string => `https://amsat.org/status/api/v1/summary.php?hours=${hours}`
 const LIST_MAX_AGE_MS = 24 * 3_600_000
-const ELEMENTS_MAX_AGE_MS = 6 * 3_600_000
+/// How long an element set is used before another is asked for. Orbits drift by a kilometer or two a day, which moves a pass by well under
+/// a minute for days, so there is no reason to ask CelesTrak more often than this. (It asks that a set be fetched no more than once in two
+/// hours, and blocks the addresses that do.)
+export const ELEMENTS_MAX_AGE_MS = 3 * 24 * 3_600_000
+/// After a failure to fetch the elements, while there is a copy to use, the next try is this far off.
+const ELEMENTS_RETRY_MS = 60 * 60_000
+/// After a server says no, as 403 and 429 do, nothing is asked of it for this long: asking again only prolongs a block.
+export const REFUSED_WAIT_MS = 2 * 3_600_000
 const STATUS_MAX_AGE_MS = 10 * 60_000
 
 export interface Link {
@@ -131,6 +138,8 @@ interface Cached {
 /// When each feed last failed, so a feed that is down is not asked for again on every redraw
 /// (the panel draws every minute) but after `BACKOFF_MS`.
 const failedAt = new Map<string, number>()
+/// How long a feed's last failure is to be waited out, where it is not the usual.
+const waitFor = new Map<string, number>()
 const BACKOFF_MS = 2 * 60_000
 /// With nothing yet to show, a failure is tried again soon: the list is waiting for it.
 const FIRST_RETRY_MS = 4_000
@@ -138,13 +147,14 @@ const FIRST_RETRY_MS = 4_000
 export const FETCH_TIMEOUT_MS = 8_000
 
 /// For tests: forget which feeds have failed.
-export const forgetFailures = (): void => failedAt.clear()
+export const forgetFailures = (): void => (failedAt.clear(), waitFor.clear())
 
 /// What has been read or fetched, by key: the same copies as the device's storage holds, kept
 /// where they cost nothing to read. Storage is read once, the first time a key is wanted.
 const memory = new Map<string, Cached>()
 onForget(() => {
   failedAt.clear()
+  waitFor.clear()
   memory.clear()
   catalogMemo = undefined
   statusMemo = undefined
@@ -163,6 +173,8 @@ export async function cachedJson(
   now: number,
   ctx: HookContext,
   essential = false,
+  /// How long to wait after a failure while there is a copy to use, for a feed that is not to be asked for as often as the usual.
+  retryMs?: number,
 ): Promise<{ data: unknown; at: number } | null> {
   let have = memory.get(key) ?? null
   if (!have) {
@@ -172,18 +184,22 @@ export async function cachedJson(
   }
   if (have && now >= have.at && now - have.at < maxAge) return { data: have.data, at: have.at }
   const failed = failedAt.get(key)
-  const backingOff = failed !== undefined && now >= failed && now - failed < (essential && !have ? FIRST_RETRY_MS : BACKOFF_MS)
+  const backingOff = failed !== undefined && now >= failed && now - failed < (waitFor.get(key) ?? (essential && !have ? FIRST_RETRY_MS : have && retryMs ? retryMs : BACKOFF_MS))
   // Online as the host believes it, or tried anyway where there is nothing to show: the host's idea of it can lag behind a connection
   // that has just come up, and a failed fetch is quick when there is none.
   if ((ctx.online || (essential && !have)) && !backingOff) {
     try {
       const response = await host.fetch(url, { timeout: FETCH_TIMEOUT_MS })
-      if (response.status !== 200) throw new Error(`HTTP ${response.status}`)
+      if (response.status !== 200) {
+        if (response.status === 403 || response.status === 429) waitFor.set(key, REFUSED_WAIT_MS)
+        throw new Error(`HTTP ${response.status}`)
+      }
       const data = JSON.parse(response.body) as JSONValue
       const fresh = { at: now, data } satisfies Cached
       memory.set(key, fresh)
       await host.kvSet(key, fresh)
       failedAt.delete(key)
+      waitFor.delete(key)
       return { data, at: now }
     } catch (error) {
       failedAt.set(key, now)
@@ -207,7 +223,7 @@ let catalogMemo: { listAt: number; elementsAt: number; catalog: Catalog } | unde
 export async function loadCatalog(ctx: HookContext, now: number): Promise<Catalog> {
   const [list, elements] = await Promise.all([
     cachedJson("list", LIST_URL, LIST_MAX_AGE_MS, now, ctx, true),
-    cachedJson("elements", ELEMENTS_URL, ELEMENTS_MAX_AGE_MS, now, ctx, true),
+    cachedJson("elements", ELEMENTS_URL, ELEMENTS_MAX_AGE_MS, now, ctx, true, ELEMENTS_RETRY_MS),
   ])
   const listAt = list?.at ?? 0
   const elementsAt = elements?.at ?? 0
