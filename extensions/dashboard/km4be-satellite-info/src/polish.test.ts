@@ -39,7 +39,7 @@ interface Content {
   scene: { width: number; strings: Record<string, string>; layers: Layer[]; controls: { id: string; opacity?: number }[] }
 }
 
-async function panel(options: { offline?: () => boolean; environment?: { width: number; height: number } } = {}) {
+async function panel(options: { offline?: () => boolean; environment?: { width: number; height: number; typography?: unknown } } = {}) {
   forgetAll()
   const id = ++panes
   const ext = await loadExtension(() => import("./index.ts"), {
@@ -191,7 +191,7 @@ test("the marks are icons in a column of their own, clear of the text and inside
     assert.ok(m.x + m.width <= scene.width - 40, "left of the chevron")
   })
   const title = scene.layers.find((l) => l.id === "markTitle")!
-  assert.equal(title.text!.literal, "Rpt")
+  assert.equal(title.text!.literal, "Status")
   assert.ok(Math.abs(title.x + title.width / 2 - (marks[0].x + marks[0].width / 2)) < 1, "the title is centered over the icons")
 })
 
@@ -207,6 +207,25 @@ test("in a wide pane the marks stay by their rows, not at the far edge", async (
   const phone = await (await panel({ environment: { width: 390, height: 700 } })).render(cfg, best.aos - 30 * 60_000)
   const phoneMark = phone.scene.layers.find((l) => l.id === "mark0")!
   assert.ok(phoneMark.x > phone.scene.width * 0.7, `${phoneMark.x} of ${phone.scene.width}`)
+})
+
+test("the Status title is centered over the icons, and clear of the last column of text, in any pane", async () => {
+  // At the operator's own text size and at one a third larger, which is where the wider title would meet the text first.
+  for (const [width, scale] of [[300, 1], [360, 1], [390, 1], [411, 1], [520, 1], [800, 1], [360, 1.3], [411, 1.3], [520, 1.3]]) {
+    const typography = { mono: { fontFamily: "RobotoMono", fontSize: 13, scaledFontSize: 13 * scale } }
+    const { scene } = await (await panel({ environment: { width, height: 700, typography } })).render(cfg, best.aos - 30 * 60_000)
+    const layers = scene.layers as (Layer & { y: number; height: number; text?: { literal?: string; size: number } })[]
+    const title = layers.find((l) => l.id === "markTitle")!
+    const mark = layers.find((l) => l.id === "mark0")!
+    assert.equal(title.text!.literal, "Status")
+    assert.ok(Math.abs(title.x + title.width / 2 - (mark.x + mark.width / 2)) < 1, `${width}: centered over the icons`)
+    assert.ok(title.x + title.width <= scene.width, `${width}: inside the pane`)
+    // The text of every row, at the width a monospaced face takes (six tenths of its size across), ends before the title begins.
+    const first = layers.find((l) => l.id === "row0")!
+    const size = layers.find((l) => l.id === "columns")!.text!.size
+    const longest = Math.max(scene.strings.columns.length, ...Object.keys(scene.strings).filter((k) => /^row\d+$/.test(k)).map((k) => scene.strings[k].length))
+    assert.ok(first.x + longest * size * scale * 0.6 <= title.x + 1, `${width} at ${scale}: the text ends at ${first.x + longest * size * scale * 0.6}, the title begins at ${title.x}`)
+  }
 })
 
 test("the key to the marks fits the pane it is in, from the whole words down to the shortest and the pane's edge", async () => {

@@ -180,6 +180,6 @@ test("with AMSAT unreachable, rows have no mark, and it is not asked again every
   down = false
   const back = await p.render(cfg, t0 + 3 * 60_000)
   assert.equal(statusFetches(), 2, "tried again after the pause")
-  const marks = layersOf(back).filter((l) => /^mark\d$/.test(l.id))
-  assert.equal(marks.length, rowsOf(back.strings).length, "every row has its icon again")
+  const marks = layersOf(back).filter((l) => /^mark\d+$/.test(l.id))
+  assert.equal(marks.length, Object.keys(back.strings).filter((k) => /^row\d+$/.test(k)).length, "every row has its icon again")
 })

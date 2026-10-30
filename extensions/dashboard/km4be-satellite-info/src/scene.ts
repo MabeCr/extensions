@@ -17,7 +17,10 @@ import type { DetailModel } from "./detail.ts"
 import type { Report } from "./report.ts"
 import type { Kind } from "./status.ts"
 
-export const PAGE_SIZE = 5
+/// The most passes the list holds. Each row is two controls (the star, and the hit area over the line) and three layers
+/// (its text, the mark, the chevron), and a scene holds 256 controls and 512 layers: so many rows is as many as fit, with
+/// the header's few besides. A day's passes do not come to so many but at a minimum elevation of 0.
+export const MAX_ROWS = 110
 
 import type { Mode } from "./favorites.ts"
 export type { Mode }
@@ -78,15 +81,39 @@ export interface ListLook {
   text: string
   live: string
   title: string
+  /// The pane's height, and its surface color: the header and the key are drawn over the rows as they scroll under them,
+  /// on the surface, so that the rows do not show through.
+  height: number
+  surface: string
+  /// What one line of the host's own label and body text takes, with the operator's text scaling.
+  lineLabel: number
+  lineBody: number
 }
 
-export const DEFAULT_LOOK: ListLook = { width: 520, family: "monospace", size: 13, os: 1, text: "#4a90d9", live: "#43a047", title: "#8a8a8a" }
+export const DEFAULT_LOOK: ListLook = {
+  width: 520,
+  family: "monospace",
+  size: 13,
+  os: 1,
+  text: "#4a90d9",
+  live: "#43a047",
+  title: "#8a8a8a",
+  height: 560,
+  surface: "#1a1d21",
+  lineLabel: 18,
+  lineBody: 20,
+}
 
 /// The list's look from what the host reports of the pane. Without a report it is a phone-wide list in a
 /// size most monospaced faces fit.
-export function listLook(environment: { width: number; colors?: Record<string, string>; typography?: { mono?: { fontFamily: string | null; fontSize: number; scaledFontSize: number } } } | undefined, compact: boolean): ListLook {
+type Typeface = { fontFamily: string | null; fontSize: number; scaledFontSize: number }
+export function listLook(
+  environment: { width: number; height?: number; colors?: Record<string, string>; typography?: { mono?: Typeface; label?: Typeface; body?: Typeface } } | undefined,
+  compact: boolean,
+): ListLook {
   if (!environment) return DEFAULT_LOOK
   const mono = environment.typography?.mono
+  const line = (face: Typeface | undefined, fallback: number): number => (face && face.scaledFontSize > 0 ? Math.ceil(face.scaledFontSize * 1.4) : fallback)
   const size = mono && mono.fontSize > 0 ? mono.fontSize : DEFAULT_LOOK.size
   return {
     width: environment.width > 0 ? Math.floor(environment.width - 2 * densityOf(compact).padding) : DEFAULT_LOOK.width,
@@ -96,6 +123,10 @@ export function listLook(environment: { width: number; colors?: Record<string, s
     text: environment.colors?.primary ?? DEFAULT_LOOK.text,
     live: DEFAULT_LOOK.live,
     title: environment.colors?.onSurfaceVariant ?? DEFAULT_LOOK.title,
+    height: environment.height && environment.height > 0 ? Math.floor(environment.height) : DEFAULT_LOOK.height,
+    surface: environment.colors?.surface ?? DEFAULT_LOOK.surface,
+    lineLabel: line(environment.typography?.label, DEFAULT_LOOK.lineLabel),
+    lineBody: line(environment.typography?.body, DEFAULT_LOOK.lineBody),
   }
 }
 
@@ -108,10 +139,20 @@ export const MIN_ROW_SIZE = 10
 /// and no larger than the face's own. It can come out below `MIN_ROW_SIZE`, which says the line does not fit at a size that
 /// can be read; `rowSize` is what to draw in then.
 export function fitSize(chars: number, look: ListLook, compact: boolean): number {
-  const room = look.width - 2 * densityOf(compact).button - 4 - markColumn(compact)
+  // The title of the marks' column reaches over the end of the text by as much as it is wider than the icons, less the gap.
+  const reach = Math.max(0, Math.ceil(markTitleWidth(look.size, look.os) / 2 - markSize(compact) / 2) - 4)
+  const room = look.width - densityOf(compact).button - CHEVRON - 4 - markColumn(compact) - reach
   const fits = Math.floor((room / ((chars + 1) * CHAR_RATIO * look.os)) * 2) / 2
   return Math.min(look.size, fits)
 }
+
+/// The room the chevron at the end of a row takes. It is an icon only: the whole line is the hit area.
+export const CHEVRON = 32
+
+/// The title over the column of marks. It is wider than the icons under it, and centered on them, so it reaches over the end of the
+/// text on its left, which has to leave it room.
+export const MARK_TITLE = "Status"
+const markTitleWidth = (size: number, os: number): number => Math.ceil(MARK_TITLE.length * size * os * CHAR_RATIO) + 6
 
 /// The report marks are drawn as icons in a column of their own, between the line and the chevron.
 export const markSize = (compact: boolean): number => (compact ? 16 : 18)
@@ -148,25 +189,33 @@ export interface Row {
 /// Everything a render, and an event's answer, is made from.
 export interface Model {
   header: string
-  /// The line under the header: what to do next, or why the page is empty.
+  /// The line under the header: what is up and what is next, or why the list is empty.
   hint: string
   mode: Mode
   utc: boolean
-  page: number
-  pageCount: number
-  /// "1–5 of 23", or "" when there is nothing to page.
-  range: string
   /// The titles over the rows' columns, set to line up with them; "" when there are no rows.
   columns: string
   /// Whether there are rows, and so titles over them and a key to the marks under them.
   legend: boolean
   /// Whether the scene is laid out tightly, for a small pane.
   compact: boolean
+  /// Every pass in the list, up to `MAX_ROWS`: the pane scrolls through them.
   rows: Row[]
+  /// How many passes there were past the last row.
+  more: number
   /// How the list is drawn, and the size its text is set in, which is what lets a line fit.
   look: ListLook
   size: number
+  /// How far down the list is scrolled, in scene units.
+  scroll: number
 }
+
+/// The choices of the switch over the list, in the order they are drawn: All on the left.
+export const MODE_OPTIONS = [
+  { label: "All", value: "all" },
+  { label: "Favorites", value: "favorites" },
+  { label: "Up Now", value: "now" },
+]
 
 export const STAR_PREFIX = "star:"
 
@@ -200,22 +249,16 @@ export function passOfOpen(id: string): { name: string; los: number } | null {
 
 export const rowKey = (i: number): string => `row${i}`
 
-/// What the scene's text controls and choices hold. A row's text is shown as its button's label;
-/// `row0`… keep it too, as the text of the page's rows.
+/// What the scene's text controls and choices hold: the words over the list, the titles, and the text of each row.
 export function stringsOf(m: Model): Record<string, string> {
-  const strings: Record<string, string> = { mode: m.mode, header: m.header, hint: m.hint, range: m.range, columns: m.columns }
-  slots(m).forEach((row, i) => {
+  const strings: Record<string, string> = { mode: m.mode, header: m.header, hint: m.hint, columns: m.columns }
+  m.rows.forEach((row, i) => {
     strings[rowKey(i)] = row.text
   })
   return strings
 }
 
-const BLANK: Row = { name: "", favorite: false, text: "", mark: null, live: false, los: 0 }
-
-/// The page's rows, padded to its five slots.
-const slots = (m: Model): Row[] => Array.from({ length: PAGE_SIZE }, (_, i) => m.rows[i] ?? BLANK)
-
-export const valuesOf = (m: Model): Record<string, number> => ({ utc: m.utc ? 1 : 0 })
+export const valuesOf = (m: Model): Record<string, number> => ({ utc: m.utc ? 1 : 0, scroll: m.scroll })
 
 /// The key to the marks, as the marks themselves: each icon with what it says, in a line under the rows. In a pane too
 /// narrow for the whole words they are shortened, and in one too narrow for those it starts at the pane's edge, under the
@@ -239,137 +282,145 @@ function keyLayers(m: Model, x0: number, y: number, icon: number, lineH: number,
   const layers: PanelScene["layers"] = []
   let x = way.start
   for (const k of kinds) {
-    layers.push({ id: `key-${k}`, x, y: y + Math.floor((lineH + 4 - icon) / 2), width: icon, height: icon, icon: { name: MARKS[k].icon, color: MARKS[k].color } })
+    layers.push({ id: `key-${k}`, x, y: y + Math.floor((lineH + 4 - icon) / 2), width: icon, height: icon, fixed: true, icon: { name: MARKS[k].icon, color: MARKS[k].color } })
     const w = Math.ceil(labels[k].length * charW) + 4
-    layers.push({ id: `keyText-${k}`, x: x + icon + 4, y, width: w, height: lineH + 4, text: { literal: labels[k], size: m.size, color: m.look.title, fontFamily: m.look.family, lineHeight: 1.3 } })
+    layers.push({ id: `keyText-${k}`, x: x + icon + 4, y, width: w, height: lineH + 4, fixed: true, text: { literal: labels[k], size: m.size, color: m.look.title, fontFamily: m.look.family, lineHeight: 1.3 } })
     x += icon + 4 + w + gap
   }
   return layers
 }
 
-/// The list is one block of artwork: the column titles and the rows, drawn in the monospaced face at one size that fits,
-/// each row with an invisible hit area over it, so that a tap anywhere on the line opens the pass, and the star and the
-/// chevron beside it as buttons at its ends. A button's label is set in the proportional face, centered and padded, so
-/// rows made of buttons could not line up under titles in another face, nor fit; drawn here, they do both.
+/// The list is a scene that scrolls, every pass of the day in it. The header, which has the chips and the switch, the two
+/// lines of words and the titles of the columns, is fixed at the top of the pane, and the key to the marks is fixed at the
+/// bottom, each on a background of the pane's own color that takes the touches, so that the rows pass under them and are
+/// neither seen nor reached through them. A row is its text, its mark and a chevron drawn as layers, and two controls: the
+/// star at its start, and a hit area over the rest of the line, so that a tap anywhere on it opens the pass. A button's own
+/// label is set in the proportional face, centered and padded, so rows made of buttons could not line up under titles in
+/// another face, nor fit; drawn here, they do both.
+const SWITCH_WIDTH = 112
+
 export function buildScene(m: Model): PanelScene {
-  const controls: PanelSceneControl[] = [
+  const d = densityOf(m.compact)
+  const L = m.look
+  const pad = d.padding
+  const W = L.width + 2 * pad
+  const rowH = rowHeightOf(m.compact)
+  const lineH = Math.ceil(m.size * L.os * 1.3)
+  const titleH = titleHeightOf(m.size, L.os)
+  const icon = markSize(m.compact)
+  const charW = m.size * L.os * CHAR_RATIO
+
+  // The header, from the top: the chips and the switch, the line about the place, the line about what is up and next
+  // (which may take two), and the titles of the columns.
+  const modeH = m.compact ? 44 : 52
+  const headerY = pad + modeH + d.gap
+  const hintY = headerY + L.lineLabel + 2
+  // One line for it, or two when the words are long enough to wrap: an estimate from the length of the text and the size of the
+  // host's body face (about half its size across to a character, a little more to be safe), since the control keeps to its box.
+  const bodyPx = L.lineBody / 1.4
+  const hintLines = Math.min(2, Math.max(1, Math.ceil((m.hint.length * bodyPx * 0.55) / (W - 2 * pad))))
+  const hintH = L.lineBody * hintLines
+  const titleY = hintY + hintH + d.gap
+  const headH = titleY + titleH
+  // The key, from the bottom; the scroll runs on past the last row by as much, so that the last row can be brought clear of it.
+  const footH = m.legend ? lineH + 14 : 0
+  const contentH = headH + m.rows.length * rowH + footH + pad
+  const H = Math.max(contentH, L.height)
+  const footY = L.height - footH
+
+  const textX = pad + d.button + 2
+  // The marks are a column of icons after the text, as near it as the text allows, and no further than the chevron.
+  // In a wide pane they would otherwise be a hand's breadth from the rows they belong to.
+  const chars = Math.max(m.columns.length, ...m.rows.map((r) => r.text.length))
+  const textEnd = textX + Math.ceil((chars + 1) * charW)
+  const markX = Math.min(W - pad - CHEVRON - icon - 6, textEnd + 18)
+  const titleW = markTitleWidth(m.size, L.os)
+  const textW = markX - textX - 4
+  const chevronX = W - pad - icon - 8
+  const layerText = (value: string, color: string) => ({ value, size: m.size, color, fontFamily: L.family, lineHeight: 1.3 })
+  const background = (height: number) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${height}"><rect width="${W}" height="${height}" fill="${L.surface}"/></svg>`
+
+  const layers: PanelScene["layers"] = []
+  const controls: PanelSceneControl[] = []
+
+  // The rows, which scroll. Each control is placed directly after its row's text, so that the header and the key, drawn
+  // later, are over it.
+  m.rows.forEach((row, i) => {
+    const y = headH + i * rowH
+    layers.push({ id: rowKey(i), x: textX, y: y + Math.floor((rowH - lineH) / 2), width: textW, height: lineH, text: layerText(rowKey(i), row.live ? L.live : L.text) })
+    if (row.mark) {
+      const mark = MARKS[row.mark]
+      layers.push({ id: `mark${i}`, x: markX, y: y + Math.floor((rowH - icon) / 2), width: icon, height: icon, icon: { name: mark.icon, color: mark.color } })
+    }
+    layers.push({ id: `chevron${i}`, x: chevronX, y: y + Math.floor((rowH - icon) / 2), width: icon, height: icon, icon: { name: "chevron-right", color: L.title } })
+    controls.push(
+      {
+        id: starId(row.name, i),
+        kind: "nativeButton",
+        label: row.favorite ? `Stop following ${row.name}` : `Follow ${row.name}`,
+        icon: row.favorite ? "star" : "star-outline",
+        variant: "text",
+        event: "star",
+        x: pad,
+        y,
+        width: d.button,
+        height: rowH,
+        after: rowKey(i),
+      },
+      // The whole line, between the star and the end of the row: a tap anywhere on it opens the pass.
+      {
+        id: rowOpenId(row.name, row.los, i),
+        kind: "button",
+        label: `Open the ${row.name} pass`,
+        event: "open",
+        x: pad + d.button,
+        y,
+        width: W - 2 * pad - d.button,
+        height: rowH,
+        after: rowKey(i),
+      },
+    )
+  })
+
+  // The header, which stays: its background first, over the rows, then what is on it.
+  layers.push({ id: "headBg", x: 0, y: 0, width: W, height: headH, fixed: true, blocksPointer: true, svg: background(headH) })
+  layers.push({ id: "columns", x: textX, y: titleY + 2, width: textW, height: titleH - 2, fixed: true, text: layerText("columns", L.title) })
+  if (m.legend) {
+    // The title of the marks' column, centered over them.
+    layers.push({ id: "markTitle", x: markX + icon / 2 - titleW / 2, y: titleY + 2, width: titleW, height: titleH - 2, fixed: true, text: { literal: MARK_TITLE, size: m.size, color: L.title, fontFamily: L.family, lineHeight: 1.3, align: "center" } })
+    layers.push({ id: "footBg", x: 0, y: footY, width: W, height: footH, fixed: true, blocksPointer: true, svg: background(footH) })
+    layers.push(...keyLayers(m, textX, footY + 6, icon, lineH, W - pad))
+  }
+
+  controls.push(
     {
       id: "mode",
       kind: "nativeSegmented",
       label: "Passes to show",
       value: "mode",
       event: "mode",
-      options: [
-        { label: "All", value: "all" },
-        { label: "Favorites", value: "favorites" },
-      ],
+      options: MODE_OPTIONS,
+      x: pad,
+      y: pad,
+      width: W - 3 * pad - SWITCH_WIDTH,
+      height: modeH,
+      fixed: true,
     },
-    { id: "utc", kind: "nativeSwitch", label: "UTC", value: "utc", event: "utc" },
-    { id: "header", kind: "nativeText", label: "Location and satellites", value: "header", style: "label" },
-    { id: "hint", kind: "nativeText", label: "Note", value: "hint" },
-  ]
-
-  const d = densityOf(m.compact)
-  const L = m.look
-  const W = L.width
-  const rowH = rowHeightOf(m.compact)
-  const titleH = titleHeightOf(m.size, L.os)
-  const lineH = Math.ceil(m.size * L.os * 1.3)
-  const keyH = m.legend ? lineH + 10 : 0
-  const H = titleH + PAGE_SIZE * rowH + keyH
-  const textX = d.button + 2
-  const icon = markSize(m.compact)
-  // The marks are a column of icons after the text, as near it as the text allows, and no further than the chevron.
-  // In a wide pane they would otherwise be a hand's breadth from the rows they belong to.
-  const chars = Math.max(m.columns.length, ...m.rows.map((r) => r.text.length))
-  const textEnd = textX + Math.ceil((chars + 1) * m.size * L.os * CHAR_RATIO)
-  const markX = Math.min(W - d.button - icon - 6, textEnd + 10)
-  const textW = markX - textX - 4
-  const layerText = (value: string, color: string) => ({ value, size: m.size, color, fontFamily: L.family, lineHeight: 1.3 })
-
-  const layers: PanelScene["layers"] = [{ id: "columns", x: textX, y: 2, width: textW, height: titleH - 2, text: layerText("columns", L.title) }]
-  if (m.legend) {
-    // The title of the marks' column, centered over them.
-    layers.push({ id: "markTitle", x: markX + icon / 2 - 20, y: 2, width: 40, height: titleH - 2, text: { literal: "Rpt", size: m.size, color: L.title, fontFamily: L.family, lineHeight: 1.3, align: "center" } })
-  }
-  const rows = slots(m)
-  rows.forEach((row, i) => {
-    const blank = row === BLANK
-    const y = titleH + i * rowH
-    layers.push({ id: rowKey(i), x: textX, y: y + Math.floor((rowH - lineH) / 2), width: textW, height: lineH, text: layerText(rowKey(i), row.live ? L.live : L.text) })
-    if (row.mark) {
-      const mark = MARKS[row.mark]
-      layers.push({ id: `mark${i}`, x: markX, y: y + Math.floor((rowH - icon) / 2), width: icon, height: icon, icon: { name: mark.icon, color: mark.color } })
-    }
-    controls.push(
-      {
-        id: starId(row.name, i),
-        kind: "nativeButton",
-        label: blank ? "No pass" : row.favorite ? `Stop following ${row.name}` : `Follow ${row.name}`,
-        icon: row.favorite ? "star" : "star-outline",
-        variant: "text",
-        event: "star",
-        x: 0,
-        y,
-        width: d.button,
-        height: rowH,
-        // A blank slot keeps its place in the layout but takes no taps and is not read out.
-        ...(blank ? { opacity: 0, disabled: true } : {}),
-      },
-      // The whole line, between the star and the chevron: a tap anywhere on it opens the pass.
-      {
-        id: rowOpenId(row.name, row.los, i),
-        kind: "button",
-        label: blank ? "No pass" : `Open the ${row.name} pass`,
-        event: "open",
-        x: d.button,
-        y,
-        width: W - 2 * d.button,
-        height: rowH,
-        ...(blank ? { opacity: 0, disabled: true } : {}),
-      },
-      {
-        id: openId(row.name, row.los, i),
-        kind: "nativeButton",
-        label: blank ? "No pass" : `Details of the ${row.name} pass`,
-        icon: "chevron-right",
-        variant: "text",
-        event: "open",
-        x: W - d.button,
-        y,
-        width: d.button,
-        height: rowH,
-        ...(blank ? { opacity: 0, disabled: true } : {}),
-      },
-    )
-  })
-
-  controls.push(
-    { id: "prev", kind: "nativeButton", label: "Previous page", icon: "chevron-left", variant: "tonal", event: "prev", disabled: m.page <= 0 },
-    { id: "range", kind: "nativeText", label: "Showing", value: "range", align: "center" },
-    { id: "next", kind: "nativeButton", label: "Next page", icon: "chevron-right", variant: "tonal", event: "next", disabled: m.page >= m.pageCount - 1 },
+    { id: "utc", kind: "nativeSwitch", label: "UTC", value: "utc", event: "utc", x: W - pad - SWITCH_WIDTH, y: pad, width: SWITCH_WIDTH, height: modeH, fixed: true },
+    { id: "header", kind: "nativeText", label: "Location and satellites", value: "header", style: "label", x: pad, y: headerY, width: W - 2 * pad, height: L.lineLabel, fixed: true },
+    { id: "hint", kind: "nativeText", label: "Note", value: "hint", x: pad, y: hintY, width: W - 2 * pad, height: hintH, fixed: true },
   )
-  if (m.legend) layers.push(...keyLayers(m, textX, titleH + PAGE_SIZE * rowH + 4, icon, lineH, W))
-
-  const column: PanelSceneLayoutNode[] = [
-    { row: [{ control: "mode", flex: 1 }, { control: "utc" }], spacing: d.gap, crossAxisAlignment: "center" },
-    { control: "header" },
-    { control: "hint" },
-    { scene: true, height: H },
-    { spacer: 1 },
-    { row: [{ control: "prev" }, { control: "range", flex: 1 }, { control: "next" }], spacing: d.gap, crossAxisAlignment: "center", ...(d.rowHeight ? { height: d.rowHeight } : {}) },
-  ]
 
   return {
     version: 1,
-    // The artwork is as wide as the pane's room, so it is drawn as it is, not scaled.
+    // As wide as the pane, so that it is drawn as it is; as long as the list, which the pane scrolls through.
     width: W,
     height: H,
     values: valuesOf(m),
     strings: stringsOf(m),
     layers,
     controls,
-    layout: { column, padding: d.padding, spacing: d.gap, crossAxisAlignment: "stretch" },
+    scroll: { axis: "y", value: "scroll", event: "scrolled" },
   }
 }
 

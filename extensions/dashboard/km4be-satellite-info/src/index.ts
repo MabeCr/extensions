@@ -32,10 +32,12 @@ import type { Cells, SatellitePass } from "./passes.ts"
 import { linksFor } from "./radio.ts"
 import { SCRUB_VALUE } from "./scrub.ts"
 import { PREVIEW_SVG } from "./preview.ts"
+import { buildNow, buildNowScene, upNow, upNowHint } from "./upnow.ts"
+import type { NowModel } from "./upnow.ts"
 import { statusFor, statusHours, statusLines } from "./status.ts"
 import type { Kind, StatusRow } from "./status.ts"
 import {
-  PAGE_SIZE,
+  MAX_ROWS,
   buildDetailScene,
   buildReportScene,
   buildScene,
@@ -80,7 +82,8 @@ interface PaneState {
   view: "list" | "detail"
   /// Not known until the stored choice has been read, which the first view of the pane does.
   mode?: Mode
-  page: number
+  /// How far down the list is scrolled, as the pane last said, in scene units.
+  scroll: number
   utc: boolean
   /// The pass the detail view shows: its satellite and when it ends.
   detail?: { name: string; los: number; tab: Tab }
@@ -91,7 +94,7 @@ const panes = new Map<string, PaneState>()
 const paneState = (args: PanelRenderArgs): PaneState => {
   const id = args.instanceId ?? args.panelKey
   let state = panes.get(id)
-  if (!state) panes.set(id, (state = { draft: freshDraft(), view: "list", page: 0, utc: args.config?.utc === true }))
+  if (!state) panes.set(id, (state = { draft: freshDraft(), view: "list", scroll: 0, utc: args.config?.utc === true }))
   return state
 }
 
@@ -114,12 +117,11 @@ const empty = (header: string, state: PaneState, compact = false, look: ListLook
   hint: "",
   mode: state.mode ?? "all",
   utc: state.utc,
-  page: 0,
-  pageCount: 1,
-  range: "",
   columns: "",
   legend: false,
   rows: [],
+  more: 0,
+  scroll: state.scroll,
 })
 
 interface Ready {
@@ -184,10 +186,8 @@ function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, co
   const mode = state.mode ?? "all"
   const followed = r.favorites.length > 0
   const showing = mode === "all" ? r.passes : r.passes.filter((p) => r.favorites.includes(p.satellite.name))
-  const pageCount = Math.max(1, Math.ceil(showing.length / PAGE_SIZE))
-  state.page = Math.min(Math.max(0, state.page), pageCount - 1)
-  const first = state.page * PAGE_SIZE
-  const page = showing.slice(first, first + PAGE_SIZE)
+  // Every pass of the day, up to what a scene holds: the pane scrolls through them.
+  const page = showing.slice(0, MAX_ROWS)
   // The mark ends the line, where a mark drawn wider than one character in some font cannot push the columns out of line.
   // On a phone each line has to fit, or it wraps and the row is twice as tall: a single space between columns, and days
   // after today as +1 and not as a date.
@@ -221,24 +221,24 @@ function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, co
     if (r.elementsAt > 0 && now - r.elementsAt > STALE_ORBITS_MS) hint += `${hint ? " · " : ""}Orbits are ${span(now - r.elementsAt)} old.`
   }
 
+  const more = showing.length - rows.length
   return {
-    header: `${r.place.grid} · min ${r.minEl}° · ${tracked} of ${r.satellites.length} satellites tracked`,
+    header: `${r.place.grid} · min ${r.minEl}° · ${tracked} of ${r.satellites.length} satellites tracked${more > 0 ? ` · the first ${rows.length} passes` : ""}`,
     hint,
     mode,
     utc: state.utc,
-    page: state.page,
-    pageCount,
-    range: showing.length ? `${first + 1}–${first + rows.length} of ${showing.length}` : "",
     columns: showing.length ? columns : "",
     legend: showing.length > 0,
     compact,
     rows,
+    more,
     look,
     size: rowSize(size),
+    scroll: state.scroll,
   }
 }
 
-type View = { kind: "list"; model: Model } | { kind: "detail"; model: DetailModel } | { kind: "report"; model: ReportModel }
+type View = { kind: "list"; model: Model } | { kind: "detail"; model: DetailModel } | { kind: "report"; model: ReportModel } | { kind: "now"; model: NowModel }
 
 /// The Report page of a pass: what AMSAT's form offers for the satellite, and what the operator has filled in,
 /// starting from their own callsign and where they are.
@@ -303,12 +303,24 @@ async function snapshot(args: PanelRenderArgs, ctx: HookContext): Promise<View> 
     }
     state.view = "list" // it has ended, or the settings no longer list it
   }
+  // The sky: what is up this moment, on one plot.
+  if (state.mode === "now") {
+    const dots = upNow(ready.passes, ready.place, ready.favorites, now)
+    const next = nowAndNext(ready.passes.filter((p) => p.aos > now), now)
+    return { kind: "now", model: { mode: "now", utc: state.utc, hint: upNowHint(dots.length, next), compact: compactNow, dots, ...buildNow(dots, themeOf(args.environment?.colors)) } }
+  }
   return { kind: "list", model: listModel(ready, state, now, args.config?.listSeconds === true, compactNow, look) }
 }
 
-const patchOf = (view: View): PanelSceneEventResult =>
-  view.kind === "list"
-    ? { values: valuesOf(view.model), strings: stringsOf(view.model) }
+/// The words of the list that every list has, which is all an answer may name: how many rows there are changes between All and
+/// Favorites, and an answer cannot name a row the pane has not got. The render the pane asks for after an event has the rows.
+const listPatchStrings = (m: Model): Record<string, string> => ({ mode: m.mode, header: m.header, hint: m.hint, columns: m.columns })
+
+const patchOf = (view: View, options: { scroll?: boolean } = {}): PanelSceneEventResult =>
+  view.kind === "now"
+    ? { values: { utc: view.model.utc ? 1 : 0 }, strings: { mode: view.model.mode, hint: view.model.hint } }
+    : view.kind === "list"
+    ? { values: options.scroll ? valuesOf(view.model) : { utc: view.model.utc ? 1 : 0 }, strings: listPatchStrings(view.model) }
     : view.kind === "report"
       ? { values: reportValues(view.model), strings: reportStrings(view.model) }
       : { values: detailValues(view.model), strings: detailStrings(view.model) }
@@ -418,6 +430,8 @@ export const PassesPanel: PanelHook = {
     // a countdown that is not fresh is wrong; every two seconds while the satellite is overhead, so it is seen to cross
     // the sky; and not at all otherwise, when the panel's own minute is enough.
     if (view.kind === "report") return { kind: "scene", scene: buildReportScene(view.model), triggers: [], title: TAB_TITLE }
+    // The satellites cross the sky in minutes: the plot is drawn again every few seconds.
+    if (view.kind === "now") return { kind: "scene", scene: buildNowScene(view.model), triggers: ["tick:3"], title: TAB_TITLE }
     const onSky = view.kind === "detail" && view.model.tab === "sky"
     // The Radio page has the Doppler-corrected frequencies for right now, which are only right for a moment: while the
     // satellite is up they are redrawn as the plot is.
@@ -450,6 +464,12 @@ export const PassesPanel: PanelHook = {
       state.view = "list"
       return stay()
     }
+    // Where the operator has scrolled the list to, once it has come to rest: kept, so that a list drawn again, or come back to
+    // from a pass's page, is where they left it, and the pane is not told to move.
+    if (event.action === "scrolled") {
+      if (typeof event.value === "number" && Number.isFinite(event.value)) state.scroll = Math.max(0, event.value)
+      return stay()
+    }
     // A tab's chip names its page in its action; the text is for a control that carries one.
     const page = event.action.startsWith("tab-") ? event.action.slice(4) : event.action === "tab" ? event.text : undefined
     if (page && state.detail && (page === "sky" || page === "radio" || page === "report")) {
@@ -471,14 +491,15 @@ export const PassesPanel: PanelHook = {
       return stay()
     }
 
-    if (event.action === "mode" && (event.text === "favorites" || event.text === "all")) {
+    if (event.action === "mode" && (event.text === "favorites" || event.text === "all" || event.text === "now")) {
       state.mode = event.text
-      state.page = 0
+      // A different list starts from its top: the scene drawn next says so, which moves the pane.
+      state.scroll = 0
       await saveMode(event.text)
+      // The answer names only what the scene the pane has and the one it is about to have both hold: the switch, and the UTC value.
+      return { values: { utc: state.utc ? 1 : 0 }, strings: { mode: event.text } }
     }
     if (event.action === "utc" && event.value !== undefined) state.utc = event.value === 1
-    if (event.action === "prev") state.page -= 1
-    if (event.action === "next") state.page += 1
     if (event.action === "star") {
       const name = satelliteOfStar(event.controlId)
       if (name) await setFavorite(name, !(await loadFavorites()).includes(name))

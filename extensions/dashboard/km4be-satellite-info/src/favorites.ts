@@ -17,8 +17,8 @@ import { onForget } from "./memory.ts"
 const KEY = "favorites"
 const MODE_KEY = "mode"
 
-/// Which satellites a list shows: every one, or only those followed.
-export type Mode = "favorites" | "all"
+/// Which view the pane shows: the list of every pass, the list of those of the satellites followed, or the sky with what is up now.
+export type Mode = "favorites" | "all" | "now"
 
 /// What is kept, as last read or written: the settings are read once, and this copy is the
 /// answer after that, since nothing else writes them.
@@ -40,8 +40,8 @@ async function load(): Promise<{ favorites: string[]; mode: Mode }> {
   const stored = own?.[KEY]
   known = {
     favorites: Array.isArray(stored) ? stored.filter((n): n is string => typeof n === "string") : [],
-    // All unless the operator has chosen Favorites: that is what a new install starts on.
-    mode: own?.[MODE_KEY] === "favorites" ? "favorites" : "all",
+    // All unless the operator has chosen another: that is what a new install starts on.
+    mode: own?.[MODE_KEY] === "favorites" || own?.[MODE_KEY] === "now" ? (own[MODE_KEY] as Mode) : "all",
   }
   return known
 }

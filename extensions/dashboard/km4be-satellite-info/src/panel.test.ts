@@ -95,10 +95,13 @@ test("the panel is a scene of controls, with its settings and a minute's tick", 
   assert.equal(kind, "scene")
   // The list is drawn as text in one monospaced face: the titles and the five rows, each with a hit area over it.
   const ids = (scene.layers as { id: string }[]).map((l) => l.id)
-  assert.deepEqual(ids.filter((id) => /^(columns|row\d)$/.test(id)), ["columns", "row0", "row1", "row2", "row3", "row4"])
+  const rowIds = ids.filter((id) => /^(columns|row\d+)$/.test(id))
+  // The rows come first, and the header after them, so that it is drawn over the rows as they scroll under it.
+  assert.ok(rowIds.length > 6 && rowIds[0] === "row0" && rowIds[1] === "row1" && rowIds[rowIds.length - 1] === "columns", rowIds.join(","))
+  assert.ok(ids.indexOf("headBg") > ids.indexOf(rowIds[rowIds.length - 2]) && ids.indexOf("headBg") < ids.indexOf("columns"), "the header background is over the rows and under its text")
   // The marks of AMSAT's reports are icons, with a title over their column and a key under the rows.
   assert.ok(ids.includes("markTitle") && ids.includes("key-heard") && ids.includes("key-telemetry") && ids.includes("key-notHeard"))
-  assert.ok(scene.controls.length <= 64)
+  assert.ok(scene.controls.length <= 256 && scene.layers.length <= 512, "within what a scene holds")
   assert.deepEqual([...new Set(scene.controls.map((c) => c.kind))].sort(), ["button", "nativeButton", "nativeSegmented", "nativeSwitch", "nativeText"])
 })
 
@@ -122,12 +125,11 @@ test("a new install opens on All, and Favorites with nobody followed says how to
   assert.match(scene.strings.header, /^EL95vs · min 10° · 2 of 4 satellites tracked$/)
   assert.match(scene.strings.hint, /^(Next: \S+ in .+|\S+ up now, .+ left)/, "what is up and what is next")
   assert.equal(scene.strings.mode, "all")
-  assert.deepEqual((scene.controls.find((c) => c.id === "mode") as unknown as { options: { value: string }[] }).options.map((o) => o.value), ["all", "favorites"], "All on the left")
+  assert.deepEqual((scene.controls.find((c) => c.id === "mode") as unknown as { options: { value: string }[] }).options.map((o) => o.value), ["all", "favorites", "now"], "All on the left, and the sky of what is up now after the lists")
   assert.equal(scene.values.utc, 1, "the setting starts the pane in UTC")
   const rows = rowTexts(scene.strings)
   assert.equal(rows.length, 5)
   assert.match(rows[0], /^(AO-7|FO-29) +SSB +(now|\d\d:\d\dZ) +\d+° +[NESW]+→[NESW]+ +\d+m( +[✔◐✘])?$/)
-  assert.match(scene.strings.range, /^1–5 of \d+$/)
 })
 
 test("a star follows a satellite without changing the list, and Favorites then shows only its passes", async () => {
@@ -143,14 +145,16 @@ test("a star follows a satellite without changing the list, and Favorites then s
   const patch = await p.event(cfg, t0, star.id, "star")
   assert.deepEqual(p.settings.get("favorites"), [name])
   assert.equal(patch.strings.mode, "all")
-  assert.equal(new Set(rowTexts(patch.strings).map((r) => r.split(/ +/)[0])).size, 2, "everything is still there")
   const after = await p.render(cfg, t0)
+  assert.equal(new Set(rowTexts(after.scene.strings).map((r) => r.split(/ +/)[0])).size, 2, "everything is still there")
   assert.ok(after.scene.controls.filter((c) => c.id.startsWith(`star:${name}:`)).every((c) => c.icon === "star"), "its star is filled")
 
   // Favorites shows only the followed satellite.
   const only = await p.event(cfg, t0, "mode", "mode", { text: "favorites" })
-  assert.ok(rowTexts(only.strings!).every((r) => r.startsWith(name)))
-  assert.match(only.strings!.hint, /^(Next: \S+ in .+|\S+ up now, .+ left)/)
+  const favorites = await p.render(cfg, t0)
+  assert.ok(rowTexts(favorites.scene.strings).every((r) => r.startsWith(name)))
+  assert.deepEqual(only, { values: { utc: 0 }, strings: { mode: "favorites" } }, "an answer names the switch and the UTC value, which every view has")
+  assert.match(favorites.scene.strings.hint, /^(Next: \S+ in .+|\S+ up now, .+ left)/)
 
   // All shows every satellite again, the followed one's star filled.
   await p.event(cfg, t0, "mode", "mode", { text: "all" })
@@ -165,29 +169,16 @@ test("a star follows a satellite without changing the list, and Favorites then s
   assert.deepEqual(p.settings.get("favorites"), [])
 })
 
-test("paging moves through the passes and stops at the ends, and the buttons say so", async () => {
+test("every pass of the day is in the list for the pane to scroll through, and there is no pager", async () => {
   const p = await panel()
-  const config = { ...cfg, minElevation: 0 }
-  const one = await p.render(config, t0)
-  const total = Number(one.scene.strings.range.split(" of ")[1])
-  assert.ok(total > 5, `${total} passes`)
-  assert.equal(control(one.scene, "prev").disabled, true)
-  assert.equal(control(one.scene, "next").disabled, false)
-
-  const first = rowTexts(one.scene.strings)
-  await p.event(config, t0, "next", "next")
-  const two = await p.render(config, t0)
-  assert.notDeepEqual(rowTexts(two.scene.strings), first)
-  assert.match(two.scene.strings.range, /^6–/)
-  assert.equal(control(two.scene, "prev").disabled, false)
-
-  // Held at the last page, and at the first.
-  for (let i = 0; i < 30; i++) await p.event(config, t0, "next", "next")
-  const last = await p.render(config, t0)
-  assert.equal(control(last.scene, "next").disabled, true)
-  assert.match(last.scene.strings.range, new RegExp(`of ${total}$`))
-  for (let i = 0; i < 30; i++) await p.event(config, t0, "prev", "prev")
-  assert.deepEqual(rowTexts((await p.render(config, t0)).scene.strings), first)
+  const { scene } = await p.render({ ...cfg, minElevation: 0 }, t0)
+  const rows = Object.keys(scene.strings).filter((k) => /^row\d+$/.test(k))
+  assert.ok(rows.length > 5, `${rows.length} passes`)
+  assert.ok(!scene.controls.some((c) => ["prev", "next", "range"].includes(c.id)), "no pager and no count of pages")
+  // A star and a hit area for each row.
+  assert.equal(scene.controls.filter((c) => c.id.startsWith("star:")).length, rows.length)
+  assert.equal(scene.controls.filter((c) => /^open:.*:row\d+$/.test(c.id)).length, rows.length)
+  assert.equal((scene as unknown as { layout?: unknown }).layout, undefined, "nothing is laid out: the scroll places every piece")
 })
 
 test("the UTC switch changes how times read, and the names an event patches are always in the scene", async () => {
@@ -195,25 +186,26 @@ test("the UTC switch changes how times read, and the names an event patches are 
   const local = await p.render(cfg, t0)
   const patch = await p.event(cfg, t0, "utc", "utc", { value: 1 })
   assert.equal(patch.values.utc, 1)
-  assert.ok(rowTexts(patch.strings).every((r) => /(now|\d\d:\d\dZ)/.test(r)))
   const utc = await p.render(cfg, t0)
+  assert.ok(rowTexts(utc.scene.strings).every((r) => /(now|\d\d:\d\dZ)/.test(r)))
   assert.equal(utc.scene.values.utc, 1)
 
   const sceneNames = new Set([...Object.keys(local.scene.strings), ...Object.keys(local.scene.values)])
   for (const key of [...Object.keys(patch.strings), ...Object.keys(patch.values)]) assert.ok(sceneNames.has(key), `${key} is not in the scene`)
   assert.equal(local.scene.controls.length, utc.scene.controls.length)
   assert.deepEqual(Object.keys(local.scene.strings).sort(), Object.keys(utc.scene.strings).sort())
+  // What an answer names is only what every list has, since the number of rows changes between All and Favorites.
+  assert.deepEqual(Object.keys(patch.strings).sort(), ["columns", "header", "hint", "mode"])
 })
 
-test("a short page keeps five slots, the unused ones hidden", async () => {
+test("a short list has just its rows: no blank ones hidden", async () => {
   const p = await panel()
   const { scene } = await p.render({ ...cfg, minElevation: 60 }, t0)
+  const shown = rowTexts(scene.strings)
   const stars = scene.controls.filter((c) => c.id.startsWith("star:"))
-  assert.equal(stars.length, 5)
-  const hidden = stars.filter((c) => c.opacity === 0)
-  assert.equal(hidden.length, 5 - rowTexts(scene.strings).length)
-  assert.ok(hidden.every((c) => c.disabled === true && c.label === "No pass"))
-  assert.equal(new Set(stars.map((c) => c.id)).size, 5, "ids stay unique")
+  assert.equal(stars.length, shown.length)
+  assert.ok(stars.every((c) => c.opacity !== 0 && c.disabled !== true && c.label !== "No pass"))
+  assert.equal(new Set(stars.map((c) => c.id)).size, stars.length, "ids stay unique")
 })
 
 test("feeds are cached, a failed one falls back to what is stored, and a tap does not refetch", async () => {
@@ -232,11 +224,10 @@ test("feeds are cached, a failed one falls back to what is stored, and a tap doe
 test("Favorites with nobody followed is an empty page that says how to fill it, not everything", async () => {
   const p = await panel()
   await p.render(cfg, t0)
-  const patch = await p.event(cfg, t0, "mode", "mode", { text: "favorites" })
-  assert.deepEqual(rowTexts(patch.strings!), [])
-  assert.match(patch.strings!.hint, /^Add some favorites to see them here: tap a star on the All page\.$/)
+  await p.event(cfg, t0, "mode", "mode", { text: "favorites" })
   const scene = (await p.render(cfg, t0)).scene
-  assert.equal(scene.strings.range, "")
+  assert.match(scene.strings.hint, /^Add some favorites to see them here: tap a star on the All page\.$/)
+  assert.deepEqual(rowTexts(scene.strings), [])
   assert.equal(scene.strings.columns, "")
   const ids = (scene.layers as { id: string }[]).map((l) => l.id)
   assert.ok(!ids.includes("markTitle") && !ids.some((id) => id.startsWith("key-")), "no title over the marks and no key to them, with nothing listed")
