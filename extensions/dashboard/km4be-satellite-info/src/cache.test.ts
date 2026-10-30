@@ -175,8 +175,17 @@ test("favorites are written once when they change and never read again", async (
   const after = await p.render(cfg, t0 + 2_000)
   assert.equal(p.counts.getSettings, 0, "the new list is already known")
   const name = star.id.split(":")[1]
-  assert.ok([0, 1, 2, 3, 4].map((i) => after.scene.strings[`row${i}`]).filter(Boolean).every((r) => r.startsWith(name)))
+  assert.equal(after.scene.strings.mode, "all", "starring a satellite leaves the list as it was")
   assert.deepEqual(p.settings.get("favorites"), [name])
+
+  // Choosing Favorites is written too, and shows only the satellite followed.
+  p.reset()
+  await p.event(cfg, t0 + 3_000, "mode", "mode", { text: "favorites" })
+  assert.equal(p.counts.setSettings, 1)
+  assert.equal(p.counts.getSettings, 0)
+  assert.equal(p.settings.get("mode"), "favorites")
+  const only = await p.render(cfg, t0 + 4_000)
+  assert.ok([0, 1, 2, 3, 4].map((i) => only.scene.strings[`row${i}`]).filter(Boolean).every((r) => r.startsWith(name)))
 })
 
 test("favorites outlast a relaunch, which empties what kvSet kept", async () => {
@@ -184,9 +193,11 @@ test("favorites outlast a relaunch, which empties what kvSet kept", async () => 
   const first = await p.render(cfg, t0)
   const star = first.scene.controls.find((c) => c.id.startsWith("star:") && c.opacity !== 0)!
   await p.event(cfg, t0 + 1_000, star.id, "star")
+  await p.event(cfg, t0 + 1_500, "mode", "mode", { text: "favorites" })
   const name = star.id.split(":")[1]
 
-  // The app's kv store is in memory, so a relaunch starts it empty; the settings are kept.
+  // The app's kv store is in memory, so a relaunch starts it empty; the settings are kept,
+  // the view the operator chose among them.
   const relaunched = await panel(() => null, new Map(), p.settings)
   const after = await relaunched.render(cfg, t0 + 2_000)
   assert.equal(after.scene.strings.mode, "favorites")

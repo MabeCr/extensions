@@ -22,14 +22,15 @@ import { expireStatus, loadCatalog, loadStatus } from "./data.ts"
 import type { Satellite } from "./data.ts"
 import { buildDetail, themeOf } from "./detail.ts"
 import type { DetailModel, Tab } from "./detail.ts"
-import { loadFavorites, setFavorite } from "./favorites.ts"
+import { loadFavorites, loadMode, saveMode, setFavorite } from "./favorites.ts"
 import { findPlace } from "./location.ts"
 import type { Place } from "./location.ts"
 import { clock, minElevation, passCells, table, upcomingPasses } from "./passes.ts"
 import { cleanCall, cleanGrid, defaultCall, labelOf, loadSatNames, namesFor, problemWith, sendReport, summaryOf } from "./report.ts"
 import type { Report } from "./report.ts"
-import type { SatellitePass } from "./passes.ts"
+import type { Cells, SatellitePass } from "./passes.ts"
 import { linksFor } from "./radio.ts"
+import { SCRUB_VALUE } from "./scrub.ts"
 import { GLYPH, LEGEND, LEGEND_COMPACT, NO_GLYPH, statusFor, statusHours, statusLines } from "./status.ts"
 import type { Kind, StatusRow } from "./status.ts"
 import {
@@ -37,6 +38,11 @@ import {
   buildDetailScene,
   buildReportScene,
   buildScene,
+  DEFAULT_LOOK,
+  fitSize,
+  listLook,
+  MIN_ROW_SIZE,
+  rowSize,
   detailStrings,
   detailValues,
   isCompact,
@@ -44,10 +50,11 @@ import {
   reportStrings,
   reportValues,
   satelliteOfStar,
+  skyPercent,
   stringsOf,
   valuesOf,
 } from "./scene.ts"
-import type { Mode, Model, ReportModel } from "./scene.ts"
+import type { ListLook, Mode, Model, ReportModel } from "./scene.ts"
 
 const REFRESH_SECONDS = 60
 
@@ -67,7 +74,8 @@ const freshDraft = (old?: Draft): Draft => ({ variant: "", kind: "", call: old?.
 interface PaneState {
   draft: Draft
   view: "list" | "detail"
-  mode: Mode
+  /// Not known until the stored choice has been read, which the first view of the pane does.
+  mode?: Mode
   page: number
   utc: boolean
   /// The pass the detail view shows: its satellite and when it ends.
@@ -79,8 +87,14 @@ const panes = new Map<string, PaneState>()
 const paneState = (args: PanelRenderArgs): PaneState => {
   const id = args.instanceId ?? args.panelKey
   let state = panes.get(id)
-  if (!state) panes.set(id, (state = { draft: freshDraft(), view: "list", mode: "favorites", page: 0, utc: args.config?.utc === true }))
+  if (!state) panes.set(id, (state = { draft: freshDraft(), view: "list", page: 0, utc: args.config?.utc === true }))
   return state
+}
+
+/// The pane's size, when the host reports it.
+const paneOf = (args: PanelRenderArgs): { width: number; height: number } | undefined => {
+  const e = args.environment
+  return e && e.width > 0 && e.height > 0 ? { width: e.width, height: e.height } : undefined
 }
 
 const nowMillis = (args: PanelRenderArgs): number => args.clock?.realNowMillis ?? Date.now()
@@ -88,11 +102,13 @@ const nowMillis = (args: PanelRenderArgs): number => args.clock?.realNowMillis ?
 /// Whether the pane counts down to rise, peak and set. Off unless the setting is on.
 const countdownOn = (config: Record<string, unknown> | undefined): boolean => config?.countdown === true
 
-const empty = (header: string, state: PaneState, compact = false): Model => ({
+const empty = (header: string, state: PaneState, compact = false, look: ListLook = DEFAULT_LOOK): Model => ({
+  look,
+  size: look.size,
   header,
   compact,
   hint: "",
-  mode: state.mode,
+  mode: state.mode ?? "all",
   utc: state.utc,
   page: 0,
   pageCount: 1,
@@ -134,10 +150,13 @@ const glyphFor = (r: Ready, satellite: Satellite): string => {
   return status ? GLYPH[status.kind] : NO_GLYPH
 }
 
-function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, compact: boolean): Model {
-  // With nobody followed, Favorites would be an empty page; show everything and say how to change that.
+/// What is left out of a line, in this order, when it will not fit the pane at a size that can be read.
+const OMIT_ORDER: (keyof Cells)[][] = [["length"], ["length", "type"]]
+
+function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, compact: boolean, look: ListLook): Model {
+  const mode = state.mode ?? "all"
   const followed = r.favorites.length > 0
-  const showing = state.mode === "all" || !followed ? r.passes : r.passes.filter((p) => r.favorites.includes(p.satellite.name))
+  const showing = mode === "all" ? r.passes : r.passes.filter((p) => r.favorites.includes(p.satellite.name))
   const pageCount = Math.max(1, Math.ceil(showing.length / PAGE_SIZE))
   state.page = Math.min(Math.max(0, state.page), pageCount - 1)
   const first = state.page * PAGE_SIZE
@@ -145,10 +164,17 @@ function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, co
   // The mark ends the line, where a mark drawn wider than one character in some font cannot push the columns out of line.
   // On a phone each line has to fit, or it wraps and the row is twice as tall: a single space between columns, and days
   // after today as +1 and not as a date.
-  const { columns, lines } = table(
-    page.map((p) => passCells(p, now, state.utc, seconds, glyphFor(r, p.satellite), compact)),
-    compact ? " " : "  ",
-  )
+  const cells = page.map((p) => passCells(p, now, state.utc, seconds, glyphFor(r, p.satellite), compact))
+  const longest = (t: { columns: string; lines: string[] }) => Math.max(t.columns.length, ...t.lines.map((l) => l.length))
+  // All the columns if they fit at a size that can be read; if not, fewer, the length and then the kind of transponder.
+  let laid = table(cells, compact ? " " : "  ")
+  let size = fitSize(longest(laid), look, compact)
+  for (const omit of OMIT_ORDER) {
+    if (size >= MIN_ROW_SIZE) break
+    laid = table(cells, compact ? " " : "  ", omit)
+    size = fitSize(longest(laid), look, compact)
+  }
+  const { columns, lines } = laid
   const rows = page.map((p, i) => ({
     name: p.satellite.name,
     favorite: r.favorites.includes(p.satellite.name),
@@ -157,20 +183,15 @@ function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, co
   }))
 
   const tracked = r.satellites.filter((s) => s.omm).length
+  // Favorites with nobody followed is an empty page, so it says how to fill it, rather than showing everything.
   let hint = `No passes of ${r.minEl}° or more in the next 24 hours.`
-  if (showing.length) {
-    hint =
-      state.mode === "favorites" && !followed
-        ? compact
-          ? "No favorites yet: all are shown. Tap a star."
-          : "No favorites yet, so every satellite is shown. Tap a star to follow one."
-        : `Orbits from CelesTrak, ${clock(r.elementsAt, now, state.utc)}.`
-  }
+  if (mode === "favorites" && !followed) hint = compact ? "Add favorites on All, with a star, to see them here." : "Add some favorites to see them here: tap a star on the All page."
+  else if (showing.length) hint = `Orbits from CelesTrak, ${clock(r.elementsAt, now, state.utc)}.`
 
   return {
     header: `${r.place.grid} · min ${r.minEl}° · ${tracked} of ${r.satellites.length} satellites tracked`,
     hint,
-    mode: state.mode,
+    mode,
     utc: state.utc,
     page: state.page,
     pageCount,
@@ -180,6 +201,8 @@ function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, co
     legend: showing.length ? (compact ? LEGEND_COMPACT : LEGEND) : "",
     compact,
     rows,
+    look,
+    size: rowSize(size),
   }
 }
 
@@ -219,8 +242,12 @@ async function reportModel(args: PanelRenderArgs, ctx: HookContext, state: PaneS
 async function snapshot(args: PanelRenderArgs, ctx: HookContext): Promise<View> {
   const state = paneState(args)
   const now = nowMillis(args)
+  // A pane opens on what the operator last chose, All if they never have.
+  if (state.mode === undefined) state.mode = await loadMode()
   const ready = await gather(args, ctx)
-  if (typeof ready === "string") return { kind: "list", model: empty(ready, state, isCompact(args.config, args.environment)) }
+  const compactNow = isCompact(args.config, args.environment)
+  const look = listLook(args.environment, compactNow)
+  if (typeof ready === "string") return { kind: "list", model: empty(ready, state, compactNow, look) }
 
   if (state.view === "detail" && state.detail) {
     const { name, los, tab } = state.detail
@@ -237,14 +264,14 @@ async function snapshot(args: PanelRenderArgs, ctx: HookContext): Promise<View> 
         tab === "report" ? "radio" : tab,
         themeOf(args.environment?.colors),
         statusLines(statusFor(ready.reports, pass.satellite), ready.hours, now, state.utc),
-        { countdown: countdownOn(args.config), compact },
+        { countdown: countdownOn(args.config), compact, pane: paneOf(args), skyPercent: skyPercent(args.config) },
       )
       if (tab !== "report") return { kind: "detail", model: detail }
       return { kind: "report", model: await reportModel(args, ctx, state, pass.satellite, ready.place, detail.title, compact, now) }
     }
     state.view = "list" // it has ended, or the settings no longer list it
   }
-  return { kind: "list", model: listModel(ready, state, now, args.config?.listSeconds === true, isCompact(args.config, args.environment)) }
+  return { kind: "list", model: listModel(ready, state, now, args.config?.listSeconds === true, compactNow, look) }
 }
 
 const patchOf = (view: View): PanelSceneEventResult =>
@@ -335,6 +362,13 @@ export const PassesPanel: PanelHook = {
           { type: "field", key: "listSeconds", fieldType: "checkbox", label: "Show seconds in the pass list" },
           {
             type: "field",
+            key: "skySize",
+            fieldType: "number",
+            label: "Sky chart size (percent)",
+            description: "How large the sky chart is on a pass's page, as a share of the most the pane allows: 40 to 100, default 100. Make it smaller to leave room for the lines under it.",
+          },
+          {
+            type: "field",
             key: "countdown",
             fieldType: "checkbox",
             label: "Count down to rise, peak and set",
@@ -370,12 +404,20 @@ export const PassesPanel: PanelHook = {
       state.draft = freshDraft(state.draft)
       return stay()
     }
+    // The slider over the plot is the pane's own, and does not tell the extension where it is. Reset answers with where it
+    // rests, which puts it there and takes the marker and the readout away.
+    if (event.action === "scrubReset") {
+      const view = await snapshot(args, ctx)
+      return view.kind === "detail" && view.model.tab === "sky" && view.model.scrub ? { values: { ...detailValues(view.model), [SCRUB_VALUE]: view.model.scrub.rest } } : stay()
+    }
     if (event.action === "back") {
       state.view = "list"
       return stay()
     }
-    if (event.action === "tab" && state.detail && (event.text === "sky" || event.text === "radio" || event.text === "report")) {
-      state.detail.tab = event.text
+    // A tab's chip names its page in its action; the text is for a control that carries one.
+    const page = event.action.startsWith("tab-") ? event.action.slice(4) : event.action === "tab" ? event.text : undefined
+    if (page && state.detail && (page === "sky" || page === "radio" || page === "report")) {
+      state.detail.tab = page
       return stay()
     }
     if (state.view === "detail" && state.detail?.tab === "report" && REPORT_ACTIONS.includes(event.action)) return reportEvent(args, ctx, state)
@@ -396,6 +438,7 @@ export const PassesPanel: PanelHook = {
     if (event.action === "mode" && (event.text === "favorites" || event.text === "all")) {
       state.mode = event.text
       state.page = 0
+      await saveMode(event.text)
     }
     if (event.action === "utc" && event.value !== undefined) state.utc = event.value === 1
     if (event.action === "prev") state.page -= 1

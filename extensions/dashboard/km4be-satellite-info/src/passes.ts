@@ -137,11 +137,27 @@ export function passCells(pass: SatellitePass, now: number, utc: boolean, second
 /// monospaced face, so padding is what lines the columns up: names, times and paths to the
 /// left, the numbers to the right. Each column is as wide as its widest cell or its title, and
 /// they are `gap` apart: two spaces, or one where a line has to fit a phone.
-export function table(rows: Cells[], gap = "  "): { columns: string; lines: string[] } {
+///
+/// `omit` leaves columns out, for a line that would not otherwise fit the pane.
+export function table(rows: Cells[], gap = "  ", omit: (keyof Cells)[] = []): { columns: string; lines: string[] } {
   const GAP = gap
   const width = (key: keyof Cells) => Math.max(TITLES[key].length, ...rows.map((r) => r[key].length))
   const w = { name: width("name"), type: width("type"), start: width("start"), max: width("max"), path: width("path"), length: width("length") }
   const line = (c: Cells) =>
-    [c.name.padEnd(w.name), c.type.padEnd(w.type), c.start.padEnd(w.start), c.max.padStart(w.max), c.path.padEnd(w.path), c.length.padStart(w.length), c.mark].join(GAP).trimEnd()
+    (
+      [
+        ["name", c.name.padEnd(w.name)],
+        ["type", c.type.padEnd(w.type)],
+        ["start", c.start.padEnd(w.start)],
+        ["max", c.max.padStart(w.max)],
+        ["path", c.path.padEnd(w.path)],
+        ["length", c.length.padStart(w.length)],
+        ["mark", c.mark],
+      ] as [keyof Cells, string][]
+    )
+      .filter(([key]) => !omit.includes(key))
+      .map(([, text]) => text)
+      .join(GAP)
+      .trimEnd()
   return { columns: line(TITLES), lines: rows.map(line) }
 }
