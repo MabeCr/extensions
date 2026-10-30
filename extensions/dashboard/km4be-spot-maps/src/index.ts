@@ -1,125 +1,105 @@
 // Copyright ©️ 2026 km4be
 // SPDX-License-Identifier: MIT
 //
-// A world map of who is on the air from a POTA park right now, a dot to an
-// activator colored by band, with a band filter.
+// A world map of who is spotted right now, a dot to a station colored by band, with a band filter, and a button that puts the
+// station you tapped in the log.
 //
-// The host does not hand a panel the spots its own list shows: `getSpotsForCall`
-// answers for one call and never fetches. So this fetches POTA's activator feed
-// itself, the way the POTA extension does, and shares nothing with the Spots pane.
+// The spots are the host's own, the board the Spots panel shows, from every source the operator has: this asks for them with
+// `ctx.getSpots` and is told when they change (the `spots` trigger), so it fetches nothing itself. A spot is placed by looking up
+// the reference it is at (board.ts), so only the stations at a park, a summit or the like have a dot.
 //
-// Drawn as a panel scene (extension API 5): the world as one SVG layer, the dots
-// as another, native dropdowns for the band, the station and the region, and
-// buttons to zoom. The scene is always the same size: a zoom crops the world's
-// viewBox and re-places the dots (view.ts), and the host scales the artwork to
-// fit the pane. A scene has no drag, pinch or wheel on its artwork, so the view
-// moves by region and zoom steps, each one a round trip to this hook.
+// A scene that scrolls (extension API 12): the host scrolls the world along the pane natively, and a drag along the strip at the
+// bottom of the map zooms. See scene.ts for how it is drawn and geo.ts for what limits the zoom.
 
 import { defineExtension, host } from "@ham2k/extension-sdk"
 import type { HookContext, JSONValue, PanelContent, PanelDescriptor, PanelHook, PanelRenderArgs, PanelSceneEventResult } from "@ham2k/extension-sdk"
 
 import manifest from "../manifest.json" with { type: "json" }
-import { BANDS, MAX_CLICKABLE, clockUtc, detailsLine, dotHitArea, filterBand, hitSize, markersSvg, parseSpots, spotOptions, summary, visibleSpots } from "./spots.ts"
-import type { MapSpot, PotaApiSpot } from "./spots.ts"
-import { MAX_ZOOM, MIN_ZOOM, PRESETS, WORLD, presetOf, presetView, windowOf, zoomed } from "./view.ts"
-import type { View } from "./view.ts"
-import { BORDER_PATH, LAND_PATH, MAP_HEIGHT, MAP_WIDTH } from "./world.ts"
+import { loadBoard } from "./board.ts"
+import { geometryOf, openingView, pannedBy, regionOf, regionView, scrollIn, zoomedBy, ZOOM_STEP } from "./geo.ts"
+import type { Pane, View } from "./geo.ts"
+import { PREVIEW_SVG } from "./preview.ts"
+import { buildScene, chromeOf, DOT_PREFIX, linesOf } from "./scene.ts"
+import type { MapModel } from "./scene.ts"
+import { detailsLine, filterBand, summary } from "./spots.ts"
 
-const SPOTS_URL = "https://api.pota.app/spot/activator"
-/// Spots change by the minute, and several triggers can land together.
-const CACHE_MILLIS = 30_000
-const DEFAULT_REFRESH_SECONDS = 60
-/// POTA is not asked more often than this; 0 (off) is the only lower setting.
-const MIN_REFRESH_SECONDS = 10
+/// The pane's tab, short enough to read whole on a phone.
+const TAB_TITLE = "Spot Map"
 
-/// The pane's update interval from its settings: 0 turns automatic updates off,
-/// a blank, negative or non-numeric setting is the default, and anything between
-/// is held to the minimum.
-export function refreshSeconds(config: Record<string, JSONValue> | undefined): number {
-  const v = config?.refreshSeconds
-  if (typeof v !== "number" || !Number.isFinite(v) || v < 0) return DEFAULT_REFRESH_SECONDS
-  const whole = Math.floor(v)
-  return whole === 0 ? 0 : Math.max(MIN_REFRESH_SECONDS, whole)
+export type BoardSource = "all" | "user"
+const DEFAULT_MAX_AGE = 30
+
+/// Which spots the board is asked for: everything it has, or what the Spots panel is set to show.
+export function boardSource(config: Record<string, JSONValue> | undefined): BoardSource {
+  return config?.source === "user" ? "user" : "all"
 }
 
-/// The world under `view`: the whole map, cropped to the window the view shows
-/// and scaled up by the host to fill the layer. Lines are thinned as the map
-/// grows so borders stay hairlines.
-function baseSvg(view: View): string {
-  const w = windowOf(view)
-  const border = Math.max(0.12, 0.5 / view.zoom)
-  return (
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${w.x} ${w.y} ${w.width} ${w.height}">` +
-    `<rect width="${MAP_WIDTH}" height="${MAP_HEIGHT}" fill="#10243a"/>` +
-    `<path d="${LAND_PATH}" fill="#2b3f4f" stroke="none"/>` +
-    `<path d="${BORDER_PATH}" fill="none" stroke="#4d6577" stroke-width="${border}"/></svg>`
-  )
+/// How old a spot may be, in minutes, from the pane's settings: 5 to 240, and 30 for anything else.
+export function maxAgeMinutes(config: Record<string, JSONValue> | undefined): number {
+  const v = config?.maxAgeMinutes
+  return typeof v === "number" && Number.isFinite(v) && v >= 1 ? Math.min(240, Math.max(5, Math.floor(v))) : DEFAULT_MAX_AGE
 }
 
-let cache: { at: number; spots: MapSpot[] } | undefined
-
-/// `force` is the Refresh button: fetch now, whatever the cache holds. With
-/// automatic updates off (`seconds` 0) nothing else fetches once there is
-/// something to draw, so a resize or a return to the tab keeps what is shown.
-/// Otherwise a spot list is reused for half the interval, at most 30 seconds,
-/// so a tick never lands on a list one tick old.
-async function currentSpots(ctx: HookContext, nowMillis: number, seconds: number, force = false): Promise<{ at: number; spots: MapSpot[] }> {
-  const maxAge = seconds === 0 ? Infinity : Math.min(CACHE_MILLIS, seconds * 500)
-  if (cache && !force && nowMillis - cache.at < maxAge) return cache
-  // Offline, or the feed is down: keep drawing the last map rather than a blank one.
-  if (ctx.online) {
-    try {
-      const response = await host.fetch(SPOTS_URL)
-      if (response.status !== 200) throw new Error(`POTA API returned HTTP ${response.status}`)
-      cache = { at: nowMillis, spots: parseSpots(JSON.parse(response.body) as PotaApiSpot[]) }
-    } catch (error) {
-      host.log(`km4be-spot-maps: ${error instanceof Error ? error.message : String(error)}`)
-    }
-  }
-  return cache ?? { at: 0, spots: [] }
+/// What each pane is showing: its band filter, the station picked and the view of the map. Per placement, and lost on a restart,
+/// which only puts them back to All, none and the whole world.
+interface PaneState {
+  band: string
+  selected: string
+  view?: View
 }
-
-/// What each pane is showing: its band filter, the station picked and the view
-/// of the map. Per placement, and lost on a restart, which only puts them back
-/// to All, none and the whole world.
-const stateByPane = new Map<string, { band: string; selected: string; view: View }>()
-const paneId = (args: PanelRenderArgs) => args.instanceId ?? args.panelKey
-const paneState = (args: PanelRenderArgs) => {
-  const id = paneId(args)
+const stateByPane = new Map<string, PaneState>()
+const paneState = (args: PanelRenderArgs): PaneState => {
+  const id = args.instanceId ?? args.panelKey
   let state = stateByPane.get(id)
-  if (!state) stateByPane.set(id, (state = { band: "all", selected: "", view: WORLD }))
+  if (!state) stateByPane.set(id, (state = { band: "all", selected: "" }))
   return state
 }
 
-const DOT_PREFIX = "dot:"
-
 const nowMillis = (args: PanelRenderArgs) => args.clock?.realNowMillis ?? Date.now()
 
-/// Everything the scene reads from the feed and the pane's state, so a render
-/// and an event answer from the same place.
-async function snapshot(args: PanelRenderArgs, ctx: HookContext, force = false) {
-  const now = nowMillis(args)
-  const seconds = refreshSeconds(args.config)
-  const feed = await currentSpots(ctx, now, seconds, force)
+/// The pane's size, or what a phone is when the host does not say.
+const paneOf = (args: PanelRenderArgs): Pane => {
+  const e = args.environment
+  return e && e.width > 0 && e.height > 0 ? { width: e.width, height: e.height } : { width: 360, height: 560 }
+}
+
+const operationUuid = (args: PanelRenderArgs): string | undefined => (typeof args.operation?.uuid === "string" ? args.operation.uuid : undefined)
+
+/// Everything the scene reads, so that a render and an event's answer come from the same place.
+async function snapshot(args: PanelRenderArgs, ctx: HookContext): Promise<MapModel> {
+  const pane = paneOf(args)
+  const lines = linesOf(args.environment)
+  const chrome = chromeOf(lines)
   const state = paneState(args)
-  const shown = filterBand(feed.spots, state.band)
-  const options = spotOptions(shown)
-  // The dropdown holds "" or one of its options, so a station that has gone
-  // (QRT, or filtered out) is let go of rather than left dangling.
-  if (!options.some((o) => o.value === state.selected)) state.selected = ""
+  const now = nowMillis(args)
+
+  const board = await loadBoard(ctx, { filter: boardSource(args.config), maxAgeMinutes: maxAgeMinutes(args.config), operationUuid: operationUuid(args) }, now)
+  const shown = filterBand(board.spots, state.band)
+  // A station that has gone (QRT, or filtered out) is let go of rather than left picked.
+  if (!shown.some((s) => s.call === state.selected)) state.selected = ""
   const chosen = shown.find((s) => s.call === state.selected)
-  const updated = feed.at ? ` · updated ${clockUtc(feed.at)}` : ""
+
+  const view = state.view ?? openingView(pane, chrome, args.operation?.grid)
+  const g = geometryOf(pane, chrome, view.zoom, view.cy)
+  const scroll = scrollIn(g, view.scroll)
+  const region = regionOf(pane, chrome, { zoom: g.zoom, scroll, cy: g.cy })
+
+  const said = board.available
+    ? summary(shown.length, board.spots.length, board.total - board.spots.length, state.band)
+    : "This app does not share its spots with the map."
   return {
-    shown,
-    options,
-    state,
-    strings: {
-      band: state.band,
-      spot: state.selected,
-      view: presetOf(state.view),
-      summary: summary(shown.length, feed.spots.length, state.band) + updated + (seconds === 0 ? " · auto-refresh off" : ""),
-      details: detailsLine(chosen, now),
-    },
+    pane,
+    lines,
+    g,
+    spots: shown,
+    selected: state.selected,
+    band: state.band,
+    region: region?.value ?? "",
+    scroll,
+    summary: said,
+    details: detailsLine(chosen, now),
+    logLabel: chosen ? `Use ${chosen.call} in the log` : "Use in the log",
+    canLog: !!chosen,
   }
 }
 
@@ -128,19 +108,30 @@ export const SpotMapPanel: PanelHook = {
     return [
       {
         key: "map",
-        title: "KM4BE POTA Spot Map",
-        description: "A map of the activators currently spotted on POTA, colored by band",
+        title: "KM4BE Spot Map",
+        description: "A map of the stations on the spot board, colored by band, with a button to put one in the log",
         icon: "map-marker-radius",
-        // No `on` here: how often to update is the pane's own setting, so each
-        // render names its tick (below). With no tick the pane renders once, when
-        // it appears, and then on a resize, an event or the Refresh button.
+        preview: PREVIEW_SVG,
+        // The host says when its board changes, and when the operation does, which is what the board is judged against.
+        on: ["spots", "operation"],
         form: [
           {
             type: "field",
-            key: "refreshSeconds",
+            key: "source",
+            fieldType: "select",
+            label: "Spots to show",
+            description: "Everything on the spot board, or only what the Spots panel is set to show.",
+            options: [
+              { label: "Everything on the board", value: "all" },
+              { label: "What the Spots panel shows", value: "user" },
+            ],
+          },
+          {
+            type: "field",
+            key: "maxAgeMinutes",
             fieldType: "number",
-            label: "Update interval (seconds)",
-            description: `How often the map fetches new spots. 0 turns automatic updates off, and the Refresh button is then the only way to update. Otherwise at least ${MIN_REFRESH_SECONDS}. Default ${DEFAULT_REFRESH_SECONDS}.`,
+            label: "Newest spots (minutes)",
+            description: "Spots older than this are left off the map. 5 to 240; default 30.",
           },
         ],
       },
@@ -148,96 +139,77 @@ export const SpotMapPanel: PanelHook = {
   },
 
   async render(args: PanelRenderArgs, ctx: HookContext): Promise<PanelContent> {
-    const { shown, options, state, strings } = await snapshot(args, ctx)
-    // A dot is a few pixels on a phone; its click target is made a fingertip wide.
-    const target = hitSize(args.environment)
-
-    const seconds = refreshSeconds(args.config)
-    return {
-      kind: "scene",
-      triggers: seconds > 0 ? [`tick:${seconds}`] : [],
-      scene: {
-        version: 1,
-        width: MAP_WIDTH,
-        height: MAP_HEIGHT,
-        values: {},
-        strings,
-        layers: [
-          { id: "world", x: 0, y: 0, width: MAP_WIDTH, height: MAP_HEIGHT, svg: baseSvg(state.view) },
-          { id: "spots", x: 0, y: 0, width: MAP_WIDTH, height: MAP_HEIGHT, svg: markersSvg(shown, state.selected, state.view) },
-        ],
-        controls: [
-          {
-            id: "band",
-            kind: "nativeDropdown",
-            label: "Band",
-            value: "band",
-            event: "filter",
-            options: [{ label: "All bands", value: "all" }, ...BANDS.map((b) => ({ label: b, value: b }))],
-          },
-          { id: "spot", kind: "nativeDropdown", label: "Station", value: "spot", event: "select", options },
-          {
-            id: "view",
-            kind: "nativeDropdown",
-            label: "Region",
-            value: "view",
-            event: "view",
-            placeholder: "Custom view",
-            options: PRESETS.map((p) => ({ label: p.label, value: p.value })),
-          },
-          { id: "zoomOut", kind: "nativeButton", label: "Zoom out", icon: "magnify-minus-outline", variant: "tonal", event: "zoomOut", disabled: state.view.zoom <= MIN_ZOOM },
-          { id: "zoomIn", kind: "nativeButton", label: "Zoom in", icon: "magnify-plus-outline", variant: "tonal", event: "zoomIn", disabled: state.view.zoom >= MAX_ZOOM },
-          { id: "refresh", kind: "nativeButton", label: "Refresh", icon: "refresh", variant: "tonal", event: "refresh" },
-          { id: "summary", kind: "nativeText", label: "Activators shown", value: "summary", align: "start" },
-          { id: "details", kind: "nativeText", label: "Selected station", value: "details", align: "start" },
-          // A click target for each dot, oldest first so the newest sits on top.
-          ...visibleSpots(shown, state.view)
-            .slice(0, MAX_CLICKABLE)
-            .reverse()
-            .map((s) => ({
-              id: DOT_PREFIX + s.call,
-              kind: "button" as const,
-              label: `${s.call} ${s.band} ${s.ref}`.trim(),
-              event: "pick",
-              ...dotHitArea(s, state.view, target),
-            })),
-        ],
-        layout: {
-          column: [
-            {
-              row: [{ control: "band", width: 130 }, { control: "spot", flex: 1 }, { control: "refresh" }],
-              spacing: 8,
-              crossAxisAlignment: "center",
-            },
-            {
-              row: [{ control: "view", flex: 1 }, { control: "zoomOut" }, { control: "zoomIn" }],
-              spacing: 8,
-              crossAxisAlignment: "center",
-            },
-            { control: "summary" },
-            { scene: true, flex: 1 },
-            { control: "details" },
-          ],
-          padding: 8,
-          spacing: 8,
-          crossAxisAlignment: "stretch",
-        },
-      },
-    }
+    return { kind: "scene", scene: buildScene(await snapshot(args, ctx)), triggers: [], title: TAB_TITLE }
   },
 
   async onEvent(args, ctx): Promise<PanelSceneEventResult> {
     const { event } = args
     const state = paneState(args)
+    const pane = paneOf(args)
+    const chrome = chromeOf(linesOf(args.environment))
+    const current = (): View => {
+      const view = state.view ?? openingView(pane, chrome, args.operation?.grid)
+      const g = geometryOf(pane, chrome, view.zoom, view.cy)
+      return { zoom: g.zoom, scroll: scrollIn(g, view.scroll), cy: g.cy }
+    }
+    let moved = false
+
     if (event.action === "filter" && event.text !== undefined) state.band = event.text === "" ? "all" : event.text
-    if (event.action === "select" && event.text !== undefined) state.selected = event.text
-    if (event.action === "view" && event.text !== undefined) state.view = presetView(event.text) ?? state.view
-    if (event.action === "zoomIn") state.view = zoomed(state.view, 1)
-    if (event.action === "zoomOut") state.view = zoomed(state.view, -1)
     if (event.action === "pick" && event.controlId.startsWith(DOT_PREFIX)) state.selected = event.controlId.slice(DOT_PREFIX.length)
-    const { strings } = await snapshot(args, ctx, event.action === "refresh")
-    return { values: {}, strings }
+    // Where the operator has scrolled to, once it has come to rest: kept, and not sent back as a change.
+    if (event.action === "scrolled" && typeof event.value === "number" && Number.isFinite(event.value)) {
+      const view = current()
+      state.view = { ...view, scroll: scrollIn(geometryOf(pane, chrome, view.zoom, view.cy), event.value) }
+      return { values: {} }
+    }
+    // A drag along the strip, come to rest: the zoom changes by the factor it says, about the middle of the pane.
+    if (event.action === "stretch" && typeof event.value === "number") {
+      state.view = zoomedBy(pane, chrome, current(), event.value)
+      moved = true
+    }
+    if (event.action === "zoomIn") (state.view = zoomedBy(pane, chrome, current(), ZOOM_STEP)), (moved = true)
+    if (event.action === "zoomOut") (state.view = zoomedBy(pane, chrome, current(), 1 / ZOOM_STEP)), (moved = true)
+    // The band of latitudes moves up or down; across, the scene's own scroll does that.
+    if (event.action === "panUp") (state.view = pannedBy(pane, chrome, current(), -1)), (moved = true)
+    if (event.action === "panDown") (state.view = pannedBy(pane, chrome, current(), 1)), (moved = true)
+    if (event.action === "region" && event.text !== undefined) {
+      const view = regionView(pane, chrome, event.text)
+      if (view) (state.view = view), (moved = true)
+    }
+    if (event.action === "log") await logStation(args, ctx)
+
+    const m = await snapshot(args, ctx)
+    return { values: moved ? { scroll: m.scroll } : {}, strings: { band: m.band, region: m.region, summary: m.summary, details: m.details } }
   },
+}
+
+/// Puts the picked station in the logging fields of the operation in front, which tunes the radio as a tap on a spot in the Spots panel
+/// does: call, frequency, band, mode and the reference it is at. The host says whether it took it.
+async function logStation(args: PanelRenderArgs, ctx: HookContext): Promise<void> {
+  const state = paneState(args)
+  const model = await snapshot(args, ctx)
+  const spot = model.spots.find((s) => s.call === state.selected)
+  if (!spot) return
+  try {
+    const result = await host.suggestQso({
+      qso: {
+        their: { call: spot.call },
+        ...(spot.freq ? { freq: spot.freq } : {}),
+        ...(spot.band !== "other" ? { band: spot.band } : {}),
+        ...(spot.mode ? { mode: spot.mode } : {}),
+        ...(spot.ref ? { refs: [{ type: spot.refType, ref: spot.ref }] } : {}),
+      },
+      ...(operationUuid(args) ? { operationUuid: operationUuid(args) } : {}),
+    })
+    await host.showMessage({
+      presentation: "status",
+      icon: result.accepted ? "check" : "alert-circle-outline",
+      text: result.accepted ? `${spot.call} is in the log's fields.` : "Open the operation you want to log it in, and try again.",
+    })
+  } catch (error) {
+    host.log(`km4be-spot-maps: logging ${spot.call}: ${error instanceof Error ? error.message : String(error)}`)
+    await host.showMessage({ presentation: "status", icon: "alert-circle-outline", text: `Could not put ${spot.call} in the log.` })
+  }
 }
 
 defineExtension({

@@ -29,8 +29,8 @@ Three more panels are written by km4be in this fork, and published to the catalo
   operation's log that contain it, as a table with one row each and the matching letters in bold. It is view
   only, since a panel cannot write to the call field, and it searches one operation, since the SDK reads the
   log per operation.
-- `km4be-spot-maps`: the spots of POTA activators on a map, in the style of the operation map, that moves and
-  zooms, with a tap on a pin for the activator and the park.
+- `km4be-spot-maps`: the stations on the app's own spot board (POTA, SOTA, WWFF and the rest) on a world map that scrolls
+  and zooms, with a dot to a station colored by band, and a button that puts the one you tapped in the log.
 - `km4be-satellite-info`: the next amateur satellite passes for where the operator is, with a sky plot that
   can be scrubbed along for the Doppler shift, the frequencies and transponder kind of each satellite,
   AMSAT's reports, and a page to send a report to AMSAT.
