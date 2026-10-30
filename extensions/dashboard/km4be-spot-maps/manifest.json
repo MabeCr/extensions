@@ -2,7 +2,7 @@
   "key": "km4be-spot-maps",
   "name": "KM4BE Spot Maps",
   "shortName": "Spot Map",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "api": 12,
   "description": "A world map of the stations on the spot board, colored by band, that scrolls and zooms, with a button to put one in the log",
   "category": "dashboard",
