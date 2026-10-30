@@ -589,7 +589,17 @@ export function buildReportScene(r: ReportModel): PanelScene {
   const { controls, head } = detailHead(r.compact)
   const dense = densityOf(r.compact)
   controls.push(
-    { id: "variant", kind: "nativeDropdown", label: "Transponder", value: "variant", event: "variant", options: r.variants },
+    // A dropdown with no options is refused by the app, and with it the whole page. With nothing to offer, because AMSAT has no
+    // entry for the satellite or its list could not be read, it has the one choice that says so, and cannot be opened.
+    {
+      id: "variant",
+      kind: "nativeDropdown",
+      label: "Transponder",
+      value: "variant",
+      event: "variant",
+      options: r.variants.length ? r.variants : [{ label: "No transponder to report on", value: "" }],
+      disabled: r.variants.length === 0,
+    },
     {
       id: "kind",
       kind: "nativeSegmented",
