@@ -202,9 +202,7 @@ test("the Sky page is redrawn every two seconds while the satellite is overhead,
   assert.deepEqual((await p.render({ ...config, countdown: true }, mid)).triggers, ["tick:1"])
   assert.deepEqual((await p.render(config, best.los + 5 * 60_000)).triggers, [], "set again")
 
-  // The Radio page has nothing moving; nor does the list.
-  await p.event(config, mid, "tab", "tab", { text: "radio" })
-  assert.deepEqual((await p.render(config, mid)).triggers, [])
+  // The list has nothing moving. (The Radio page is redrawn while the satellite is up too: see polish.test.ts.)
   await p.event(config, mid, "back", "back")
   assert.deepEqual((await p.render(config, mid)).triggers, [])
 })

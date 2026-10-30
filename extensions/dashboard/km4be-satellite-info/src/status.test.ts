@@ -8,7 +8,7 @@ import { ELEMENTS_URL, LIST_URL, statusUrl } from "./data.ts"
 import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
 import { forgetAll } from "./memory.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
-import { GLYPH, LEGEND, parseSummary, statusFor, statusHours, statusLines } from "./status.ts"
+import { parseSummary, statusFor, statusHours, statusLines } from "./status.ts"
 
 const rows = parseSummary(SUMMARY)
 const sat = (name: string, modulation: string, amsat?: string[]) => ({ name, modulation, info: amsat ? { amsat } : {} })
@@ -143,21 +143,27 @@ async function panel(summary: () => { status: number; body: string }) {
   }
 }
 
+type TestLayer = { id: string; x: number; y: number; width: number; icon?: { name: string; color: string }; text?: { literal?: string; value?: string; size: number; color: string; fontFamily: string } }
+const layersOf = (scene: unknown): TestLayer[] => (scene as { layers: TestLayer[] }).layers
 const rowsOf = (strings: Record<string, string>) => [0, 1, 2, 3, 4].map((i) => strings[`row${i}`]).filter(Boolean)
 
-test("each row ends with what AMSAT's reports say, and the legend under the list explains the marks", async () => {
+test("each row has what AMSAT's reports say as an icon, and the key under the list explains the marks", async () => {
   const p = await panel(() => ({ status: 200, body: JSON.stringify(SUMMARY) }))
   const scene = await p.render({ ...cfg, minElevation: 0 }, t0)
   const lines = rowsOf(scene.strings)
   assert.ok(lines.length > 0)
-  for (const line of lines) {
+  const layers = layersOf(scene)
+  lines.forEach((line, i) => {
     const name = line.split(/ +/)[0]
     // AO-7 was heard twice and not heard once; FO-29 reported telemetry only twice and heard once.
-    assert.equal(line.at(-1), name === "AO-7" ? GLYPH.heard : GLYPH.telemetry, `${name}: ${line}`)
-    assert.match(line, / {2}\S$/, "the mark stands apart from the length")
-  }
-  assert.equal(scene.strings.legend, LEGEND)
-  assert.ok(!scene.strings.hint.includes("heard"), "the hint no longer carries it")
+    const mark = layers.find((l) => l.id === `mark${i}`)
+    assert.deepEqual(mark?.icon, name === "AO-7" ? { name: "check-circle", color: "#43a047" } : { name: "circle-half-full", color: "#f9a825" }, `${name}: ${line}`)
+    assert.ok(/\d+m$/.test(line), "the line ends at the length: the mark is not in it")
+  })
+  // Under the rows, the same icons with what they say.
+  assert.deepEqual(layers.filter((l) => l.id.startsWith("key-")).map((l) => l.icon!.name), ["check-circle", "circle-half-full", "close-circle"])
+  assert.deepEqual(layers.filter((l) => l.id.startsWith("keyText-")).map((l) => l.text!.literal), ["heard", "telemetry only", "not heard"])
+  assert.ok(!scene.strings.hint.includes("heard"), "the hint does not carry it")
 })
 
 test("with AMSAT unreachable, rows have no mark, and it is not asked again every minute", async () => {
@@ -165,6 +171,7 @@ test("with AMSAT unreachable, rows have no mark, and it is not asked again every
   const p = await panel(() => (down ? { status: 503, body: "" } : { status: 200, body: JSON.stringify(SUMMARY) }))
   const scene = await p.render(cfg, t0)
   assert.ok(rowsOf(scene.strings).every((line) => /\d+m$/.test(line)), "ends at the length")
+  assert.ok(!layersOf(scene).some((l) => l.id.startsWith("mark") && l.id !== "markTitle"), "and no icon to say what AMSAT said, when it has said nothing")
   const statusFetches = () => p.fetched.filter((u) => u === statusUrl(24)).length
   assert.equal(statusFetches(), 1)
 
@@ -173,5 +180,6 @@ test("with AMSAT unreachable, rows have no mark, and it is not asked again every
   down = false
   const back = await p.render(cfg, t0 + 3 * 60_000)
   assert.equal(statusFetches(), 2, "tried again after the pause")
-  assert.ok(rowsOf(back.strings).every((line) => line.at(-1) === GLYPH.heard || line.at(-1) === GLYPH.telemetry))
+  const marks = layersOf(back).filter((l) => /^mark\d$/.test(l.id))
+  assert.equal(marks.length, rowsOf(back.strings).length, "every row has its icon again")
 })

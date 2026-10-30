@@ -11,7 +11,6 @@ import { clock, table } from "./passes.ts"
 import type { Cells } from "./passes.ts"
 import { COMFORTABLE, COMPACT, isCompact } from "./scene.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
-import { LEGEND, LEGEND_COMPACT } from "./status.ts"
 
 const t0 = Date.parse("2026-10-07T00:00:00Z")
 void buildCatalog
@@ -122,6 +121,8 @@ async function panel(environment?: { width: number; height: number }) {
 
 const cfg = { grid: "EL95vs", utc: true, minElevation: 0 }
 type LayoutNode = { row?: { control?: string; width?: number }[]; control?: string; spacing?: number; height?: number; padding?: number | number[]; spacer?: number; scene?: boolean }
+type TestLayer = { id: string; x: number; y: number; width: number; icon?: { name: string; color: string }; text?: { literal?: string; value?: string; size: number; color: string; fontFamily: string } }
+const layersOf = (scene: unknown): TestLayer[] => (scene as { layers: TestLayer[] }).layers
 type Geometry = { id: string; kind?: string; x?: number; y?: number; width?: number; height?: number; opacity?: number }
 /// Where the list's controls are in its artwork, by the kind of control.
 const geometry = (scene: { controls: Geometry[] }) => {
@@ -144,7 +145,8 @@ test("a desktop pane's list is laid out as it always was", async () => {
   assert.ok(stars.length > 0 && stars.length === rows.length && rows.length === chevrons.length)
   for (const c of [...stars, ...chevrons]) assert.deepEqual([c.width, c.height], [56, 44], "a star and a chevron are a button wide")
   for (const c of rows) assert.deepEqual([c.kind, c.x, c.width, c.height], ["button", 56, 1000 - 24 - 112, 44], "the line between them is one hit area")
-  assert.equal(scene.strings.legend, LEGEND)
+  // The key to the marks is drawn under the rows, as the marks are, with the whole words where they fit.
+  assert.deepEqual(layersOf(scene).filter((l) => l.id.startsWith("keyText-")).map((l) => l.text!.literal), ["heard", "telemetry only", "not heard"])
   const names = [0, 1, 2, 3, 4].map((i) => scene.strings[`row${i}`]?.split(/ +/)[0]).filter(Boolean)
   assert.equal(nameGap(scene.strings.columns, names), 2, "two spaces between columns")
   assert.ok([0, 1, 2, 3, 4].every((i) => !/\+1\b/.test(scene.strings[`row${i}`] ?? "")))
@@ -165,8 +167,10 @@ test("the same list in a phone's pane is packed tighter, and has the same contro
   const pager = (scene: { layout: { column: LayoutNode[] } }) => scene.layout.column.find((n) => n.row?.some((c) => c.control === "prev"))!
   assert.equal(pager(tight).height, 40, "the pager is no taller than a row")
   assert.equal(pager(wide).height, undefined, "and on a desktop is as it was")
-  assert.equal(tight.strings.legend, LEGEND_COMPACT)
-  assert.ok(LEGEND_COMPACT.length < 40 && LEGEND.length > 55)
+  // The key fits the phone's width, shortened if it has to be.
+  const keys = layersOf(tight).filter((l) => l.id.startsWith("keyText-"))
+  assert.equal(keys.length, 3)
+  assert.ok(keys.every((l) => l.x + l.width <= tight.width), "within the artwork")
   const tightNames = [0, 1, 2, 3, 4].map((i) => tight.strings[`row${i}`]?.split(/ +/)[0]).filter(Boolean)
   assert.equal(nameGap(tight.strings.columns, tightNames), 1, "one space between columns")
   assert.ok(tight.strings.columns.length < wide.strings.columns.length)

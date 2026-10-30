@@ -1,0 +1,13 @@
+{
+  "defaults": {
+    "operation": { "grid": "FM18lv" }
+  },
+  "cases": [
+    { "label": "phone", "width": 390, "height": 700, "config": { "grid": "FM18lv", "minElevation": 5 } },
+    { "label": "phone, dark, seconds", "width": 390, "height": 700, "app": "dark", "config": { "grid": "FM18lv", "minElevation": 5, "listSeconds": true } },
+    { "label": "small phone", "width": 360, "height": 640, "config": { "grid": "FM18lv", "minElevation": 5 } },
+    { "label": "phone on its side", "width": 800, "height": 360, "config": { "grid": "FM18lv", "minElevation": 5 } },
+    { "label": "tablet, chart at 70%", "width": 600, "height": 900, "config": { "grid": "FM18lv", "minElevation": 5, "skySize": 70 } },
+    { "label": "desktop pane", "width": 480, "height": 560, "config": { "grid": "FM18lv", "minElevation": 5, "density": "comfortable" } }
+  ]
+}
