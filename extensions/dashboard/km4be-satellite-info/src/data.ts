@@ -132,6 +132,10 @@ interface Cached {
 /// (the panel draws every minute) but after `BACKOFF_MS`.
 const failedAt = new Map<string, number>()
 const BACKOFF_MS = 2 * 60_000
+/// With nothing yet to show, a failure is tried again soon: the list is waiting for it.
+const FIRST_RETRY_MS = 4_000
+/// A slow server is given up on in this long, so that a render is not held for the host's whole allowance for one feed.
+export const FETCH_TIMEOUT_MS = 8_000
 
 /// For tests: forget which feeds have failed.
 export const forgetFailures = (): void => failedAt.clear()
@@ -149,7 +153,17 @@ onForget(() => {
 /// The copy under `key` while younger than `maxAge`; otherwise fetched, stored and returned; and
 /// when the fetch fails, or one failed a moment ago, whatever copy there is, however old. The copy
 /// comes from memory if it has been read before, and from the device's storage if not.
-export async function cachedJson(key: string, url: string, maxAge: number, now: number, ctx: HookContext): Promise<{ data: unknown; at: number } | null> {
+///
+/// `essential` is for a feed the list cannot be drawn without: a failure of it is tried again in seconds, and it is tried when the host
+/// says it is offline, for there is nothing else to show. A feed that only adds to the list waits out the usual pause.
+export async function cachedJson(
+  key: string,
+  url: string,
+  maxAge: number,
+  now: number,
+  ctx: HookContext,
+  essential = false,
+): Promise<{ data: unknown; at: number } | null> {
   let have = memory.get(key) ?? null
   if (!have) {
     const stored = (await host.kvGet(key)) as Cached | null
@@ -158,10 +172,12 @@ export async function cachedJson(key: string, url: string, maxAge: number, now: 
   }
   if (have && now >= have.at && now - have.at < maxAge) return { data: have.data, at: have.at }
   const failed = failedAt.get(key)
-  const backingOff = failed !== undefined && now >= failed && now - failed < BACKOFF_MS
-  if (ctx.online && !backingOff) {
+  const backingOff = failed !== undefined && now >= failed && now - failed < (essential && !have ? FIRST_RETRY_MS : BACKOFF_MS)
+  // Online as the host believes it, or tried anyway where there is nothing to show: the host's idea of it can lag behind a connection
+  // that has just come up, and a failed fetch is quick when there is none.
+  if ((ctx.online || (essential && !have)) && !backingOff) {
     try {
-      const response = await host.fetch(url)
+      const response = await host.fetch(url, { timeout: FETCH_TIMEOUT_MS })
       if (response.status !== 200) throw new Error(`HTTP ${response.status}`)
       const data = JSON.parse(response.body) as JSONValue
       const fresh = { at: now, data } satisfies Cached
@@ -190,8 +206,8 @@ let catalogMemo: { listAt: number; elementsAt: number; catalog: Catalog } | unde
 
 export async function loadCatalog(ctx: HookContext, now: number): Promise<Catalog> {
   const [list, elements] = await Promise.all([
-    cachedJson("list", LIST_URL, LIST_MAX_AGE_MS, now, ctx),
-    cachedJson("elements", ELEMENTS_URL, ELEMENTS_MAX_AGE_MS, now, ctx),
+    cachedJson("list", LIST_URL, LIST_MAX_AGE_MS, now, ctx, true),
+    cachedJson("elements", ELEMENTS_URL, ELEMENTS_MAX_AGE_MS, now, ctx, true),
   ])
   const listAt = list?.at ?? 0
   const elementsAt = elements?.at ?? 0

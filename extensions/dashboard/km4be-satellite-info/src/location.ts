@@ -39,10 +39,16 @@ export function roundedPlace(lat: number, lon: number): Place | null {
 /// How long a position is good for: a person on foot or in a car does not move far enough in a
 /// minute to change a pass, and asking the host for the device's location is a round trip.
 const PLACE_MAX_AGE_MS = 60_000
+/// How long `no place` is remembered: a moment. The device's position can be a while coming on a cold start, and a list that said
+/// "No location" for a minute after it had arrived is the list that has to be left and come back to.
+const NO_PLACE_MAX_AGE_MS = 4_000
 
 let placeMemo: { key: string; at: number; place: Place | null } | undefined
+/// The last position the device gave, for when it does not give one for a moment.
+let lastDevice: Place | undefined
 onForget(() => {
   placeMemo = undefined
+  lastDevice = undefined
 })
 
 /// The device's position if the host will say, then the grid typed in the panel's settings, then
@@ -54,7 +60,8 @@ export async function findPlace(
   now: number = Date.now(),
 ): Promise<Place | null> {
   const key = `${String(config?.grid)}|${String(operation?.grid)}`
-  if (placeMemo && placeMemo.key === key && now >= placeMemo.at && now - placeMemo.at < PLACE_MAX_AGE_MS) return placeMemo.place
+  const memoAge = placeMemo ? now - placeMemo.at : Infinity
+  if (placeMemo && placeMemo.key === key && memoAge >= 0 && memoAge < (placeMemo.place ? PLACE_MAX_AGE_MS : NO_PLACE_MAX_AGE_MS)) return placeMemo.place
   const place = await lookForPlace(config, operation)
   placeMemo = { key, at: now, place }
   return place
@@ -64,11 +71,12 @@ async function lookForPlace(config: Record<string, unknown> | undefined, operati
   const device = await host.getLocation().catch(() => null)
   if (device && Number.isFinite(device.latitude) && Number.isFinite(device.longitude)) {
     const place = roundedPlace(device.latitude, device.longitude)
-    if (place) return place
+    if (place) return (lastDevice = place)
   }
   for (const [grid, source] of [[config?.grid, "settings"], [operation?.grid, "operation"]] as const) {
     const observer = observerFromGrid(grid)
     if (observer) return { ...observer, grid: String(grid).trim(), source }
   }
-  return null
+  // Nothing typed, and the device says nothing this time: where it last said, which is better than nowhere.
+  return lastDevice ?? null
 }

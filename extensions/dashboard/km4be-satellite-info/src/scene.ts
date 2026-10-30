@@ -90,6 +90,12 @@ export interface ListLook {
   lineBody: number
 }
 
+/// Panes are measured while the host is still laying them out, and can say they are a sliver for a moment. The geometry is worked out
+/// for no less than this, since a width under about 125 pixels leaves a row no room for its text, and the app refuses a rect with a
+/// size below zero, and the whole scene with it. The next render, with the pane's real size, replaces it.
+export const MIN_PANE_WIDTH = 160
+export const MIN_PANE_HEIGHT = 200
+
 export const DEFAULT_LOOK: ListLook = {
   width: 520,
   family: "monospace",
@@ -116,14 +122,14 @@ export function listLook(
   const line = (face: Typeface | undefined, fallback: number): number => (face && face.scaledFontSize > 0 ? Math.ceil(face.scaledFontSize * 1.4) : fallback)
   const size = mono && mono.fontSize > 0 ? mono.fontSize : DEFAULT_LOOK.size
   return {
-    width: environment.width > 0 ? Math.floor(environment.width - 2 * densityOf(compact).padding) : DEFAULT_LOOK.width,
+    width: environment.width > 0 ? Math.floor(Math.max(environment.width, MIN_PANE_WIDTH) - 2 * densityOf(compact).padding) : DEFAULT_LOOK.width,
     family: mono?.fontFamily || DEFAULT_LOOK.family,
     size,
     os: mono && mono.fontSize > 0 && mono.scaledFontSize > 0 ? mono.scaledFontSize / mono.fontSize : 1,
     text: environment.colors?.primary ?? DEFAULT_LOOK.text,
     live: DEFAULT_LOOK.live,
     title: environment.colors?.onSurfaceVariant ?? DEFAULT_LOOK.title,
-    height: environment.height && environment.height > 0 ? Math.floor(environment.height) : DEFAULT_LOOK.height,
+    height: environment.height && environment.height > 0 ? Math.floor(Math.max(environment.height, MIN_PANE_HEIGHT)) : DEFAULT_LOOK.height,
     surface: environment.colors?.surface ?? DEFAULT_LOOK.surface,
     lineLabel: line(environment.typography?.label, DEFAULT_LOOK.lineLabel),
     lineBody: line(environment.typography?.body, DEFAULT_LOOK.lineBody),

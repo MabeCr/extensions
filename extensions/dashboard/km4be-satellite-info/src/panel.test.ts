@@ -105,12 +105,17 @@ test("the panel is a scene of controls, with its settings and a minute's tick", 
   assert.deepEqual([...new Set(scene.controls.map((c) => c.kind))].sort(), ["button", "nativeButton", "nativeSegmented", "nativeSwitch", "nativeText"])
 })
 
-test("with no place the panel says so, and fetches nothing", async () => {
+test("with no place the panel says so, and asks again in ten seconds, not every few", async () => {
   const p = await panel()
-  const { scene } = await p.render({}, t0)
+  const first = await p.render({}, t0)
+  const { scene } = first
   assert.match(scene.strings.header, /No location/)
   assert.deepEqual(rowTexts(scene.strings), [])
-  assert.equal(p.fetched.length, 0)
+  // The feeds are asked for with the place, not after it, so that the list is as soon as the place is; they are asked once.
+  assert.equal(p.fetched.length, 3)
+  assert.deepEqual((first as unknown as { triggers: string[] }).triggers, ["tick:10"])
+  await p.render({}, t0 + 10_000)
+  assert.equal(p.fetched.length, 3, "and not again")
 })
 
 test("the device's location is used, rounded to its grid square", async () => {
