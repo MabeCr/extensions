@@ -1,0 +1,63 @@
+{
+  "key": "ki2d-ssb-sprint",
+  "name": "KI2D’s North American SSB Sprint",
+  "shortName": "SSB Sprint",
+  "version": "0.1.1",
+  "description": "Four hours on 20, 40 and 80m: serial, name and state, province or country, and QSY after every solicited contact; a Saturday evening in the fall and in the spring",
+  "category": "contest",
+  "icon": "run-fast",
+  "accentColor": "#C62828",
+  "api": 11,
+  "keywords": [
+    "contest",
+    "sprint",
+    "ssb sprint",
+    "na sprint",
+    "phone",
+    "ssb",
+    "state",
+    "province",
+    "cabrillo"
+  ],
+  "relevance": {
+    "continents": [
+      "NA"
+    ],
+    "dates": [
+      "2026-10-31",
+      "2026-11-01",
+      "2027-03-20",
+      "2027-03-21"
+    ]
+  },
+  "hooks": [
+    "activity",
+    "adifFields",
+    "dataFile",
+    "export",
+    "ref:ssb-sprint",
+    "scoring"
+  ],
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "@ham2k/lib-qson-cabrillo": "^1.2.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  },
+  "translations": {
+    "es": {
+      "name": "North American SSB Sprint de KI2D",
+      "description": "Cuatro horas en 20, 40 y 80 m: número de serie, nombre y estado, provincia o país, y QSY tras cada contacto solicitado; un sábado por la noche en otoño y en primavera",
+      "keywords": [
+        "concurso",
+        "fonía",
+        "estado"
+      ]
+    }
+  }
+}

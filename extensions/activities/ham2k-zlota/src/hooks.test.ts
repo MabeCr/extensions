@@ -30,14 +30,13 @@ test("the end-anchored rules shape only the reference being typed", () => {
   assert.equal(applyRefTransforms("ZLP/OT-1234", transforms), "ZLP/OT-1234")
 })
 
-test("the reference list reads x as longitude and y as latitude", () => {
-  // The list is drawn from a map layer, so its coordinates are named for
-  // screen axes — swapped, every reference lands in the wrong ocean. `name`
-  // is the field the live list publishes; reading any other leaves every
-  // reference nameless.
+test("the reference list reads its coordinates and names from the fields the live list publishes", () => {
+  // Shaped like a row of ontheair.nz/assets/assets.json. A field the list
+  // does not carry reads as nothing, so every reference would be nameless,
+  // or — for the coordinates — off every map.
   const hook = zlota.hooks.find((h) => h.category === "dataFile" && h.key === "ham2k-zlota-all-references")!.hook
   const mapper = hook.jsonToLookupEntry as (entry: unknown) => any
-  const entries = [{ code: "ZLH/AA-001", name: "Angelus Hut", asset_type: "hut", x: 172.7, y: -41.8 }]
+  const entries = [{ id: 1, code: "ZLH/AA-001", name: "Angelus Hut", asset_type: "hut", latitude: -41.8, longitude: 172.7 }]
     .map((entry) => mapper(entry))
     .filter((entry) => entry !== null && entry !== undefined)
   assert.equal(entries.length, 1)
@@ -93,4 +92,19 @@ test("ADIF import keeps a reference that does not match the pattern", async () =
   assert.deepEqual(await importOne({ my_sig: "ZLOTA", my_sig_info: "not a reference" }), {
     refs: [{ type: "zlotaActivation", ref: "NOT A REFERENCE", for: "operation" }],
   })
+})
+
+test("only a hut is circled: every other kind of place is activated by a rule no circle draws", async () => {
+  // A hut's rule is "within 100m". A lake's is measured from its shore and a
+  // park's is its boundary, so a circle around their point would be wrong.
+  const rows: Record<string, Record<string, unknown>> = {
+    "ZLH/AA-001": { key: "ZLH/AA-001", name: "Angelus Hut", lat: -41.8, lon: 172.7, data: { assetType: "hut" } },
+    "ZLL/0001": { key: "ZLL/0001", name: "A Lake", lat: -41.0, lon: 172.0, data: { assetType: "lake" } },
+  }
+  const withRows = await loadExtension(() => import("./index.ts"), { hostCalls: { dbLookupSelectOne: (params) => rows[params.key as string] ?? null } })
+  const radius = async (ref: string) =>
+    ((await withRows.runHook("ref:zlotaActivation", "decorateRef", { ref: { type: "zlotaActivation", ref } })) as Record<string, unknown>)
+      .activationRadiusInMeters
+  assert.equal(await radius("ZLH/AA-001"), 100)
+  assert.equal(await radius("ZLL/0001"), undefined)
 })

@@ -13,27 +13,32 @@ Three kinds of thing live here. The **QSO parties**: the app carries one `qp`
 extension holding all fifty, and this repository publishes them **one event per
 extension**, so an operator installs the Texas QSO Party and gets the Texas QSO
 Party. **Catalog copies of the app's own built-ins**, so that each can ship
-and update without an app release — see **Porting a built-in**. And **two spotting
-sources the app never shipped**, under the `ki2d-` callsign prefix a third
-party's extension takes: the QSO Party Hub and APRS Tracker feeds that
-app-polo's `qp` extension carried inside it, and an APRS position beacon.
+and update without an app release — see **Porting a built-in**. And
+**extensions the app never shipped**: new activity programs, contests and
+state-park events, the DX cluster's spots, dashboard panels, and four
+spotting sources under the `ki2d-` callsign prefix a third party's extension
+takes — the QSO Party Hub and APRS Tracker feeds that app-polo's `qp`
+extension carried inside it, an APRS position beacon, Discord channel
+webhooks, and HamAlert's alerts.
 
 ## What is here
 
-100 extensions, grouped by the manifest's own `category`:
+114 extensions, grouped by the manifest's own `category`:
 
 | directory | manifest `category` | n | of which |
 |---|---|--:|---|
-| `extensions/activities/` | `activity` | 19 | 18 ported built-ins, 1 new program |
-| `extensions/contests/` | `contest` | 68 | 14 ported built-ins, 49 QSO party events, 5 park events |
+| `extensions/activities/` | `activity` | 20 | 18 ported built-ins, 2 new programs |
+| `extensions/contests/` | `contest` | 72 | 14 ported built-ins, 4 new contests, 49 QSO party events, 5 park events |
+| `extensions/awards/` | `award` | 2 | 2 new award checklists |
 | `extensions/lookups/` | `lookup` | 5 | 5 ported built-ins |
-| `extensions/spots/` | `spots` | 3 | 1 ported built-in, 2 new spotting sources |
-| `extensions/dashboard/` | `dashboard` | 5 | 1 ported built-in, 3 SVG reference panels, 1 new panel |
-| **total** | | **100** | **39 ported, 58 new, 3 SVG reference panels** |
+| `extensions/spots/` | `spots` | 6 | 1 ported built-in, 5 new spotting sources |
+| `extensions/dashboard/` | `dashboard` | 9 | 1 ported built-in, 2 new panels, 3 SVG reference panels, 3 panels by km4be |
+| **total** | | **114** | **39 ported, 72 new, 3 SVG reference panels** |
 
-The 39 are the app's own extensions, ported one for one. The 58 are new: events
-the app has never shipped separately, five state-park events, two spotting
-sources, one award program, and one dashboard panel:
+The 39 are the app's own extensions, ported one for one. The 72 are new: four
+contests and events the app has never shipped separately, five state-park
+events, five spotting sources, two award programs, Worked All States and
+DXCC checklists, a rate chart, a band map and three dashboard panels written in this fork by km4be (fuzzy callsign search, spot maps and satellite passes):
 
 - **`ham2k-hota`** — [History on the Air](https://cqhota.app), historic sites
   over 200 years old, written for the catalog from cqhota.app's own
@@ -42,6 +47,14 @@ sources, one award program, and one dashboard panel:
   holding a HOTA operation carries from here on: never rename them. Posting a
   spot takes the operator's own integration key from cqhota.app, entered as an
   account; the reference list and the spot feed need none.
+
+- **`ham2k-ppota`** — [Pueblos y Parajes On The Air](https://ppota.app),
+  villages, hamlets and small rural localities, written for the catalog from
+  ppota.app's own rules and [API](https://ppota.app/api). Its ref types,
+  `ppota` and `ppotaActivation`, are new and permanent in the same way.
+  PPOTA issues its spot-posting key per integration, not per operator, so it
+  ships in the bundle as a constant (`PPOTA_API_KEY`), as WWFF's does. It is
+  Ham2K's key, issued by PPOTA's administrator; rotating it means a release.
 
 - **The state-park events** — `ham2k-txspota`, `ham2k-flspota`,
   `ham2k-gaspota`, `ham2k-ohspota` and `ham2k-wispota` — are one extension
@@ -63,6 +76,77 @@ sources, one award program, and one dashboard panel:
   parties answer `ref:qp/<code>`. Wisconsin answers `wipota`, the type it
   stored under its first name, `ham2k-wipota`.
 
+- **`ham2k-arrl-ss`** — the [ARRL November Sweepstakes](https://www.arrl.org/sweepstakes),
+  which the app has never had, written for the catalog from the ARRL's rules
+  and Cabrillo templates. Its ref type, `arrl-ss`, is new and permanent in the
+  same way as HOTA's. Each weekend's dates are computed (`src/schedule.ts`), so
+  only the manifest's `relevance.dates` need moving each year, and a test
+  checks them against the schedule.
+
+- **`ki2d-ssb-sprint`** — the [North American SSB Sprint](https://ssbsprint.com),
+  four hours on 20, 40 and 80m, written for the catalog from the sponsor's
+  [rules](https://ssbsprint.com/rules/) and
+  [Cabrillo page](https://ssbsprint.com/submit-log-cabrillo/). A `ki2d-` key,
+  so it side-loads from its `.h2kext`. Its ref type, `ssb-sprint`, is new and
+  permanent in the same way as HOTA's. The exchange is a serial, a name and a
+  location; the name and location are suggested from N1MM's `SPRINTSSB` call
+  history, then the callsign lookup. Multipliers count once per contest, not
+  per band, and "North America" is CQ WW's plus KH6, so the multiplier list is
+  the sponsor's own (`HI3` for the Dominican Republic, `FO/C` for Clipperton)
+  rather than NAQP's. The sponsor publishes each season's date rather than a
+  rule, so `src/schedule.ts` lists the runnings and needs the next one added,
+  with the manifest's `relevance.dates`, when it is announced. Spotting
+  assistance is ruled out for every entry but a check log (rule 3), and
+  self-spotting is left to the operator. The QSY rule is shown at setup but
+  not judged: the log does not say who solicited a contact.
+
+- **`ki2d-wwsac`** — the [Worldwide Sideband Activity Contest](https://wwsac.com),
+  an hour of SSB every Tuesday at 0100 UTC, written for the catalog from the
+  sponsor's [rules](https://wwsac.com/rules.html) and its N1MM user-defined
+  contest file, [`WWSACv3.udc`](https://wwsac.com/WWSACv3.udc), which is where
+  the Cabrillo name (`WWSAC`), the column order and the dupe rule (once per
+  band) come from: the rules give none of them. A `ki2d-` key, so it
+  side-loads from its `.h2kext`. Its ref type, `wwsac`, is new and permanent
+  in the same way as HOTA's, and like CWT's its `ref` names the occurrence —
+  the Tuesday, `2026-10-27` — since every week is its own entry; the sessions
+  are computed (`src/schedule.ts`), so nothing needs moving each year. The
+  exchange is a report and an age group (OM, YL, Y, YYL); the other station's
+  age group is what the contact is worth (1, 5, 10, 15), suggested from what
+  that call sent in an earlier WWSAC contact and otherwise only hinted as OM.
+  The multiplier is the CQ WPX prefix, once per session; `src/prefix.ts` is a
+  copy of `ham2k-cqwpx`'s `wpxPrefix` and must be kept the same. Spotting
+  assistance is allowed in every entry and self-spotting is not, so the ref
+  rules out self-spotting.
+
+- **`ki2d-phone-weekly-test`** — the Phone Weekly Test, formerly the Phone
+  Fray: half an hour of SSB every Wednesday at 0230 UTC (Tuesday evening in
+  North America), written for the catalog from its one-page
+  [rules](http://www.perluma.com/Phone_Fray_Contest_Rules.pdf) — its website,
+  phoneweeklytest.com, is still a parked domain. "The same rules as NAQP but
+  without 10 meters": name and state, province or NA entity, `DX` from
+  outside North America, multipliers once per band, from NAQP's own location
+  set (`@ham2k/lib-naqp-exchange`). A `ki2d-` key, so it
+  side-loads from its `.h2kext`. Its ref type, `pwt`, is new and permanent,
+  and its `ref` names the Wednesday (`2026-10-28`), computed as the WWSAC's
+  is. Name and location are suggested from what the station sent earlier in
+  the session, else in an earlier week or an NAQP (the name over the
+  lookup's, the lookup's location over the old one). There are no logs to
+  send — the score is posted on 3830scores.com — so it offers no Cabrillo,
+  only the contest's ADIF, under the CONTEST_ID `PWT`, which the rules do not
+  name. Single operator at 100 W with no assistance, so the ref rules out
+  both assistance and self-spotting.
+
+- **`ham2k-dxcc`** — ARRL's [DXCC](https://www.arrl.org/dxcc) as a chasing
+  program: Mixed ("DXCC ATNO"), the three mode groups ("DXCC in CW") and
+  every band ("DXCC in 80m"). The DXCC Challenge is a second tally over the
+  same checklist, the band slots on 160–6m without 60m. It replaced the app's
+  core `dxcc` program, and the app ships it pre-loaded, switched on. It keeps that program's holders (`KI2D@291`, the call
+  worked from one entity), and reads credit from `credits.dxcc`, the key the
+  ADIF import writes: that is log data, and does not follow the program key.
+  The program words its own notices (`program.notices`, `modeLabels`, from
+  its i18n catalogs; SDK 1.12.2 types them); an app that does not read them
+  words the verdicts its own way ("New DXCC mode").
+
 - **`ki2d-qso-party-spots`** reads the [QSO Party Hub](http://qsopartyhub.com)
   and the [QSO Party APRS Tracker](https://mobiletracker.stateqso.com) for
   every party running that weekend, and posts self-spots to the Hub. app-polo
@@ -76,6 +160,64 @@ sources, one award program, and one dashboard panel:
   the tracker parses and what app-polo sends; from a park it names the
   reference. One beacon source, deliberately: the QP source reads the tracker
   and never beacons, so the two installed together beacon once.
+- **`ki2d-discord-spotting`** posts each self-spot to the Discord channels
+  the operator lists in its settings, one webhook each, every one with its
+  own Liquid template and an on/off switch — plus, as app-polo has them,
+  optional templates for the name and avatar the message is posted under. The default template posts only
+  the QRV and QRT spots, so a channel hears when the operator goes on and off
+  the air rather than every respot. A template that renders blank skips its
+  channel, and when every one does, the answer is `skipped` and
+  the Spotting control leaves the icon gray. Templates name `spot.freq`,
+  `spot.mode`, `spot.comments`, `spot.qcode` and `spot.qrest` — app-polo's
+  spot-discord names, lowercased, with PoLo's `qCode` and `qRest` working
+  too — besides the app's `op`; the app's template editor
+  does not know `spot` yet, so its preview shows those blank.
+- **`ki2d-hamalert`** puts the operator's [HamAlert](https://hamalert.org)
+  alerts on the spots board, under the spot `source` `hamalert`, each
+  labelled with the comments of the triggers it matched. It polls
+  `/api/spots2`, the endpoint HamAlert's own app reads — HTTP Basic with the
+  HamAlert login, the last hour's alerts from every trigger with the **App**
+  action — at most once a minute, because every request is a login. HamAlert
+  pauses a login after 20 failures in fifteen minutes, its own app's too, so
+  a refused password is never sent again until the account is checked. Its
+  Telnet feed needs a raw socket and its webhook a public URL, and an
+  extension has neither. Once the log shows an alerted station worked on the
+  alert's band and mode, it asks HamAlert to mute that call there (`addMute`,
+  an hour unless the operator picks otherwise), as the mute buttons in
+  HamAlert's app do. Every spot of an alerted station on its band, from any
+  source, shows a red bell beside its references' icons: an `'always'`
+  scorer that judges nothing answers `scoreCandidates` with the icon alone
+  (SDK 1.12.7), and needs a HaLo whose fallback scorers keep an icon that
+  yielded nothing. HamAlert's code is public at
+  [github.com/hamalert](https://github.com/hamalert), which is where the
+  record's fields come from; a `v1` API with a server-sent event stream is
+  drafted there and not yet deployed, and is the better target once it is.
+- **`ham2k-cluster-spots`** reads the one telnet connection the app holds to
+  the node picked in Settings › DX Cluster (extension API 10), and turns every
+  `DX de` line the node sends into a spot on the board, under the spot
+  `source` `cluster`. It posts the other way too: self-spots, and spots of
+  stations worked, go to that one node, which forwards each to the rest of the
+  network. A posted spot's comment names every activity, contests first (`NYQP
+  SUL/DEL - POTA US-1234`), because a reader's 80-column line shows only the
+  comment's first 30 characters; a test operation's spot starts with
+  `TESTING`. It replaces `ki2d-cluster-spotter`, now retired, which only
+  posted. The Spots panel is where spots are narrowed down, so it asks the
+  node for all of them: the first session as each call on an AR-Cluster,
+  DXSpider or CC Cluster node (told apart by its prompt) clears the filters
+  set there and turns on the CW, RTTY and PSK skimmers — which the operator's
+  other clients on that node then see too. A node pushes only what is spotted
+  after the login, so each new session then asks for its newest hundred spots
+  with `SH/DX/100`; the reply arrives with the other lines. Sending commands
+  takes `requiresClusterCommand`. DXSpider, AR-Cluster and CC Cluster all
+  announce a spot in the same 80-column line, and list them alike, so one
+  parser reads them all; the mode is the one the comment names, else the band
+  plan's, else the band's usual one. It keeps the newest spot per station per
+  band and mode for an hour, and drops it once the station spots itself (under
+  any SSID or portable form of its call) with `QRT` in the comment. Reading
+  needs the session held, which a subscription does, and the session is the
+  operator's own login on that node — so it subscribes at the board's first
+  fetch and lets go ten minutes after its last, and the app closes the session
+  when idle.
 
 The SVG reference panels carry `ki2d-` keys and install from a file.
 See [dashboard development](extensions/dashboard/README.md) for building and
@@ -150,7 +292,7 @@ saying publishes to `stable`.
     own files. Edit a fixture and re-run the generator; never edit a module.
     Its `./identities` export is the slim view of all fifty — name, ref type,
     states, the APRS token and the tracker and hub pages, no counties — for
-    the two spotting extensions that need every party at once, plus the two
+    the three spotting extensions that need every party at once, plus the two
     readers they share: which party an operation is in (its own ref type, or
     the bundled `qp` pair by longest prefix) and which counties its ref names.
   - `@ham2k/lib-vhf-contests` — what the IARU R1 and RSGB VHF+ contest
@@ -160,6 +302,43 @@ saying publishes to `stable`.
     into another one's source and two copies of a scoring table diverge. The
     writer is contest-agnostic, the shape `@ham2k/lib-qson-cabrillo`'s is, so
     if the host ever carries it only the manifests change.
+  - `@ham2k/lib-contest-rules` — what a contest's rules say about spotting
+    assistance and self-spotting, the two things the host can rule out for an
+    operation. A contest states them on its ref (`assistance: false`,
+    `selfSpotting: false`; the key absent where its rules allow it) from
+    `decorateRef` and on its search suggestions, and its setup form shows them
+    as one line — "🟢 Assistance: ON, 🔴 Self-spotting: OFF" — that follows the
+    entry category the operator picks, one markdown note per verdict under the
+    form renderer's `visibleWhen`. Each contest's `contestRules` cites the rule
+    it reads; the QSO parties take theirs from the party file's `selfSpotting`
+    and, where a party publishes an assisted single-operator class, read plain
+    Single Operator as unassisted.
+  - `@ham2k/lib-contest-exchange` — a contest's received exchange at save
+    time. `stampedExchange` is what `processQsoBeforeSave` returns for every
+    contest that guesses an exchange (CQ WW, IARU HF, ARRL VHF, CWT, NAQP,
+    Ohio SPOTA, the SSB Sprint, the WWSAC, the Phone Weekly Test): each part the operator decided is
+    read from the ref, each part they left alone is guessed and stamped onto
+    it, and the whole is projected into `their.exchange`. The guesses are each contest's
+    own; the package holds the bookkeeping they all share and that is easy to
+    get wrong — a present key, blank or not, is a decision; a guess that comes
+    up empty is never stamped as a blank, which would read back as one.
+  - `@ham2k/lib-naqp-exchange` — NAQP's exchange, a name and a location: the
+    states, provinces and North American entities it accepts, which of them
+    are multipliers, and the guesses from the callsign lookup and the country
+    file. For NAQP and the Phone Weekly Test, whose multipliers are NAQP's
+    word for word — two copies of a multiplier list diverge. The SSB Sprint's
+    list differs (DC and KH6 as states, the sponsor's own country spellings)
+    and keeps its own.
+  - `@ham2k/lib-weekly-contest` — the weekly contests' schedule, for CWT, the
+    WWSAC and the Phone Weekly Test: each week's sessions computed from the
+    sponsor's rule, the reference that names one occurrence, the one at hand
+    (offered unprompted from three hours before until an hour after), whether
+    a contact falls in it, and `searchMatches`, which finds a contest by the
+    words of its name and holds steady while the operator is still typing.
+  - `@ham2k/lib-panel-themes` — the themes a dashboard panel offers in its
+    settings: Automatic (the app's colors), Light, Dark and Teal, the last
+    KI2D's Radio Panel's face. One table, so every panel's Teal is the same
+    teal; the radio panel keeps its own, which predates it.
 - `extensions/<category>/<key>` — one directory per published extension, grouped
   by the manifest's own `category`. The directory names a group and the manifest
   names one extension, so they differ by a plural: `activity` lives in
@@ -198,7 +377,7 @@ extensions/<category>/<key>/
 ```
 
 Copy them from the nearest sibling rather than typing them; only `manifest.json`
-and `src/` differ between two extensions in the same category. Three rules bind
+and `src/` differ between two extensions in the same category. Four rules bind
 everywhere, and `bundles.test.ts` enforces each:
 
 - **The directory is the category and the key.** `activity` lives in
@@ -213,6 +392,16 @@ everywhere, and `bundles.test.ts` enforces each:
   see step 7 of **Porting a built-in** for why.
 - **Every registration key is `manifest.key` or `` `${manifest.key}-…` ``**, and
   written as `manifest.key` rather than a literal so it cannot drift.
+- **All of an extension's settings are one panel, in the Settings section that
+  fits its main purpose** — `activities`, `hunting`, `contests`, `lookups`,
+  `spotting` or `dashboard`, or where it tunes something the app already has,
+  `logging`, `radio` (CAT Control), `map` or `exports`. The manifest declares
+  it (`"settings": { "section": "activities" }`), which is what the catalog
+  reviews and the app places the panel by, and the panel names it again with
+  `sidebar: false`, for an app older than the manifest field. A category of
+  its own, a sidebar entry or Common Preferences rows each take an admin's
+  review on the catalog; see the app's `docs/extensions/settings.md`, *Where
+  an extension's settings go*.
 
 What each category actually is, with the worked example to read first:
 
@@ -221,7 +410,7 @@ What each category actually is, with the worked example to read first:
 | `activity` | `activity` (from `referenceActivity`), `ref:<type>` per reference it publishes a control for, `export`/`adifFields` (`activityExportHook`, `huntingExportHook`), usually `dataFile`, `spots`, `scoring`, `adifImport` | `activities/ham2k-pota` |
 | `contest` | `activity`, one `ref:<type>`, `scoring` (`contestScorer`), `export` + `adifFields` — Cabrillo through `@ham2k/lib-qson-cabrillo` | `contests/ham2k-cqww`, or `contests/ham2k-txqp` for a generated event |
 | `lookup` | `lookup`, or `recentContextLookup` for one that only reads what the app already has; plus `account` for a service with a login, `dataFile` for one with a downloadable list, `settingsPanel`, `command`, `callNotes` | `lookups/ham2k-call-history` (one hook), `lookups/ham2k-qrz` (an account and a network service) |
-| `spots` | `spots`, plus `account` where the service wants a login | `spots/ham2k-parksnpeaks` |
+| `spots` | `spots`, plus `account` where the service wants a login, and `cluster` for one reading the DX cluster's lines as they arrive | `spots/ham2k-parksnpeaks`, or `spots/ham2k-cluster-spots` for the cluster |
 | `dashboard` | `panel` — a pane the operator adds to a dock, with per-pane config the host persists | `dashboard/ham2k-custom-text` |
 
 Then: `npm install` (a new workspace has to reach the root lock), `npm test`,
@@ -475,9 +664,13 @@ below.
 
 ## Bundle sizes, and why they are what they are
 
-Built as they are today, unminified, through the same preset the app's own
-extensions use. The last column is what the app ships those same extensions as,
-in `app/assets/extensions/*.js`:
+Measured on 2026-09-08, against extension SDK 0.2.0, unminified, through the
+same preset the app's own extensions use. The last column is what the app
+shipped those same extensions as then, in `app/assets/extensions/*.js`. The
+ported built-ins numbered 40 then: `stateparks` has since been split into the
+Texas, Florida, Georgia and Ohio events, which are new rather than ported, and
+the SDK each bundle carries a slice of has grown since. Treat the numbers as the shape of
+the cost, not as today's bytes:
 
 | category | n | `index.js` | `.h2kext` | the app's own |
 |---|--:|---:|---:|---:|
@@ -559,9 +752,10 @@ publishing it to the catalog, or building it under a key that is not `ham2k-`.
 
 **The host must carry `@ham2k/lib-qson-cabrillo` 1.2.0 or newer.** That release
 added the Cabrillo *writer* the engine calls; 1.1.0 and earlier read Cabrillo
-and cannot write it. 61 of the 64 contests and events declare `^1.2.0` — all but
-the two VHF families, which submit REG1TEST/EDI instead, and Winter Field Day,
-which has no Cabrillo submission. The host checks a declared
+and cannot write it. 63 of the 67 contests and events declare `^1.2.0` — all but
+the two VHF families, which submit REG1TEST/EDI instead, Winter Field Day,
+which has no Cabrillo submission, and the Phone Weekly Test, which has no logs
+at all. The host checks a declared
 range against the copy it actually holds, so an app built against an older one
 refuses those bundles by name and version rather than failing at the moment
 someone exports a log. The app's own `extensions/package.json` is where that

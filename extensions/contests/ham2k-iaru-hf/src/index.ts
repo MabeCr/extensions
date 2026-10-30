@@ -14,8 +14,11 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
-import { adifForExport, annotateCallAgainstCountryFile, contestScorer, defineExtension, exportFilename, startMillisOf } from "@ham2k/extension-sdk"
+import { rulesNotes, withRules } from "@ham2k/lib-contest-rules"
+import { stampedExchange } from "@ham2k/lib-contest-exchange"
+import { adifForExport, annotateCallAgainstCountryFile, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
+  ActivitySuggestion,
   ExportOption,
   ExportOptionsRequest,
   ExportRequest,
@@ -25,10 +28,14 @@ import type {
   LoggingControlDescriptor,
   Ref,
   RefLink,
+  SuggestArgs,
 } from "@ham2k/extension-sdk"
 
 import { tFor } from "./i18n.ts"
+import { cabrilloLocation, normalizeSection } from "./location.ts"
+import { nextContestDate, relevanceFor } from "./schedule.ts"
 import { EXCHANGE_PATTERN, IARUHFScorer, contestTitle, normalizeZone, ourExchange } from "./scorer.ts"
+import { OPERATOR_CLASSES, OVERLAY_CLASSES, POWER_CLASSES, cabrilloCategories, contestRules, declaredClub, declaredOperators } from "./entry.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
 
@@ -36,6 +43,10 @@ import manifest from "../manifest.json" with { type: "json" }
 /// stays what the app's own built-in wrote there whatever this package is
 /// called: the manifest key names the package, `TYPE` names the activation.
 const TYPE = 'iaru-hf'
+
+/// What a search has to contain to offer this contest. Matched as "does the
+/// alias contain what was typed", so "iaru" or "championship" finds it.
+const ALIASES = ['IARU HF', 'IARU HF WORLD CHAMPIONSHIP', 'HF CHAMPIONSHIP', 'HF WORLD CHAMPIONSHIP']
 
 function refOfType(container: Record<string, JSONValue>, type: string): Record<string, JSONValue> | undefined {
   return (((container.refs as Record<string, JSONValue>[] | undefined) ?? [])).find((r) => r?.type === type)
@@ -57,7 +68,85 @@ function guessedZoneFor(their: Record<string, JSONValue>): string {
   )
 }
 
+/// Our section from the operator's profile, for the setup form's `value`.
+/// STICKY ON FAILURE, as in `arrl-ss`: the form re-applies a field's value
+/// whenever it is rebuilt, so a host that answers once and then fails must not
+/// blank the field in front of the operator.
+let lastKnownSection = ''
+
+async function ourSectionDefault(): Promise<string> {
+  try {
+    const settings = (await host.getSettings()) as Record<string, JSONValue> | undefined
+    lastKnownSection = normalizeSection(settings?.operatorSection)
+  } catch (e) {
+    console.warn(`[iaru-hf] profile settings unavailable, keeping the last section read:`, e)
+  }
+  return lastKnownSection
+}
+
+/// The operator's name, email and club from their profile, for the Cabrillo
+/// header. All optional and free-form in the profile, so each may be ''. A
+/// host that cannot answer costs these lines, never the log itself.
+async function profileDetails(): Promise<{ name: string; email: string; club: string }> {
+  try {
+    const settings = (await host.getSettings()) as Record<string, JSONValue> | undefined
+    const line = (value: JSONValue | undefined) => str(value).replace(/\s+/g, ' ').trim()
+    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail), club: line(settings?.operatorClub) }
+  } catch (e) {
+    console.warn(`[iaru-hf] profile settings unavailable, exporting without name, email and profile club:`, e)
+    return { name: '', email: '', club: '' }
+  }
+}
+
+/// One select per axis of the entry, "Not declared" first.
+function entrySelects(t: (key: string) => string) {
+  const select = (key: string, options: readonly string[]) => ({
+    type: 'field' as const,
+    fieldType: 'select' as const,
+    key,
+    label: t(`${key}Label`),
+    value: '',
+    options: [{ value: '', label: t('notDeclared') }, ...options.map((value) => ({ value, label: t(`${key}_${value}`) }))],
+  })
+  return [
+    select('operator', OPERATOR_CLASSES),
+    select('power', POWER_CLASSES),
+    select('overlay', OVERLAY_CLASSES),
+  ]
+}
+
 const ActivityHook = {
+  /// Offered in the activity search by NAME and by NEARNESS — one suggestion,
+  /// since the mode restriction is an entry category of one contest rather
+  /// than a separate running.
+  ///
+  /// Nothing is offered to an operation that already runs IARU HF: a
+  /// suggestion has no `ref` for the picker's duplicate guard to match, so a
+  /// tapped one would REPLACE the configured ref and lose its exchange.
+  async suggest({ operation, searchTerm }: SuggestArgs, ctx: HookContext): Promise<ActivitySuggestion[]> {
+    if (refOfType(operation ?? {}, TYPE)) return []
+    const t = tFor(ctx)
+    const term = (searchTerm ?? '').trim().toUpperCase()
+    if (term && !ALIASES.some((alias) => alias.includes(term))) return []
+
+    const now = Date.now()
+    return [
+      withRules({
+        type: TYPE,
+        // A suggestion is persisted VERBATIM and never runs through
+        // `decorateRef`, so everything the operation row reads has to be here,
+        // and the labels must match what `decorateRef` composes for a Mixed
+        // entry.
+        program: 'Contest',
+        // The same `description • date` line the QSO parties show.
+        name: `${t('activityDescription')} • ${nextContestDate(now)}`,
+        label: 'IARU HF',
+        shortLabel: 'IARU HF',
+        relevance: relevanceFor(now),
+      }, contestRules(undefined)),
+    ]
+  },
+
   async operationControls(
     _args: { operation: Record<string, JSONValue> },
     ctx: HookContext,
@@ -140,6 +229,37 @@ const ActivityHook = {
                 ],
                 visibleWhen: { field: 'stationType', equals: 'official' },
               },
+              // What the rules allow, following the operator class below.
+              ...rulesNotes(ctx, 'operator', OPERATOR_CLASSES, contestRules),
+              // The entry we are making, for the Cabrillo header, alongside
+              // the mode restriction and station type above. Each starts
+              // undeclared: see entry.ts.
+              ...entrySelects(t),
+              // For the Cabrillo LOCATION, US and Canadian stations only.
+              {
+                type: 'field',
+                fieldType: 'text',
+                key: 'section',
+                label: t('ourSectionLabel'),
+                placeholder: t('ourSectionPlaceholder'),
+                uppercase: true,
+                value: await ourSectionDefault(),
+              },
+              {
+                type: 'field',
+                fieldType: 'text',
+                key: 'operators',
+                label: t('operatorsLabel'),
+                placeholder: t('operatorsPlaceholder'),
+                uppercase: true,
+              },
+              {
+                type: 'field',
+                fieldType: 'text',
+                key: 'club',
+                label: t('clubLabel'),
+                placeholder: t('clubPlaceholder'),
+              },
               // Markdown rather than a `link` element: a link renders dead from a
               // setup form, which has no link handler wired to it.
               { type: 'markdown', text: t('rulesLink') },
@@ -209,28 +329,14 @@ const ActivityHook = {
   ): Promise<Record<string, JSONValue> | null> {
     if (!refOfType(args.operation, TYPE)) return null
 
-    const qsoRef = refOfType(args.qso, TYPE)
-    // PRESENCE of the field, not its truthiness. The core writes
-    // `theirExchange: ''` when the operator empties the field on purpose, and
-    // drops the key entirely when it was never filled in — so a present key,
-    // blank or not, is a decision, and guessing over it would put back what
-    // they just removed.
-    const decided = qsoRef !== undefined && 'theirExchange' in qsoRef
     // Only a ZONE can be guessed — nothing can infer a society or an office, so
     // those are always the operator's own typing.
-    const exchange = decided
-      ? str(qsoRef.theirExchange).trim().toUpperCase()
-      : guessedZoneFor((args.qso.their as Record<string, JSONValue>) ?? {})
-
-    // A deliberate blank still projects, so clearing an exchange on an edit
-    // clears the QSO row's column too instead of leaving the old value there.
-    if (!exchange) return decided ? { their: { exchange: '' } } : null
-
-    return {
-      // Field-wise into our own ref; the core allows this extension no other.
-      refs: [{ type: TYPE, theirExchange: exchange }],
-      their: { exchange },
-    }
+    return stampedExchange(TYPE, refOfType(args.qso, TYPE), {
+      theirExchange: {
+        read: (value) => str(value).trim().toUpperCase(),
+        guess: () => guessedZoneFor((args.qso.their as Record<string, JSONValue>) ?? {}),
+      },
+    }, ({ theirExchange }) => theirExchange)
   },
 }
 
@@ -247,13 +353,13 @@ const RefHandler = {
       .filter(Boolean)
       .join(' ')
     const sent = ourExchange({}, ref as Record<string, JSONValue>)
-    return {
+    return withRules({
       ...ref,
       program: 'Contest',
       label: label || tFor(ctx)('unconfigured'),
       shortLabel: label || tFor(ctx)('unconfigured'),
       name: sent || tFor(ctx)('notConfigured'),
-    }
+    }, contestRules((ref as Record<string, JSONValue>).operator))
   },
 
   /// "KI2D for IARU HF" with "Sending 8" beneath it: the sent exchange is the
@@ -370,12 +476,22 @@ const ExportHook = {
     const sent = ourExchange(operation, opRef)
 
     if (args.exportType === `${TYPE}-cabrillo`) {
+      const profile = await profileDetails()
       const content = qsonToCabrillo(args.qsos, {
         headers: [
           ['CONTEST', 'IARU-HF'],
           ['CALLSIGN', ourCall],
-          ['OPERATORS', str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          // The calls listed at setup — required for a multi-operator entry —
+          // else the app's own operator call.
+          ['OPERATORS', declaredOperators(opRef) || str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          // Our section, or DX: see location.ts.
+          ['LOCATION', cabrilloLocation(ourCall, opRef)],
+          ...cabrilloCategories(opRef),
           ['GRID-LOCATOR', str(operation.grid)],
+          // The club typed at setup, else the profile's.
+          ['CLUB', declaredClub(opRef) || profile.club],
+          ['NAME', profile.name],
+          ['EMAIL', profile.email],
         ],
         qsoParts: (qso) => [
           ourCall || '-',

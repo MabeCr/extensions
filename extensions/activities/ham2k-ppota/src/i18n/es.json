@@ -1,0 +1,14 @@
+{
+  "invalidReference": "Referencia inválida",
+  "unknownReference": "Referencia PPOTA desconocida",
+  "activationControl": "Activación PPOTA",
+  "huntingControl": "PPOTA",
+  "dataFileName": "PPOTA: Todas las Referencias",
+  "dataFileDescription": "Base de datos de todos los pueblos y parajes PPOTA",
+  "reference": "localidad",
+  "referencesPlural": "localidades",
+  "keyRejected": "PPOTA no aceptó la clave de spots de Ham2K ({{code}}) — por favor avísale a Ham2K",
+  "unknownReferenceOnPost": "PPOTA no conoce {{ref}}, o no está activa",
+  "postRefused": "PPOTA rechazó el spot para {{refs}}",
+  "alreadyPosted": "{{count}} spot(s) sí se publicaron."
+}

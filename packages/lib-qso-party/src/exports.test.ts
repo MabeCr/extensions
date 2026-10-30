@@ -57,7 +57,9 @@ registerHooks({
 
 const { defineQsoParty } = await import("./index.ts")
 const { RESOLVED_MARKER } = await import("./exchange.ts")
-const { CA, NY, WI } = await import("./testFixtures.ts")
+const { adifCountyOf } = await import("./exports.ts")
+const { resolveParty } = await import("./party.ts")
+const { ACQP, CA, NEQP, NY, WI } = await import("./testFixtures.ts")
 
 const ctx = {} as never
 
@@ -170,6 +172,25 @@ test('the Cabrillo is the sponsor′s file, headers and all', async () => {
   assert.match(lines.find((line) => line.startsWith('QSO:'))!, /N0DEV\s+1\s+ALAM\s+K1ABC\s+7\s+BUTT\s*$/)
 })
 
+test('a log kept under the old combined extension files the serials and counties its contacts carry', async () => {
+  // The old extension kept the party's code on the operation and wrote each
+  // contact's exchange on a bare `{type: 'qp'}`. Read by code, those contacts
+  // file with serials of 0 and -, and an in-state station's county is lost
+  // with nothing to fall back on — so it drops out of the file altogether.
+  const legacy = { ...CA, legacyRefs: [{ type: 'qp', prefix: 'ca' }] }
+  const result = await define(legacy).export.generateExport({
+    exportType: `${CA.refType}-cabrillo`,
+    operation: { ...operation(CA, 'ALAM'), refs: [{ type: 'qp', ref: 'CA', location: 'ALAM' }] },
+    qsos: [contact('', CA, {
+      their: { call: 'W6ABC', entityPrefix: 'K', state: 'CA' },
+      refs: [{ type: 'qp', location: 'BUTT', ourSerial: 1, theirSerial: '7' }],
+    })],
+  }, ctx)
+
+  const lines = result.content.split('\n')
+  assert.match(lines.find((line) => line.startsWith('QSO:'))!, /N0DEV\s+1\s+ALAM\s+W6ABC\s+7\s+BUTT\s*$/)
+})
+
 test('the Cabrillo is a whole file: framed, signed, and one line per contact with a county at each end', async () => {
   // A checker refuses a file without its START/END lines or a CALLSIGN before
   // it reads a single contact, and a QSO party's line needs the county sent
@@ -246,12 +267,13 @@ test('a log kept under the old combined extension is handed the resolved exchang
   // `adifFields` reads whichever ref `partyRefIn` finds, the old `qp` one
   // included. Marking only refs of the party's own type leaves that one bare,
   // and the ADIF then resolves each contact alone — so the second contact's
-  // SRX_STRING disagrees with the Cabrillo's for the same station.
+  // SRX_STRING disagrees with the Cabrillo's for the same station. The
+  // contacts' refs carry no code, as the old extension wrote them.
   const legacy = { ...NY, legacyRefs: [{ type: 'qp', prefix: 'ny' }] }
-  const old = (location: string) => [{ type: 'qp', ref: 'NY', location }]
+  const old = (location: string) => [{ type: 'qp', location }]
   const result = await define(legacy).export.generateExport({
     exportType: `${NY.refType}-adif`,
-    operation: { uuid: 'op', stationCall: 'N0DEV', refs: old('ALB') },
+    operation: { uuid: 'op', stationCall: 'N0DEV', refs: [{ type: 'qp', ref: 'NY', location: 'ALB' }] },
     qsos: [contact('', legacy, { refs: old('ERI') }), { ...contact('', legacy, { refs: old('') }), uuid: 'q2', band: '40m' }],
   } as ExportRequest, ctx)
 
@@ -291,17 +313,114 @@ test('a log that is not this party′s gets no ADIF fields from it', async () =>
 test('a log kept under the old combined extension is still this party′s', async () => {
   // `{type: 'qp', ref: 'CA'}` is how every party was stored when fifty were one
   // extension. Checking for the party's own refType alone would read those
-  // logs as someone else's and drop their contest fields.
+  // logs as someone else's and drop their contest fields. The code is on the
+  // operation only: the contact's ref is a bare `{type: 'qp'}`, so reading it
+  // by code loses what the station sent.
   const legacy = { ...CA, legacyRefs: [{ type: 'qp', prefix: 'ca' }] }
   const fields = await define(legacy).adifFields.fieldsForOneQSO({
-    qso: contact('', CA, { refs: [{ type: 'qp', ref: 'CA', location: 'BUTT' }] }),
+    qso: contact('', CA, { refs: [{ type: 'qp', location: 'BUTT', ourSerial: 3, theirSerial: '17' }] }),
     operation: { uuid: 'op', stationCall: 'N0DEV', refs: [{ type: 'qp', ref: 'CA', location: 'ALAM' }] },
   }, ctx)
 
   assert.deepEqual(fields.find((field) => field.name === 'CONTEST_ID'), { name: 'CONTEST_ID', value: 'CA-QSO-PARTY' })
-  assert.deepEqual(fields.find((field) => field.name === 'STX_STRING'), { name: 'STX_STRING', value: 'ALAM' })
+  assert.deepEqual(fields.find((field) => field.name === 'STX_STRING'), { name: 'STX_STRING', value: '3 ALAM' })
+  assert.deepEqual(fields.find((field) => field.name === 'SRX_STRING'), { name: 'SRX_STRING', value: '17 BUTT' })
 })
 
+test('a legacy contact that carries the party′s code, or app-polo′s serial names, files its exchange', async () => {
+  // Both shapes are in logs today: a contact ref with the code on it, and
+  // app-polo's `ourNumber`/`theirNumber`. Reading only the bare shape, or only
+  // this engine's serial names, files them with no exchange or no numbers.
+  const legacy = { ...CA, legacyRefs: [{ type: 'qp', prefix: 'ca' }] }
+  const fields = await define(legacy).adifFields.fieldsForOneQSO({
+    qso: contact('', CA, { refs: [{ type: 'qp', ref: 'CA', location: 'BUTT', ourNumber: '3', theirNumber: '17' }] }),
+    operation: { uuid: 'op', stationCall: 'N0DEV', refs: [{ type: 'qp', ref: 'CA', location: 'ALAM' }] },
+  }, ctx)
+
+  assert.deepEqual(fields.find((field) => field.name === 'STX_STRING'), { name: 'STX_STRING', value: '3 ALAM' })
+  assert.deepEqual(fields.find((field) => field.name === 'SRX_STRING'), { name: 'SRX_STRING', value: '17 BUTT' })
+})
+
+
+test('a county line leaves one ADIF record per pairing, each naming its own two counties', async () => {
+  const records = await define(NY).adifFields.fieldCombinationsForOneQSO({
+    qso: contact('ERI/CHA'),
+    operation: operation(NY, 'ALB/REN'),
+  }, ctx)
+
+  const pick = (record: { name: string; value: string }[], name: string) =>
+    record.find((field) => field.name === name)?.value
+  assert.deepEqual(records.map((record) => [
+    pick(record, 'STX_STRING'), pick(record, 'MY_CNTY'), pick(record, 'SRX_STRING'), pick(record, 'CNTY'),
+  ]), [
+    ['ALB', 'NY,Albany', 'ERI', 'NY,Erie'],
+    ['ALB', 'NY,Albany', 'CHA', 'NY,Chautauqua'],
+    ['REN', 'NY,Rensselaer', 'ERI', 'NY,Erie'],
+    ['REN', 'NY,Rensselaer', 'CHA', 'NY,Chautauqua'],
+  ])
+  // The state beside each county, so a lookup's home state cannot contradict it.
+  assert.equal(pick(records[0], 'MY_STATE'), 'NY')
+  assert.equal(pick(records[0], 'STATE'), 'NY')
+  assert.ok(records.every((record) => pick(record, 'CONTEST_ID') === 'NY-QSO-PARTY'))
+})
+
+test('an end that is a state rather than a county writes no county', async () => {
+  const records = await define(NY).adifFields.fieldCombinationsForOneQSO({
+    qso: contact('PA'),
+    operation: operation(NY, 'ALB'),
+  }, ctx)
+
+  assert.equal(records.length, 1)
+  const names = records[0].map((field) => field.name)
+  assert.ok(names.includes('MY_CNTY'))
+  assert.ok(!names.includes('CNTY'))
+  assert.ok(!names.includes('STATE'))
+})
+
+test('a log that is not this party′s gets no ADIF records from it', async () => {
+  const records = await define(NY).adifFields.fieldCombinationsForOneQSO({
+    qso: contact('', NY, { refs: [] }),
+    operation: { uuid: 'op', stationCall: 'N0DEV', refs: [{ type: 'potaActivation', ref: 'US-1234' }] },
+  }, ctx)
+
+  assert.deepEqual(records, [])
+})
+
+test('an ADIF county is the state and the name, without County or Parish, St. and & spelled out', () => {
+  const ny = resolveParty({ ...NY, counties: { DEL: 'Delaware County', STL: 'St. Lawrence' } })
+  assert.deepEqual(adifCountyOf(ny, 'DEL'), { state: 'NY', county: 'Delaware' })
+  assert.deepEqual(adifCountyOf(ny, 'STL'), { state: 'NY', county: 'Saint Lawrence' })
+  const fl = resolveParty({ ...NY, state: 'FL', counties: { STJ: 'St Johns', STE: 'Stevens' } })
+  assert.deepEqual(adifCountyOf(fl, 'STJ'), { state: 'FL', county: 'Saint Johns' })
+  assert.deepEqual(adifCountyOf(fl, 'STE'), { state: 'FL', county: 'Stevens' })
+
+  const la = resolveParty({ ...NY, state: 'LA', counties: { ORL: 'Orleans Parish' } })
+  assert.deepEqual(adifCountyOf(la, 'ORL'), { state: 'LA', county: 'Orleans' })
+
+  // A party spanning several states names the state after the county.
+  const neqp = resolveParty({ ...NEQP, counties: { VTWAS: 'Washington County VT', MABAR: 'Barnstable' } })
+  assert.deepEqual(adifCountyOf(neqp, 'VTWAS'), { state: 'VT', county: 'Washington' })
+  assert.deepEqual(adifCountyOf(neqp, 'MABAR'), { state: 'MA', county: 'Barnstable' })
+  const mt = resolveParty({ ...NEQP, counties: { MTLEW: 'Lewis & Clark MT' } })
+  assert.deepEqual(adifCountyOf(mt, 'MTLEW'), { state: 'MT', county: 'Lewis and Clark' })
+
+  // Virginia's independent cities keep the "City" that tells them from the
+  // county of the same name.
+  const va = resolveParty({ ...NY, state: 'VA', counties: { RIX: 'Richmond (City)', RIC: 'Richmond County' } })
+  assert.deepEqual(adifCountyOf(va, 'RIX'), { state: 'VA', county: 'Richmond City' })
+  assert.deepEqual(adifCountyOf(va, 'RIC'), { state: 'VA', county: 'Richmond' })
+
+  // A party played in districts names the county each one lies in.
+  const hi = resolveParty({ ...NY, state: 'HI', counties: { LHN: 'Leeward' }, adifCounties: { LHN: 'Honolulu' } })
+  assert.deepEqual(adifCountyOf(hi, 'LHN'), { state: 'HI', county: 'Honolulu' })
+
+  // Not a county of the party's state, and not a US county at all.
+  const md = resolveParty({ ...NY, state: 'MD', counties: { WDC: 'Washington DC' } })
+  assert.equal(adifCountyOf(md, 'WDC'), undefined)
+  const acqp = resolveParty(ACQP)
+  assert.equal(adifCountyOf(acqp, Object.keys(acqp.counties)[0]), undefined)
+  assert.equal(adifCountyOf(ny, 'PA'), undefined)
+})
 
 test('party registrations keep settings separate and reflect available formats', async () => {
   const ny = await define(NY).export.getExportTypes!({}, ctx)

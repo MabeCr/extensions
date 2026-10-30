@@ -78,6 +78,9 @@ function stubSharedModules(): Record<string, Record<string, unknown>> {
     "@ham2k/lib-country-files": {
       useBuiltinCountryFile: () => {},
       annotateFromCountryFile: (info: unknown) => info,
+      // The SDK's `dxcc` module reads the file's sign convention off it on
+      // import (`BIGCTY.entities.K`), so an app of either age answers the same.
+      BIGCTY: { entities: {} },
     },
     "@ham2k/lib-dxcc-data": { CONTINENTS: {}, DXCC_BY_CODE: {}, DXCC_BY_PREFIX: {} },
     "@ham2k/lib-format-tools": {},
@@ -96,7 +99,9 @@ function stubSharedModules(): Record<string, Record<string, unknown>> {
       EHF_BANDS: [],
     },
     "@ham2k/lib-qson-cabrillo": {},
-    "i18next": { default: {}, createInstance: () => ({}) },
+    // Enough of an instance for a hook to call its translator — the settings
+    // panels' titles — and get the key back.
+    "i18next": { default: {}, createInstance: () => ({ init: () => {}, t: (key: string) => key }) },
     "liquidjs": { Liquid: class {} },
   }
 }
@@ -143,12 +148,26 @@ function loadBundle(source: string): { definition: Record<string, unknown>; regi
   return { definition, registrations }
 }
 
+/// The settings sections an extension's panel may go in without review —
+/// the app's own settings groups, by key (`radio` is CAT Control, `map` is
+/// Maps). halo's packer exports the same list as `SETTINGS_SECTIONS` and
+/// the catalog keeps its own; once the installed packer has it, the test
+/// below holds this copy to it.
+const SETTINGS_SECTIONS = ["activities", "hunting", "contests", "lookups", "spotting", "dashboard", "logging", "radio", "map", "exports"]
+
+test("this repo's list of settings sections is the packer's", (t) => {
+  const packers = (packerFormat as Record<string, unknown>).SETTINGS_SECTIONS as { preferred: string[]; other: string[] } | undefined
+  if (!packers) return t.skip("the installed packer predates SETTINGS_SECTIONS")
+  assert.deepEqual([...packers.preferred, ...packers.other], SETTINGS_SECTIONS)
+})
+
 /// Which directory a manifest `category` belongs in. The manifest names one
 /// extension's category and the directory names a group of them, so the two
 /// differ by a plural — and the spellings are the app's own source tree's, so
 /// that a built-in ported here lands in the directory it came from.
 const DIRECTORY_FOR_CATEGORY: Record<string, string> = {
   activity: "activities",
+  award: "awards",
   contest: "contests",
   dashboard: "dashboard",
   lookup: "lookups",
@@ -311,6 +330,44 @@ test("every extension builds, packs and loads", async (t) => {
       const scoped = (scoring?.hook.scope as { refTypes?: string[] } | undefined)?.refTypes
       if (scoped) {
         assert.deepEqual([...scoped].sort(), refTypes.sort(), `${name}'s scorer is scoped to other ref types`)
+      }
+
+      // All of an extension's settings in one place: the section that fits
+      // its main purpose, declared in the manifest — which is what the catalog
+      // reviews and what the app places the panel by — and named again on
+      // the panel, which is all an app older than the manifest field reads.
+      // No sidebar entry and no Common Preferences rows: those take a
+      // review, and nothing here has asked for one.
+      // (docs/extensions/settings.md, "Where an extension's settings go")
+      const placement = (manifest.settings ?? {}) as Record<string, unknown>
+      if (manifest.settings !== undefined) {
+        assert.deepEqual(
+          Object.keys(placement).filter((k) => !["section", "sidebar", "common"].includes(k)),
+          [],
+          `${name}'s 'settings' has keys other than section, sidebar and common`,
+        )
+        if (placement.section !== undefined) {
+          assert.ok(SETTINGS_SECTIONS.includes(placement.section as string), `${name}'s 'settings.section' must be one of ${SETTINGS_SECTIONS.join(", ")}`)
+        }
+        assert.ok(placement.sidebar === undefined || placement.sidebar === false, `${name} asks for a Settings sidebar entry`)
+        assert.ok(placement.common === undefined || placement.common === false, `${name} asks for Common Preferences rows`)
+        if (packerFormat.validateSettingsPlacement) {
+          assert.deepEqual(packerFormat.validateSettingsPlacement(manifest.settings), [], `${name}'s 'settings' would not pack`)
+        }
+      }
+      const panelRegistrations = registrations.filter((r) => r.category === "settingsPanel")
+      if (panelRegistrations.length) {
+        assert.ok(placement.section !== undefined, `${name} registers a settingsPanel, so its manifest must declare 'settings.section'`)
+        const panels: Record<string, unknown>[] = []
+        for (const { hook } of panelRegistrations) {
+          const getPanels = hook.getPanels as ((args: object, ctx: object) => Promise<Record<string, unknown>[]>) | undefined
+          panels.push(...(hook.kind === "simple" ? [hook] : getPanels ? await getPanels({}, { locale: "en" }) : [{}]))
+        }
+        assert.equal(panels.length, 1, `${name}'s settings are ${panels.length} panels, not one`)
+        for (const panel of panels) {
+          assert.equal(panel.section, placement.section, `${name}'s panel names another section than its manifest`)
+          assert.equal(panel.sidebar, false, `${name}'s panel asks for a sidebar entry`)
+        }
       }
     })
   }

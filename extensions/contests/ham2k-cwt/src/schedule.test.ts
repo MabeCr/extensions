@@ -25,7 +25,7 @@ describe("sessionFor", () => {
     const session = sessionFor('2026-08-26-1300')
     assert.equal(session?.startMillis, WED_1300)
     assert.equal(session?.endMillis, WED_1300 + HOUR)
-    assert.equal(session?.hour, 13)
+    assert.equal(sessionShortLabel(session!), 'CWT 1300z')
   })
 
   it("accepts all four weekly slots and nothing else", () => {

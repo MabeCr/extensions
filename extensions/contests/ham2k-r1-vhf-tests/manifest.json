@@ -2,7 +2,7 @@
   "key": "ham2k-r1-vhf-tests",
   "name": "IARU R1 VHF Contests",
   "shortName": "IARU R1 VHF",
-  "version": "0.2.4",
+  "version": "0.2.7",
   "description": "IARU Region 1's VHF/UHF/microwave contest family",
   "category": "contest",
   "icon": "flag-checkered",

@@ -49,6 +49,15 @@ export function endOfFieldDay(year: number, mode: R1FdMode): number {
   return startOfFieldDay(year, mode) + DAY
 }
 
+/// `2026-06-06` — the UTC day [year]'s running opens. Written out rather than
+/// localized, the same form the QSO parties use: these are the sponsor's UTC
+/// dates, and an operator checks them against the rules.
+export function fieldDayDate(year: number, mode: R1FdMode): string {
+  const at = new Date(startOfFieldDay(year, mode))
+  const pad = (value: number) => `${value}`.padStart(2, '0')
+  return `${at.getUTCFullYear()}-${pad(at.getUTCMonth() + 1)}-${pad(at.getUTCDate())}`
+}
+
 /// The YEAR whose running of [mode] is the next one — the single source for
 /// "which running is this?". Both the ranking and the suggestion's ref read
 /// this; deciding it separately disagrees for the hours in between.

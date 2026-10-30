@@ -122,3 +122,32 @@ test("the Cabrillo file comes out of the export hook", async () => {
   assert.equal(result.content.split('\n')[0].trim(), 'START-OF-LOG: 3.0')
   assert.equal(delegated.length, 0, 'a Cabrillo file is written here, not delegated')
 })
+
+test("the Cabrillo header carries the declared entry as the sponsor's template writes it", async () => {
+  const exported = async (operation: Record<string, unknown>) =>
+    ((await contest.runHook('export', 'generateExport', { operation, qsos: QSOS, exportType: 'naqp-cabrillo' })) as { content: string }).content
+  const header = async (operation: Record<string, unknown>) =>
+    (await exported(operation)).split('\n').filter((line) => /^(CONTEST|LOCATION|CATEGORY-)/.test(line))
+
+  const declared = { uuid: 'op-1', stationCall: 'N0DEV', refs: [{ type: 'naqp', mode: 'CW', ourName: 'SEB', ourLocation: 'NY', operator: 'SINGLE-OP', power: 'LOW' }] }
+  assert.deepEqual(await header(declared), [
+    'CONTEST: NAQP-CW',
+    'LOCATION: NY',
+    'CATEGORY-OPERATOR: SINGLE-OP',
+    'CATEGORY-TRANSMITTER: ONE',
+    'CATEGORY-ASSISTED: NON-ASSISTED',
+    'CATEGORY-BAND: ALL',
+    'CATEGORY-POWER: LOW',
+    'CATEGORY-MODE: CW',
+  ])
+
+  // Undeclared, nothing is claimed beyond what every entry is.
+  const undeclared = { uuid: 'op-2', stationCall: 'N0DEV', refs: [{ type: 'naqp', mode: 'SSB' }] }
+  assert.deepEqual(await header(undeclared), ['CONTEST: NAQP-SSB', 'CATEGORY-BAND: ALL', 'CATEGORY-MODE: SSB'])
+
+  // The operators listed at setup reach the header; with none listed, the
+  // app's operator call stands in.
+  const multi = { uuid: 'op-3', stationCall: 'N0DEV', local: { operatorCall: 'N0DEV' }, refs: [{ type: 'naqp', mode: 'RTTY', operator: 'MULTI-TWO', operators: 'k1abc, w2def' }] }
+  assert.ok((await exported(multi)).includes('\nOPERATORS: K1ABC W2DEF\n'))
+  assert.ok((await exported({ ...multi, refs: [{ type: 'naqp', mode: 'RTTY' }] })).includes('\nOPERATORS: N0DEV\n'))
+})

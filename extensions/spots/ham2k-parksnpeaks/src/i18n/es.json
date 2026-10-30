@@ -1,10 +1,16 @@
 {
   "accountDescription": "Spotting a WWFF y SiOTA en VK y ZL",
-  "userIdLabel": "Usuario",
-  "userIdPostface": "El usuario de tu cuenta de ParksnPeaks, no tu indicativo",
-  "apiKeyLabel": "Clave de API",
-  "apiKeyPostface": "Desde tu página de perfil en ParksnPeaks — no es tu contraseña",
-  "missingCredentials": "Ingresa tu usuario y clave de API de ParksnPeaks",
+  "userIdLabel": "Indicativo",
+  "userIdPostface": "El indicativo con el que entras a ParksnPeaks",
+  "apiKeyLabel": "Clave de API o PIN",
+  "apiKeyPostface": "Tu clave de API de ParksnPeaks, o el PIN de tu perfil en el sitio nuevo — no es tu contraseña",
+  "missingCredentials": "Ingresa tu indicativo y tu clave de API o PIN de ParksnPeaks",
   "credentialsUnverified": "Guardado para **{{userId}}**. ParksnPeaks no permite verificar un acceso, así que se confirma la primera vez que publiques un spot.",
-  "postFailed": "ParksnPeaks rechazó el spot de {{refs}}"
+  "postFailed": "ParksnPeaks rechazó el spot de {{refs}}",
+  "postFailedBecause": "ParksnPeaks rechazó el spot de {{refs}}: {{reason}}",
+  "postHttpError": "ParksnPeaks respondió HTTP {{status}} al spot de {{refs}} — revisa su lista de spots antes de volver a publicarlo",
+  "postUnreadable": "ParksnPeaks dio una respuesta ilegible al spot de {{refs}} — revisa su lista de spots antes de volver a publicarlo",
+  "postLoginRefused": "ParksnPeaks rechazó el acceso para el spot de {{refs}} ({{reason}}) — revisa tu indicativo y tu clave de API o PIN en Configuración › Cuentas, Servicios y Fuentes de Datos › ParksnPeaks",
+  "postHttpErrorBecause": "ParksnPeaks respondió HTTP {{status}} al spot de {{refs}} ({{reason}}) — revisa su lista de spots antes de volver a publicarlo",
+  "postNoAnswer": "ParksnPeaks no respondió al spot de {{refs}} ({{error}}) — si salió, estará en su lista de spots, así que revisa antes de volver a publicarlo"
 }

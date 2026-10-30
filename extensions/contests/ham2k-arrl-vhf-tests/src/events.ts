@@ -34,6 +34,9 @@ export interface VhfEvent {
   /// great-circle km.
   multipliers?: Record<string, number>
   rules: string
+  /// When it runs, as the rules state it: the [nth] full weekend of [month]
+  /// (0-based) — see `nextStartDate`.
+  weekend: { month: number; nth: number }
 }
 
 const EVENTS: VhfEvent[] = [
@@ -50,6 +53,7 @@ const EVENTS: VhfEvent[] = [
       '1.25cm': 8, '6mm': 8, '4mm': 8, '2mm': 8, '2.5mm': 8, '1mm': 8, submm: 4,
     },
     rules: 'https://contests.arrl.org/ContestRules/JanJunSep-VHF-Rules.pdf',
+    weekend: { month: 0, nth: 3 },
   },
   {
     key: 'ARRL-VHF-JUN',
@@ -64,6 +68,7 @@ const EVENTS: VhfEvent[] = [
       '1.25cm': 4, '6mm': 4, '4mm': 4, '2mm': 4, '2.5mm': 4, '1mm': 4, submm: 4,
     },
     rules: 'https://contests.arrl.org/ContestRules/JanJunSep-VHF-Rules.pdf',
+    weekend: { month: 5, nth: 2 },
   },
   {
     key: 'ARRL-VHF-SEP',
@@ -78,6 +83,7 @@ const EVENTS: VhfEvent[] = [
       '1.25cm': 4, '6mm': 4, '4mm': 4, '2mm': 4, '2.5mm': 4, '1mm': 4, submm: 4,
     },
     rules: 'https://contests.arrl.org/ContestRules/JanJunSep-VHF-Rules.pdf',
+    weekend: { month: 8, nth: 2 },
   },
   {
     key: 'ARRL-222',
@@ -92,6 +98,7 @@ const EVENTS: VhfEvent[] = [
       '2.5mm': 20, '1mm': 20, submm: 20,
     },
     rules: 'https://contests.arrl.org/ContestRules/222-MHz-Rules.pdf',
+    weekend: { month: 7, nth: 1 },
   },
   {
     key: 'ARRL-10G-AUG',
@@ -104,6 +111,7 @@ const EVENTS: VhfEvent[] = [
     points: { qso: 100 },
     multipliers: { '3cm': 1, '1.25cm': 2, '6mm': 3, '4mm': 4, '2mm': 5, '2.5mm': 5, '1mm': 5, submm: 5 },
     rules: 'https://contests.arrl.org/ContestRules/10-GHz-Rules.pdf',
+    weekend: { month: 7, nth: 3 },
   },
   {
     key: 'ARRL-10G-SEP',
@@ -116,6 +124,7 @@ const EVENTS: VhfEvent[] = [
     points: { qso: 100 },
     multipliers: { '3cm': 1, '1.25cm': 2, '6mm': 3, '4mm': 4, '2mm': 5, '2.5mm': 5, '1mm': 5, submm: 5 },
     rules: 'https://contests.arrl.org/ContestRules/10-GHz-Rules.pdf',
+    weekend: { month: 8, nth: 3 },
   },
 ]
 
@@ -123,6 +132,33 @@ const EVENTS_BY_KEY: Record<string, VhfEvent> = Object.fromEntries(EVENTS.map((e
 
 export function eventFor(key: string | undefined | null): VhfEvent | undefined {
   return key ? EVENTS_BY_KEY[key] : undefined
+}
+
+const DAY = 24 * 60 * 60 * 1000
+
+/// How long a finished running is still offered as itself — long enough to
+/// log it after the weekend — before the date moves on to next year's.
+const GRACE_DAYS = 3
+
+/// The Saturday of the [nth] full weekend of [month]. The first Saturday of a
+/// month always has its Sunday in the same month, so the nth full weekend is
+/// simply the nth Saturday.
+function weekendSaturday(year: number, { month, nth }: VhfEvent['weekend']): number {
+  const firstDay = new Date(Date.UTC(year, month, 1)).getUTCDay()
+  return Date.UTC(year, month, 1 + ((6 - firstDay + 7) % 7) + (nth - 1) * 7)
+}
+
+/// `2026-08-01` — the Saturday [event]'s next running starts, UTC. Rolls to
+/// next year's [GRACE_DAYS] after the weekend ends. Written out rather than
+/// localized, the same form the QSO parties use: these are the sponsor's
+/// dates, and an operator checks them against the rules.
+export function nextStartDate(event: VhfEvent, nowMillis: number): string {
+  const year = new Date(nowMillis).getUTCFullYear()
+  const thisYear = weekendSaturday(year, event.weekend)
+  const start = thisYear + (2 + GRACE_DAYS) * DAY < nowMillis ? weekendSaturday(year + 1, event.weekend) : thisYear
+  const at = new Date(start)
+  const pad = (value: number) => `${value}`.padStart(2, '0')
+  return `${at.getUTCFullYear()}-${pad(at.getUTCMonth() + 1)}-${pad(at.getUTCDate())}`
 }
 
 export { EVENTS }

@@ -1,0 +1,21 @@
+{
+  "settingsTitle": "Spots a Discord",
+  "webhooksLabel": "Canales de Discord",
+  "webhookItemLabel": "Canal de Discord",
+  "nameLabel": "Nombre",
+  "namePlaceholder": "Canal #spots del club",
+  "urlLabel": "URL del webhook",
+  "templateLabel": "Mensaje",
+  "usernameLabel": "Publicar como",
+  "avatarUrlLabel": "URL de la imagen de avatar",
+  "helpTitle": "Cómo configurarlo",
+  "helpText": "Cada auto-spot que envías llega también a cada canal de esta lista que esté activado.\n\n**URL del webhook**: en Discord, abre la configuración del canal, luego *Integraciones → Webhooks → Nuevo webhook*, y copia su URL. Cualquiera que tenga esa URL puede publicar en el canal, así que compártela como una contraseña.\n\n**Mensaje**: una plantilla, escrita como las demás plantillas de la app. Además de `op` (la operación), puede nombrar el spot en sí:\n\n- `spot.freq` — la frecuencia, en kHz\n- `spot.mode` — el modo\n- `spot.comments` — tu comentario del spot\n- `spot.qcode` — su código Q, si empieza con uno (`QRT`), siempre en mayúsculas\n- `spot.qrest` — el comentario después de ese código Q\n\nSon los nombres que usan los spots a Discord de Ham2K Portable Logger, así que una plantilla de allí conserva sus valores de `spot` (sus `spot.qCode` y `spot.qRest` también funcionan) — escrita con la sintaxis de plantillas de esta app.\n\n**Publicar como** y **URL de la imagen de avatar** también son plantillas, para el nombre y la imagen con que aparece el mensaje — `{{ op.station }}` publica con tu indicativo. Si quedan vacías, Discord muestra las del propio webhook.\n\nLa vista previa del editor muestra los valores de `spot` en blanco; se completan al enviar un spot.\n\nEl mensaje de un canal nuevo publica solo los spots cuyo comentario empieza con QRV o QRT — `KI2D QRV till 1600 • US-1234 • 14285 SSB` — así el canal se entera de cuándo sales al aire y cuándo terminas, no de cada re-spot. Edítalo para cambiarlo: un mensaje que queda en blanco omite ese canal, así que una plantilla puede elegir sus spots: `{% if spot.qcode != 'QRT' %}…{% endif %}` publica todos los spots salvo el que avisa que te vas QRT.",
+  "unnamed": "Canal {{n}}",
+  "noWebhooks": "No hay ningún canal de Discord activado",
+  "urlRequired": "Ingresa la URL del webhook que te dio Discord",
+  "notWebhook": "Esta no es una URL de webhook de Discord",
+  "templateError": "La plantilla «{{field}}» tiene un error: {{error}}",
+  "allSkipped": "El mensaje de ningún canal de Discord aplica a este spot",
+  "rejected": "Discord respondió HTTP {{status}}",
+  "unreachable": "No se pudo contactar a Discord: {{error}}"
+}

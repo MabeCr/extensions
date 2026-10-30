@@ -1,0 +1,22 @@
+{
+  "activityLabel": "WWSAC",
+  "setupLabel": "Configuración del WWSAC",
+  "sessionLabel": "Sesión",
+  "noSession": "Sin sesión",
+  "notDeclared": "Sin declarar",
+  "ourAgeGroupLabel": "Nuestro grupo de edad",
+  "ourAgeGroup_OM": "OM",
+  "ourAgeGroup_YL": "YL",
+  "ourAgeGroup_Y": "Joven (Y)",
+  "ourAgeGroup_YYL": "YL joven (YYL)",
+  "powerLabel": "Potencia",
+  "power_HIGH": "Alta (1500 W)",
+  "power_LOW": "Baja (100 W)",
+  "power_QRP": "QRP (5 W)",
+  "rulesLink": "Joven es 26 años o menos; un grupo de edad YL o YL joven es también la categoría superpuesta (overlay) de la participación. Los logs se envían dentro de las 24 horas, en [logs.wwsac.com](https://logs.wwsac.com/). [Reglas oficiales](https://wwsac.com/rules.html)",
+  "ageGroupLabel": "Edad",
+  "notConfigured": "¡Sin configurar!",
+  "ourExchangeSubtitle": "Enviando {{ageGroup}}",
+  "adifExport": "ADIF para {{contest}}",
+  "cabrilloExport": "Cabrillo para {{contest}}"
+}

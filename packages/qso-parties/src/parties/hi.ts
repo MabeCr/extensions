@@ -35,4 +35,21 @@ export const PARTY: QsoPartyParams = {
     powerLimits: { QRP: "5 watts", LOW: "100 watts", HIGH: "1500 watts" },
   },
   counties,
+  // From scripts/convert-parties.mjs, which polo's files do not carry.
+  adifCounties: {
+    HIL: "Hawaii",
+    KOH: "Hawaii",
+    KON: "Hawaii",
+    VOL: "Hawaii",
+    HON: "Honolulu",
+    LHN: "Honolulu",
+    PRL: "Honolulu",
+    WHN: "Honolulu",
+    KAL: "Kalawao",
+    KAU: "Kauai",
+    NII: "Kauai",
+    LNI: "Maui",
+    MAU: "Maui",
+    MOL: "Maui",
+  },
 }

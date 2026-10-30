@@ -1,8 +1,8 @@
 {
   "key": "ki2d-qso-party-spots",
-  "name": "QSO Party Spots",
+  "name": "KI2D’s QSO Party Spots",
   "shortName": "QP Spots",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "api": 4,
   "description": "Spots from the QSO Party Hub and the QSO Party APRS Tracker during a state QSO party, and self-spots to the Hub",
   "category": "spots",
@@ -43,7 +43,7 @@
   },
   "translations": {
     "es": {
-      "name": "Spots de QSO Parties",
+      "name": "Spots de QSO Parties de KI2D",
       "description": "Spots del QSO Party Hub y del QSO Party APRS Tracker durante un QSO party estatal, y auto-spots al Hub",
       "keywords": [
         "spots",

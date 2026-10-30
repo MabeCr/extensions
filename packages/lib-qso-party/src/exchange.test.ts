@@ -254,8 +254,15 @@ test('the county-line shorthand is declared, not rewritten', () => {
   assert.equal(exchangeInheritPrefix(resolveParty(SEVEN_QP)), 2)
   // A party whose codes are three letters has no shorthand at all…
   assert.equal(exchangeInheritPrefix(ny), 0)
-  // …and the only live rewrite left is the comma an operator may reach for.
-  assert.deepEqual(exchangeTransforms(ny), [{ pattern: ',', replacement: '/', flags: 'g' }])
+  // …and the only live rewrite left is the comma, plus or period an operator may
+  // reach for, written as the slash the field splits on. Applied the way the
+  // host applies it, so a pattern that stops matching one of them — or a bare
+  // `.` that matches every character — fails here.
+  const [rewrite] = exchangeTransforms(ny)
+  assert.equal(
+    'ALB+ERI,ONE.OTS/SCH'.replace(new RegExp(rewrite.pattern, rewrite.flags), rewrite.replacement),
+    'ALB/ERI/ONE/OTS/SCH',
+  )
   assert.deepEqual(exchangeTransforms(resolveParty(WI)), [])
 })
 
@@ -396,8 +403,8 @@ test('an exchange from an earlier running of the event is offered only while it 
   // first exchange that still holds wins, newest first.
   const entry = (location: string) =>
     ({ their: { call: 'K2ABC' }, band: '20m', refs: [{ type: NY.refType, location }] }) as Record<string, JSONValue>
-  assert.equal(loggedExchangeFor(ny, [entry('ALB')], 'K2ABC', (l) => pastExchangeHolds(ny, us, 'PA', l)), '')
-  assert.equal(loggedExchangeFor(ny, [entry('ALB')], 'K2ABC', (l) => pastExchangeHolds(ny, us, 'NY', l)), 'ALB')
+  assert.equal(loggedExchangeFor(ny, [entry('ALB')], 'K2ABC', { accept: (l) => pastExchangeHolds(ny, us, 'PA', l) }), '')
+  assert.equal(loggedExchangeFor(ny, [entry('ALB')], 'K2ABC', { accept: (l) => pastExchangeHolds(ny, us, 'NY', l) }), 'ALB')
 })
 
 test('the declared entry classes become the Cabrillo CATEGORY lines', () => {

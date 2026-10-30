@@ -69,3 +69,37 @@ test("a deliberately emptied zone stays empty, and the guess is not put back", a
   const patch = await decorate({ their: { call: 'W1AW' }, refs: [{ type: 'cqww', theirZone: '' }] })
   assert.deepEqual(patch, { their: { exchange: '' } })
 })
+
+test("on RTTY a W/VE station's QTH joins the exchange, and is recorded on the ref", async () => {
+  const rtty = [{ type: 'cqww', mode: 'RTTY' }]
+  const typed = await decorate({ mode: 'RTTY', their: { call: 'W1AW' }, refs: [{ type: 'cqww', theirZone: '5', theirQth: 'ct' }] }, rtty)
+  assert.equal(typed?.their?.exchange, '5 CT')
+  assert.deepEqual(typed?.refs, [{ type: 'cqww', theirZone: '5', theirQth: 'CT' }])
+
+  // Guessed from the call area when nothing was typed, like the zone.
+  const guessed = await decorate({ mode: 'RTTY', their: { call: 'VE3XYZ' } }, rtty)
+  assert.equal(guessed?.their?.exchange, '4 ON')
+
+  // A DX station sends no QTH, whatever was typed.
+  const dx = await decorate({ mode: 'RTTY', their: { call: 'DL1ABC' }, refs: [{ type: 'cqww', theirQth: 'MA' }] }, rtty)
+  assert.equal(dx?.their?.exchange, '14')
+})
+
+test("setup asks for each part of the entry, undeclared until answered", async () => {
+  const controls = async (locale: string) =>
+    ((await contest.runHook('activity', 'operationControls', { operation: { stationCall: 'N0DEV', refs: [] } }, { ctx: { locale } })) as {
+      input: { form: { elements: { key?: string; value?: string; options?: { value: string; label: string }[] }[] } }
+    }[])[0].input.form.elements
+
+  const elements = await controls('en')
+  for (const key of ['operator', 'band', 'power', 'overlay']) {
+    const select = elements.find((element) => element.key === key)
+    assert.equal(select?.value, '', key)
+    assert.deepEqual(select?.options?.[0], { value: '', label: 'Not declared' })
+  }
+  const operator = elements.find((element) => element.key === 'operator')
+  assert.equal(operator?.options?.find((option) => option.value === 'MULTI-ONE')?.label, 'Multi-Single')
+
+  const spanish = await controls('es')
+  assert.equal(spanish.find((element) => element.key === 'power')?.options?.[1]?.label, 'Alta (1500 W)')
+})

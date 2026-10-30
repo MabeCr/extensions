@@ -31,9 +31,9 @@ import { ADIF_MODE_FOR_SUBMODE, superModeForMode } from "@ham2k/lib-operation-da
 import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
 import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
 
-import { normalizeLocation } from "./exchange.ts"
+import { isMultiplier, locationKind, normalizeLocation } from "@ham2k/lib-naqp-exchange"
+
 import { tFor } from "./i18n.ts"
-import { isMultiplier, locationKind } from "./locations.ts"
 
 /// NAQP is an HF contest: the WARC bands are excluded by the rules.
 export const VALID_BANDS = ['160m', '80m', '40m', '20m', '15m', '10m']

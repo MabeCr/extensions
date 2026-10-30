@@ -39,6 +39,7 @@ export const PARTY: QsoPartyParams = {
   stateCountsForInState: true,
   multsPerBand: true,
   countiesAreMultipliersInParty: false,
+  selfSpotting: false,
   labelForCounties: "Districts",
   pointsByMode: { PHONE: 1, CW: 1 },
   entryClasses: {

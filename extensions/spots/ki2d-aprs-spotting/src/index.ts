@@ -85,7 +85,9 @@ const Hook: SpotsHook = {
         },
         body: packet,
       })
-      if (response.status !== 200) return { ok: false, message: t('rejected', { status: response.status }) }
+      // Any 2xx, as app-polo's `response.ok`: the gateway answers 204 when it
+      // takes a beacon and has nothing to say back.
+      if (response.status < 200 || response.status >= 300) return { ok: false, message: t('rejected', { status: response.status }) }
     } catch (error) {
       return { ok: false, message: t('unreachable', { error: String(error) }) }
     }

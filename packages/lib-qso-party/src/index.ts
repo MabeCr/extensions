@@ -22,7 +22,7 @@ import type {
 
 import { qsoPartyActivity } from "./activity.ts"
 import { registerEntityLookup } from "./dxcc.ts"
-import { qsoPartyAdifFields, qsoPartyExport } from "./exports.ts"
+import { qsoPartyAdifFields, qsoPartyExport, type QsoPartyAdifFieldsHook } from "./exports.ts"
 import type { QsoPartyExtensionParams } from "./params.ts"
 import { qsoPartyRefHandler } from "./refHandler.ts"
 import { qsoPartyScorer } from "./scorer.ts"
@@ -127,7 +127,7 @@ export interface QsoPartyHooks {
   refType: string
   activity: ActivityHook
   refHandler: RefHandlerHook
-  adifFields: AdifFieldsHook
+  adifFields: QsoPartyAdifFieldsHook
   export: ExportHook
   /// Already wrapped by the SDK's `contestScorer`, scoped to `refType`.
   scoring: ScoringHook & { scope: ScoringScope }

@@ -14,6 +14,13 @@ import { PARTY } from "@ham2k/qso-parties/tx"
 bundled version used to name a party (`TX`, `7QP`) — for tools and tests, not
 for an extension, because it carries every county list with it.
 
+An extension that needs every party at once — a spotting source naming the
+party an operation is in — imports `@ham2k/qso-parties/identities` instead:
+each party's name, ref type, states, APRS token and feed pages, a few
+kilobytes for all fifty, with no counties. `@ham2k/qso-parties/identity`
+holds the type and the two readers those extensions share: which party an
+operation is in, and which counties its ref names.
+
 ## Layout
 
 | | |
@@ -22,9 +29,12 @@ for an extension, because it carries every county list with it.
 | `src/parties/<key>.ts` | one party's parameters, generated |
 | `src/parties/<key>.counties.json` | its county table, generated |
 | `src/index.ts` | the map of all fifty, generated |
+| `src/identities.ts` | every party's identity, no counties, generated |
+| `src/identity.ts` | the identity type and its two readers — hand-written |
 | `src/parties.test.ts` | the differential test — hand-written |
+| `src/identity.test.ts` | the readers' tests — hand-written |
 
-Everything but the fixtures and the test is written by
+Everything but the fixtures, `identity.ts` and the tests is written by
 `scripts/convert-parties.mjs`. Edit a fixture, never a generated module.
 
 ## Re-syncing a season

@@ -55,7 +55,7 @@ export function eventRefIn(operation: Container): Record<string, JSONValue> | un
 /// and nothing more — and needs none: the hooks that read it have already
 /// established that the OPERATION is this event's, and Ohio was the only
 /// state-park event with an exchange to store.
-function exchangeRefIn(qso: Container): Record<string, JSONValue> | undefined {
+export function exchangeRefIn(qso: Container): Record<string, JSONValue> | undefined {
   return refsOfType(qso, TYPE)[0] ?? refsOfType(qso, LEGACY_TYPE)[0]
 }
 
@@ -86,26 +86,20 @@ export function ourPark(operation: Container, ownRef?: Record<string, JSONValue>
   return ''
 }
 
-/// Whether the operator has DECIDED this QSO's exchange — the field is present
-/// on the exchange ref, blank or not.
-///
-/// Presence, never truthiness: the core writes `park: ''` when the operator
-/// empties the field on purpose and drops the key when it was never filled in,
-/// so a present-but-blank key is a decision every reader has to honour. Deriving
-/// a park from a POTA reference over the top of it would put back what they just
-/// removed — in the log they submit, if not on the screen.
-export function theirParkWasDecided(qso: Container): boolean {
-  const ref = exchangeRefIn(qso)
-  return ref !== undefined && 'park' in ref
-}
-
-/// What the station we worked sent, as typed if anything was typed, else the
-/// identifier of a park they are logged as being in. NOT validated: this is what
-/// the exchange column shows, typo and all.
+/// What the station we worked sent, as typed if anything was typed — a blank
+/// included, since the core writes `park: ''` only when the operator empties
+/// the field on purpose — else the identifier of a park they are logged as
+/// being in. NOT validated: this is what the exchange column shows, typo and
+/// all.
 export function theirExchange(qso: Container): string {
   const ref = exchangeRefIn(qso)
   if (ref !== undefined && 'park' in ref) return str(ref.park).toUpperCase()
+  return guessedPark(qso)
+}
 
+/// The identifier of a park the station we worked is logged as being in, by
+/// the POTA reference hunted on the contact, or `''`.
+export function guessedPark(qso: Container): string {
   for (const hunted of refsOfType(qso, POTA_HUNTING)) {
     const park = PARK_BY_REF[str(hunted.ref).toUpperCase()]
     if (park) return park.abbreviation

@@ -122,3 +122,56 @@ test("the Cabrillo file comes out of the export hook", async () => {
   assert.equal(result.content.split('\n')[0].trim(), 'START-OF-LOG: 3.0')
   assert.equal(delegated.length, 0, 'a Cabrillo file is written here, not delegated')
 })
+
+test("the Cabrillo header carries the declared entry, the operators and the club", async () => {
+  const exported = async (operation: Record<string, unknown>) =>
+    ((await contest.runHook('export', 'generateExport', { operation, qsos: QSOS, exportType: 'iaru-hf-cabrillo' })) as { content: string }).content
+  const categories = async (operation: Record<string, unknown>) =>
+    (await exported(operation)).split('\n').filter((line) => line.startsWith('CATEGORY-'))
+
+  const declared = { uuid: 'op-1', stationCall: 'N0DEV', refs: [{ type: 'iaru-hf', modeRestriction: 'CW', stationType: 'normal', zone: '8', operator: 'SINGLE-OP', power: 'LOW', overlay: 'YOUTH' }] }
+  assert.deepEqual(await categories(declared), [
+    'CATEGORY-OPERATOR: SINGLE-OP',
+    'CATEGORY-ASSISTED: NON-ASSISTED',
+    'CATEGORY-BAND: ALL',
+    'CATEGORY-MODE: CW',
+    'CATEGORY-POWER: LOW',
+    'CATEGORY-OVERLAY: YOUTH',
+  ])
+
+  // An HQ station's own category comes from the station type set up for
+  // its exchange.
+  const hq = { uuid: 'op-2', stationCall: 'W1AW', refs: [{ type: 'iaru-hf', modeRestriction: 'Mixed', stationType: 'hq', society: 'ARRL', operator: 'MULTI-HQ', power: 'HIGH' }] }
+  assert.deepEqual(await categories(hq), [
+    'CATEGORY-OPERATOR: MULTI-OP',
+    'CATEGORY-BAND: ALL',
+    'CATEGORY-MODE: MIXED',
+    'CATEGORY-POWER: HIGH',
+    'CATEGORY-TRANSMITTER: UNLIMITED',
+    'CATEGORY-STATION: HQ',
+  ])
+
+  // Undeclared, the entry claims nothing beyond the contest's one band.
+  assert.deepEqual(await categories({ uuid: 'op-3', stationCall: 'N0DEV', refs: [{ type: 'iaru-hf' }] }), ['CATEGORY-BAND: ALL'])
+
+  const multi = { uuid: 'op-4', stationCall: 'N0DEV', local: { operatorCall: 'N0DEV' }, refs: [{ type: 'iaru-hf', operator: 'MULTI-ONE', operators: 'k1abc, w2def', club: 'Yankee Clipper Contest Club' }] }
+  const content = await exported(multi)
+  assert.ok(content.includes('\nOPERATORS: K1ABC W2DEF\n'))
+  assert.ok(content.includes('\nCLUB: Yankee Clipper Contest Club\n'))
+  // With none listed, the app's operator call stands in.
+  const solo = { ...multi, refs: [{ type: 'iaru-hf', modeRestriction: 'Mixed' }] }
+  assert.ok((await exported(solo)).includes('\nOPERATORS: N0DEV\n'))
+})
+
+test("the setup form asks each entry question undeclared first", async () => {
+  const controls = (await contest.runHook('activity', 'operationControls', { operation: { refs: [] } })) as {
+    input: { form: { elements: { key?: string; value?: unknown; options?: { value: unknown }[] }[] } }
+  }[]
+  const fields = Object.fromEntries(controls[0].input.form.elements.filter((e) => e.key).map((e) => [e.key, e]))
+  for (const key of ['operator', 'power', 'overlay']) {
+    assert.equal(fields[key].value, '', key)
+    assert.equal(fields[key].options?.[0].value, '', key)
+  }
+  assert.deepEqual(fields.operator.options?.slice(1).map((o: { value: unknown }) => o.value), ['SINGLE-OP', 'SINGLE-OP-UNLIMITED', 'MULTI-ONE', 'MULTI-TWO', 'MULTI-HQ', 'CHECKLOG'])
+  assert.ok(fields.operators && fields.club)
+})

@@ -18,17 +18,18 @@
 //      are on is not a setting — it is whether the county we typed is one of the
 //      party's own.
 //
-// What a duplicate is: a contact repeats if the same callsign, band, mode, OUR
-// county and THEIR county has been logged before — and a pair that overlaps a
-// previous contact on any ONE of its combinations counts as a repeat, not just
-// one that overlaps on all of them. That costs a rover on a county line a QSO
-// the sponsor might well allow, and the other reading claims contacts a log
-// checker may strike; an over-claim in a submitted file is the worse error.
+// What a duplicate is: each pairing of OUR county with THEIR county is its own
+// contact — the Cabrillo file writes one line per pairing, and a log checker
+// judges each line on its own — and a pairing repeats if the same callsign,
+// band, mode and pair of counties has been logged before. A county-line
+// contact that repeats only SOME of its pairings is half a duplicate: the
+// repeated pairings are worth nothing, the new ones count. A rover who works
+// KN2X from SUL/DEL and then again from DEL/ULS earns the ULS pairing.
 
 import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
 import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
 
-import { isMobile, ourLocationText, partyRefIn, powerMultiplier, str } from "./entry.ts"
+import { isMobile, ourLocationText, partyContactRefIn, powerMultiplier, str } from "./entry.ts"
 import { tFor } from "./i18n.ts"
 import type { QsoPartyLocation, QsoPartyParams } from "./params.ts"
 import {
@@ -276,7 +277,7 @@ export function qsoPartyScorer(params: QsoPartyParams): ContestScorer<QsoPartySc
       // us earlier, then to what their callsign says — a DX station's exchange
       // is its entity, and no party asks them to type it.
       const entityPrefix = entityPrefixOf(qso)
-      const qsoRef = partyRefIn(party, qso as Record<string, unknown>)
+      const qsoRef = partyContactRefIn(party, qso as Record<string, unknown>, operation as Record<string, unknown>)
       const typed = str(qsoRef?.location).trim()
       const fallback = sheet.lastLocation[call] ?? defaultTheirLocation(party, qso)
       const { locations: theirs, standing } = theirLocations(party, typed || fallback, {
@@ -299,22 +300,48 @@ export function qsoPartyScorer(params: QsoPartyParams): ContestScorer<QsoPartySc
         return { scoresheet: sheet, score: { value: 0, alerts: ['invalidExchange'] } }
       }
 
-      // Every pairing of our counties with theirs is its own contact — the N×M a
-      // county line earns.
+      // Duplicates, against the pairs already credited. A slot is one band, one
+      // mode and one of OUR counties, so a rover who drives into the next county
+      // may work the same station again.
+      const bySlot = (sheet.worked[call] ??= {})
+      const slots = Object.keys(bySlot)
+      const workedBefore = slots.length > 0
+      const pairs: { slot: string; ours: QsoPartyLocation; theirs: QsoPartyLocation }[] = []
+      for (const ours of ourLocations) {
+        for (const theirLocation of theirs) {
+          const slot = `${band}|${mode}|${ours.code}`
+          if (!(bySlot[slot] ?? []).includes(theirLocation.code)) pairs.push({ slot, ours, theirs: theirLocation })
+        }
+      }
+
+      sheet.lastLocation[call] = theirs.map((location) => location.code).join('/')
+
+      if (pairs.length === 0) {
+        sheet.dupes += 1
+        return { scoresheet: sheet, score: { value: 0, dupe: true, alerts: ['duplicate'] } }
+      }
+
+      // What the rest of this contact credits: only the counties, on either
+      // side, that appear in a pairing not worked before.
+      const newOurs = ourLocations.filter((location) => pairs.some((pair) => pair.ours === location))
+      const newTheirs = theirs.filter((location) => pairs.some((pair) => pair.theirs === location))
+
+      // Every new pairing of our counties with theirs is its own contact — the
+      // N×M a county line earns.
       const priced = party.pointsForContact?.({
-        qso, band, superMode, ours: ourLocations, theirs, weAreInParty, theyAreInParty,
+        qso, band, superMode, ours: newOurs, theirs: newTheirs, weAreInParty, theyAreInParty,
       })
       const perContact = priced ?? (
         !theyAreInParty && party.pointsWhenTheyAreOutOfParty !== undefined
           ? party.pointsWhenTheyAreOutOfParty
           : pointsForMode(party, superMode)
       )
-      let value = perContact * ourLocations.length * theirs.length
+      let value = perContact * pairs.length
       if (party.inStateToOutOfStatePointsDouble && weAreInParty && !theyAreInParty) value *= 2
 
       const notices: string[] = []
       const rareCounties: string[] = []
-      for (const location of theirs) {
+      for (const location of newTheirs) {
         const rare = party.rareCountyMultipliers[location.code]
         if (rare) {
           rareCounties.push(location.code)
@@ -322,27 +349,6 @@ export function qsoPartyScorer(params: QsoPartyParams): ContestScorer<QsoPartySc
         }
       }
       if (rareCounties.length > 0) notices.push('rareCounty')
-
-      // Duplicates, against the pairs already credited. A slot is one band, one
-      // mode and one of OUR counties, so a rover who drives into the next county
-      // may work the same station again.
-      const bySlot = (sheet.worked[call] ??= {})
-      const slots = Object.keys(bySlot)
-      const workedBefore = slots.length > 0
-      const pairs: { slot: string; code: string }[] = []
-      for (const ours of ourLocations) {
-        for (const theirLocation of theirs) {
-          pairs.push({ slot: `${band}|${mode}|${ours.code}`, code: theirLocation.code })
-        }
-      }
-      const repeat = pairs.some(({ slot, code }) => (bySlot[slot] ?? []).includes(code))
-
-      sheet.lastLocation[call] = theirs.map((location) => location.code).join('/')
-
-      if (repeat) {
-        sheet.dupes += 1
-        return { scoresheet: sheet, score: { value: 0, dupe: true, alerts: ['duplicate'] } }
-      }
 
       if (workedBefore) {
         if (!slots.some((slot) => slot.startsWith(`${band}|`))) notices.push('newBand')
@@ -371,7 +377,7 @@ export function qsoPartyScorer(params: QsoPartyParams): ContestScorer<QsoPartySc
       }
 
       let newMult = false
-      for (const location of theirs) {
+      for (const location of newTheirs) {
         const { keys, county, state, province, entity } = multipliersFor(party, location, {
           prefix,
           weAreInParty,
@@ -410,9 +416,9 @@ export function qsoPartyScorer(params: QsoPartyParams): ContestScorer<QsoPartySc
         }
       }
 
-      for (const { slot, code } of pairs) (bySlot[slot] ??= []).push(code)
+      for (const pair of pairs) (bySlot[pair.slot] ??= []).push(pair.theirs.code)
       for (const county of rareCounties) sheet.rareCounties[county] = (sheet.rareCounties[county] ?? 0) + 1
-      for (const ours of ourLocations) {
+      for (const ours of newOurs) {
         if (ours.inParty) sheet.activatedCounties[ours.code] = (sheet.activatedCounties[ours.code] ?? 0) + 1
       }
       sheet.bands[band] = (sheet.bands[band] ?? 0) + 1
@@ -424,7 +430,11 @@ export function qsoPartyScorer(params: QsoPartyParams): ContestScorer<QsoPartySc
       sheet.qsos += 1
       sheet.points += value
 
-      const score: QsoScoreVerdict = { value, band }
+      // `dupe: false` says out loud that this contact passed the party's own
+      // duplicate test. Without it, the host's core scorer keeps its coarser
+      // call+band+mode rule, and a mobile worked again from a new county reads
+      // "Dupe!" beside the "New Mult" it earned.
+      const score: QsoScoreVerdict = { value, band, dupe: false }
       if (notices.length > 0) score.notices = notices
       if (typedOurState) score.alerts = ['ourLocation']
       return { scoresheet: sheet, score }

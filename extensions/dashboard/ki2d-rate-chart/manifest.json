@@ -1,0 +1,29 @@
+{
+  "key": "ki2d-rate-chart",
+  "name": "KI2D’s Rate Chart",
+  "version": "0.4.0",
+  "description": "QSO rates over the trailing 10 and 60 minutes, charted with their peaks and lows",
+  "category": "dashboard",
+  "icon": "chart-line",
+  "keywords": ["rate", "qso rate", "contest", "chart"],
+  "hooks": [
+    "panel"
+  ],
+  "translations": {
+    "es": {
+      "name": "Gráfico de ritmo de KI2D",
+      "description": "Ritmo de QSOs en los últimos 10 y 60 minutos, con sus picos y mínimos"
+    }
+  },
+  "api": 9,
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  }
+}

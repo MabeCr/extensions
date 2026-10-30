@@ -112,6 +112,11 @@ const { refHandler, activityHook, adifFieldsHook, adifImportHook } = referenceAc
   // Derived from the scorer's own rule, not a separate flag — the UI control
   // and the scorer can't disagree about whether this award allows n-fers.
   allowsMultiple: ZLOTA_SCORING.allowsMultipleReferences,
+  // Only a hut's rule is a distance from a point: "within 100m" (ZLOTA Rules,
+  // ontheair.nz). A lake's is from its shore and a park's or an island's is
+  // its boundary, which no circle draws; a lighthouse's or a volcano's
+  // differs per reference and is published only on the reference's own page.
+  activationRadius: (row) => (row.data?.assetType === 'hut' ? { activationRadiusInMeters: 100 } : undefined),
 })
 
 interface ZLOTAApiSpot {
@@ -181,9 +186,8 @@ const zlotaDataFile: DataFileDefinition = {
     const ref = String(entry?.code ?? '').trim().toUpperCase()
     if (!ref) return null
 
-    // `x` is longitude and `y` latitude — the list is drawn from a map layer.
-    const lat = typeof entry?.y === 'number' ? entry.y : undefined
-    const lon = typeof entry?.x === 'number' ? entry.x : undefined
+    const lat = typeof entry?.latitude === 'number' ? entry.latitude : undefined
+    const lon = typeof entry?.longitude === 'number' ? entry.longitude : undefined
 
     return {
       // The kind of place, which is both how an operator narrows a search and

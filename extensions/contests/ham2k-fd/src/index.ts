@@ -12,6 +12,7 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
+import { NO_RESTRICTIONS, rulesNote } from "@ham2k/lib-contest-rules"
 import {
   adifForExport,
   contestScorer,
@@ -35,7 +36,7 @@ import type {
 
 import { ALL_SECTIONS, CALL_AREA_FOR_SECTION, PREFIX_TO_LOCATION } from "./sections.ts"
 import { CLAIMED_BONUS_KEYS, CLASS_REGEX, FDScorer, TYPE, contestTitle, refOfType } from "./scorer.ts"
-import { nextRunningYear, relevanceFor } from "./schedule.ts"
+import { fieldDayDate, nextRunningYear, relevanceFor } from "./schedule.ts"
 import { tFor } from "./i18n.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
@@ -125,6 +126,34 @@ async function ourSectionDefault(): Promise<string> {
   return lastKnownSection
 }
 
+/// `OPERATORS`: the calls typed at setup, uppercased and space-separated, with
+/// an `@station` kept as written. Empty when nothing was typed, so the caller
+/// can fall back to the app's operator call.
+function declaredOperators(ref: Record<string, JSONValue> | undefined): string {
+  const typed = typeof ref?.operators === 'string' ? ref.operators : ''
+  return typed.toUpperCase().split(/[\s,;]+/).filter((call) => call).join(' ')
+}
+
+/// `CLUB`: the club or group name as typed, on one line. Aggregate club
+/// scoring needs it spelled exactly as every member's entry spells it.
+function declaredClub(ref: Record<string, JSONValue> | undefined): string {
+  return typeof ref?.club === 'string' ? ref.club.replace(/\s+/g, ' ').trim() : ''
+}
+
+/// The operator's name, email and club from their profile, for the Cabrillo
+/// header. All optional and free-form in the profile, so each may be ''. A
+/// host that cannot answer costs these lines, never the log itself.
+async function profileDetails(): Promise<{ name: string; email: string; club: string }> {
+  try {
+    const settings = (await host.getSettings()) as Record<string, JSONValue> | undefined
+    const line = (value: JSONValue | undefined) => str(value).replace(/\s+/g, ' ').trim()
+    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail), club: line(settings?.operatorClub) }
+  } catch (e) {
+    console.warn(`[fd] profile settings unavailable, exporting without name, email and profile club:`, e)
+    return { name: '', email: '', club: '' }
+  }
+}
+
 const ActivityHook = {
   async operationControls(
     _args: { operation: Record<string, JSONValue> },
@@ -181,6 +210,9 @@ const ActivityHook = {
                 uppercase: true,
                 value: profileSection,
               },
+              // The rules say nothing of spotting assistance or self-spotting,
+              // and pull in none of the general rules that do.
+              rulesNote(ctx, NO_RESTRICTIONS),
               {
                 type: 'field',
                 fieldType: 'select',
@@ -201,6 +233,21 @@ const ActivityHook = {
                   { value: 'BATTERIES', label: t('powerBatteries') },
                   { value: 'GENERATOR', label: t('powerGenerator') },
                 ],
+              },
+              {
+                type: 'field',
+                fieldType: 'text',
+                key: 'operators',
+                label: t('operatorsLabel'),
+                placeholder: t('operatorsPlaceholder'),
+                uppercase: true,
+              },
+              {
+                type: 'field',
+                fieldType: 'text',
+                key: 'club',
+                label: t('clubLabel'),
+                placeholder: t('clubPlaceholder'),
               },
 
               { type: 'header', title: t('bonusesHeader') },
@@ -290,7 +337,9 @@ const ActivityHook = {
         // activity puts its reference's real name here (a park's name); an
         // event has no such name, so it describes itself instead.
         program: 'Contest',
-        name: t('activityDescription'),
+        // The day it opens, so the row says WHEN as well as what — the same
+        // `description • date` line the QSO parties show.
+        name: `${t('activityDescription')} • ${fieldDayDate(year)}`,
         label: `${t('activityLabel')} ${year}`,
         // Must match what `decorateRef` composes: the same running added by
         // tapping this suggestion and by the setup form has to read the same
@@ -471,6 +520,7 @@ const ExportHook = {
     const stamp = `FD-${ourCall || 'log'}`.replace(/[^A-Za-z0-9_-]+/g, '-')
 
     if (args.exportType === `${TYPE}-cabrillo`) {
+      const profile = await profileDetails()
       const content = qsonToCabrillo(args.qsos, {
         headers: [
           // The registered CABRILLO name, which is not the ADIF CONTEST_ID
@@ -478,9 +528,13 @@ const ExportHook = {
           ['CONTEST', 'ARRL-FD'],
           ['CALLSIGN', ourCall],
           ['LOCATION', ourSection],
-          ['NAME', ''],
-          ['OPERATORS', str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          // The calls listed at setup, else the app's own operator call.
+          ['OPERATORS', declaredOperators(opRef) || str((operation.local as Record<string, JSONValue>)?.operatorCall)],
           ['GRID-LOCATOR', str(operation.grid)],
+          // The club typed at setup, else the profile's.
+          ['CLUB', declaredClub(opRef) || profile.club],
+          ['NAME', profile.name],
+          ['EMAIL', profile.email],
         ],
         qsoParts: (qso) => {
           const qsoRef = refOfType(qso, TYPE)

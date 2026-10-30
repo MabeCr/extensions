@@ -11,7 +11,7 @@
 //     a park the operator said no to;
 //   - the scorer reads refs it does not own (the POTA activation on the
 //     operation), so a segment that moves the operator to another park has to
-//     reach it as that segment's operation.
+//     reach it, and the Cabrillo's rows, as that segment's operation.
 
 import { test } from "node:test"
 import assert from "node:assert/strict"
@@ -191,4 +191,20 @@ test('a stretch the event was not running is not scored at all', async () => {
   assert.equal(result.operationSummary.ohspota.qsos, 10)
   assert.equal(Object.keys(result.qsoScores).length, 10)
   assert.doesNotMatch(String(result.operationSummary.ohspota.longSummary), /\*\*HOC:\*\*/)
+})
+
+test('each Cabrillo row names the park its own segment was activating', async () => {
+  // Rows sent from the starting park credit every contact after the move to the wrong entry.
+  const base = { uuid: 'op', stationCall: 'N0DEV', refs: [EVENT, ADA] }
+  const result = (await oh.runHook('export', 'generateExport', {
+    exportType: 'ohspota-cabrillo',
+    operation: base,
+    qsos: [...tenQsos(0).slice(0, 2), ...tenQsos(10).slice(0, 2)],
+    segments: [
+      { fromMillis: DAWN, operation: base },
+      { fromMillis: at(10), operation: { ...base, refs: [EVENT, HOC] } },
+    ],
+  })) as { content: string }
+  const ourParks = result.content.split('\n').filter((line) => line.startsWith('QSO:')).map((line) => line.split(/\s+/)[6])
+  assert.deepEqual(ourParks, ['ADA', 'ADA', 'HOC', 'HOC'])
 })

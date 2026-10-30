@@ -209,6 +209,9 @@ function optionsOf(raw: RawParty): ReferenceParty['options'] {
     pointsWhenTheyAreOutOfParty: num(o.pointsWhenTheyAreOutOfParty),
     removeCountySuffixes: bool(o.removeCountySuffixes),
     labelForCounties: str(o.labelForCounties) ?? 'Counties',
+    // Allowed unless the file says `false`: most write `true`, and several
+    // write nothing at all.
+    selfSpotting: o.selfSpotting !== false,
   }
 }
 
@@ -315,6 +318,7 @@ function resolvedOptions(params: QsoPartyParams): ReferenceParty['options'] {
     pointsWhenTheyAreOutOfParty: params.pointsWhenTheyAreOutOfParty,
     removeCountySuffixes: params.removeCountySuffixes ?? false,
     labelForCounties: params.labelForCounties ?? 'Counties',
+    selfSpotting: params.selfSpotting ?? true,
   }
 }
 

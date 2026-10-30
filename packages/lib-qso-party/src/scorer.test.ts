@@ -167,6 +167,25 @@ test('nothing scores until the operator says where WE are', () => {
   assert.deepEqual(scores[0].alerts, ['ourLocation'])
 })
 
+test('a log kept under the old combined extension scores the exchange its contacts carry', () => {
+  // The party's code is on the operation's `qp` ref alone; each contact's
+  // exchange is on a bare `{type: 'qp'}`. Read by code, every contact scores as
+  // if nothing had been copied — an in-state station's county is lost outright.
+  const scorer = qsoPartyScorer({ ...NY, legacyRefs: [{ type: 'qp', prefix: 'ny' }] })
+  const ref = { type: 'qp', ref: 'NY', location: 'ALB' }
+  const operation = { uuid: 'op', stationCall: 'N0DEV', refs: [ref] }
+  const contact = { ...qso(), refs: [{ type: 'qp', location: 'ERI' }] }
+  const { scoresheet, score } = scorer.scoreQso(
+    { scoresheet: scorer.startScoresheet({ operation, ref }, ctx), qso: contact, operation, ref, isNewDay: false },
+    ctx,
+  )
+
+  const expected = run([qso({ location: 'ERI' })])
+  assert.equal(score.alerts, undefined)
+  assert.equal(score.value, expected.scores[0].value)
+  assert.deepEqual(Object.keys(scoresheet.mults), Object.keys(expected.sheet.mults))
+})
+
 test('an exchange that was never sent, and one that means nothing', () => {
   assert.deepEqual(run([qso({ location: '' })]).scores[0].alerts, ['missingExchange'])
   assert.deepEqual(run([qso({ location: 'ZZZ', entityPrefix: '' })]).scores[0].alerts, ['invalidExchange'])
@@ -258,14 +277,32 @@ test('a repeat on the same band, mode and county is a duplicate', () => {
   assert.equal(sheet.dupes, 1)
 })
 
-test('a county line that overlaps an earlier contact on ANY pairing is a repeat', () => {
-  // The safe reading of a rule the sponsors leave open. Requiring every pairing
-  // to overlap claims a contact a log checker may strike, and an over-claim in a
-  // submitted file is the worse of the two errors — so a station who moves onto
-  // a line that still includes the county we just worked them from gets no
-  // second contact.
-  const { scores } = run([qso({ location: 'ERI' }), qso({ location: 'ERI/CHA' })])
-  assert.equal(scores[1].dupe, true)
+test('a county line that repeats only SOME of its pairings counts the new ones', () => {
+  // Each pairing is its own line in the Cabrillo file, and a checker strikes
+  // only the line that repeats. Ours on the line: REN/ALB, then ALB/ALL — the
+  // ALB pairing is a dupe, the ALL one is a new contact.
+  const ours = run([qso({ location: 'ERI', mode: 'SSB' }), qso({ location: 'ERI', mode: 'SSB' })], {
+    ourLocation: ['REN/ALB', 'ALB/ALL'],
+  })
+  assert.equal(ours.scores[0].value, 1 * 2)
+  assert.equal(ours.scores[1].value, 1)
+  assert.equal(ours.scores[1].dupe, false)
+  assert.equal(ours.sheet.dupes, 0)
+  assert.equal(ours.sheet.activatedCounties.ALB, 1)
+  assert.equal(ours.sheet.activatedCounties.ALL, 1)
+
+  // Theirs on the line: ERI, then ERI/CHA — only the CHA pairing is new.
+  const theirs = run([qso({ location: 'ERI' }), qso({ location: 'ERI/CHA' })])
+  assert.equal(theirs.scores[1].value, 2)
+  assert.equal(theirs.scores[1].dupe, false)
+  assert.equal(theirs.sheet.counties.ERI, 1)
+  assert.equal(theirs.sheet.counties.CHA, 1)
+
+  // Every pairing repeated is still a duplicate.
+  const all = run([qso({ location: 'ERI/CHA' }), qso({ location: 'CHA' })])
+  assert.equal(all.scores[1].dupe, true)
+  assert.equal(all.scores[1].value, 0)
+
   // Neither county worked before, and it counts — both pairings.
   const fresh = run([qso({ location: 'ERI' }), qso({ location: 'ALB/CHA' })])
   assert.equal(fresh.scores[1].value, 2 * 2)
@@ -289,7 +326,16 @@ test('a rover who moves may work the same station again, from the new county', (
     ourLocation: ['ALB', 'REN'],
   })
   assert.equal(scores[1].value, 2)
-  assert.equal(scores[1].dupe, undefined)
+  assert.equal(scores[1].dupe, false)
+})
+
+// Same call, band and mode is the host core scorer's duplicate. Only a ruling
+// from the party makes core's yield, so a contact the party clears has to say
+// so — silence leaves "Dupe!" on the row beside the new county.
+test('a mobile worked again from a new county is ruled not a duplicate', () => {
+  const { scores } = run([qso({ location: 'ERI' }), qso({ location: 'ALB' })])
+  assert.equal(scores[1].dupe, false)
+  assert.ok(scores[1].value > 0)
 })
 
 test('a rover activates each county they operate from', () => {

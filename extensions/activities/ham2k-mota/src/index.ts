@@ -89,6 +89,9 @@ const { refHandler, activityHook, adifFieldsHook, adifImportHook } = referenceAc
   // Derived from the scorer's own rule, not a separate flag — the UI control
   // and the scorer can't disagree about whether this award allows n-fers.
   allowsMultiple: MOTA_SCORING.allowsMultipleReferences,
+  // "The maximum distance from the mill must not exceed 1,000m", and the mill
+  // must be in sight — which no circle can show (gma.rocks/doc/MOTA_Rules.pdf).
+  activationRadius: { activationRadiusInMeters: 1000 },
 })
 
 function refsOfType(container: Record<string, unknown>, type: string): Ref[] {

@@ -1,0 +1,285 @@
+<!doctype html>
+<!-- Copyright ©️ 2026 Sebastian Delmont <sd@ham2k.com> -->
+<!-- SPDX-License-Identifier: MIT -->
+<!-- The page scripts/preview-panels.mjs serves: draws each rendered scene from its layers and controls. -->
+<html><head><meta charset="utf-8"><title>Panel preview</title>
+<!-- The app's own faces, so text measures as it will there; Google names Roboto Mono with a space. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&family=Roboto:wght@400;500;700&display=block">
+<!-- The app's icon set, for `icon` layers; `fa-` names show a placeholder here. -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
+<style>
+  body { margin: 0; padding: 16px; background: #888; font-family: Roboto, -apple-system, system-ui, sans-serif; }
+  header { color: #fff; font-size: 12px; margin-bottom: 12px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  figure { margin: 0; }
+  figcaption { color: #fff; font-size: 11px; margin-bottom: 4px; max-width: 520px; }
+  /* A drag on a pane scrolls or zooms it, as in the host, which selects no text: a browser would start a selection. */
+  .pane { position: relative; overflow: hidden; border-radius: 12px; box-shadow: 0 2px 8px rgba(0, 0, 0, .3); user-select: none; -webkit-user-select: none; }
+  .layer { position: absolute; transform-origin: 50% 50%; }
+  .layer > svg { display: block; width: 100%; height: 100%; }
+  /* Flutter keeps a layer's spaces; a browser would collapse them. */
+  .text { white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+  .control { position: absolute; outline: 1px dashed transparent; }
+  .control.native { outline: 1px dashed rgba(128, 128, 255, .6); font-size: 10px; color: #66f; overflow: hidden; }
+  .button { cursor: pointer; }
+  pre { background: #fee; padding: 8px; font-size: 11px; max-width: 600px; white-space: pre-wrap; margin: 0; }
+  .text-content { padding: 12px; font-size: 14px; white-space: pre-wrap; }
+  #sheet { position: fixed; right: 16px; top: 16px; background: #fff; padding: 12px 16px; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, .4); max-width: 380px; font-size: 13px; z-index: 10; }
+  #sheet button { float: right; }
+</style></head>
+<body><header id="info"></header><div class="grid" id="grid"></div>
+<script>
+let lastStamp, pageVersion
+/** Each scrolling case's position, by figure: what its scene asked for, and where it is. */
+const scrolled = {}
+const bind = (b, values) => {
+  // A missing reading binds as the bottom of the binding's range, as in the host.
+  if (values[b.value] === undefined) return b.samples?.length ? b.samples[0] : b.output[0]
+  let x = values[b.value] * (b.scale ?? 1)
+  if (b.truncate) x = Math.trunc(x)
+  if (b.modulo) x = x % b.modulo
+  const [i0, i1] = b.input, f = Math.max(0, Math.min(1, (x - i0) / ((i1 - i0) || 1)))
+  if (b.samples?.length) {
+    const p = f * (b.samples.length - 1), k = Math.floor(p), r = p - k
+    return k >= b.samples.length - 1 ? b.samples.at(-1) : b.samples[k] * (1 - r) + b.samples[k + 1] * r
+  }
+  return b.output[0] + (b.output[1] - b.output[0]) * f
+}
+/// A layer's `when`, as the host tests it: a missing number fails the test itself, before `not`.
+function holds(w, values) {
+  const v = values[w.value], matches = w.is !== undefined ? [w.is] : w.in
+  const pass = typeof v === 'string' ? (matches ?? []).includes(v)
+    : v !== undefined && v !== -Infinity && (matches ? matches.includes(v) : (w.min === undefined || v >= w.min) && (w.max === undefined || v <= w.max))
+  return pass !== !!w.not
+}
+/// A bound number as the host formats it: scale, truncate, modulo, then zero padding.
+function number(v, t) {
+  let x = v * (t.scale ?? 1)
+  if (t.truncate) x = Math.trunc(x)
+  if (t.modulo) x = ((x % t.modulo) + t.modulo) % t.modulo
+  const [whole, fraction] = Math.abs(x).toFixed(t.decimals ?? 0).split('.')
+  return (x < 0 ? '-' : '') + whole.padStart(t.minIntegerDigits ?? 1, '0') + (fraction ? `.${fraction}` : '')
+}
+function paint(pane, values) {
+  for (const el of pane.querySelectorAll('.layer')) {
+    const l = el._layer, t = []
+    if (l.translateX) t.push(`translateX(${bind(l.translateX, values)}px)`)
+    if (l.translateY) t.push(`translateY(${bind(l.translateY, values)}px)`)
+    if (l.rotation) t.push(`rotate(${bind(l.rotation, values)}deg)`)
+    if (l.scaleX) t.push(`scaleX(${bind(l.scaleX, values)})`)
+    if (l.scaleY) t.push(`scaleY(${bind(l.scaleY, values)})`)
+    el.style.transform = t.join(' ')
+    if (l.opacity) el.style.opacity = bind(l.opacity, values)
+    if (l.when && !holds(l.when, values)) el.style.opacity = 0
+    if (l.text?.value) {
+      const v = values[l.text.value], s = l.text.samples
+      el.textContent = typeof v === 'string' ? v
+        : s ? s[Math.max(0, Math.min(s.length - 1, Math.round(v ?? 0)))]
+        : (l.text.prefix ?? '') + (v === undefined ? '—' : number(v, l.text)) + (l.text.suffix ?? '')
+    }
+  }
+}
+function showSheets(sheets) {
+  if (!sheets?.length) return
+  let box = document.getElementById('sheet')
+  if (!box) { box = document.createElement('div'); box.id = 'sheet'; document.body.append(box) }
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+  box.innerHTML = '<button onclick="this.parentNode.remove()">✕</button>' + sheets.map(sheet =>
+    `<p><b>${esc(sheet.title)}</b></p>` + (sheet.text ? `<p>${esc(sheet.text)}</p>` : '') +
+    (sheet.elements ?? []).map(e => e.type === 'link'
+      ? `<p><a href="${esc(e.url)}" target="_blank" rel="noreferrer">${esc(e.label)}</a><br><small>${esc(e.description)}</small></p>`
+      : `<p><small>${esc(e.type)} ${esc(e.label ?? e.key ?? '')}</small></p>`).join('')).join('<hr>')
+}
+async function send(entry, control, extra = {}) {
+  const answer = await (await fetch('/event', { method: 'POST', body: JSON.stringify({ index: entry.index, hook: entry.hook, panel: entry.panel, controlId: control.id, action: control.event, ...extra }) })).json()
+  // The host reports a failed event to the operator; here it shows as a sheet.
+  showSheets(answer.error ? [{ title: `${control.event} failed`, text: answer.error }, ...answer.sheets] : answer.sheets)
+  for (const fresh of answer.entries ?? []) document.getElementById(figureId(fresh))?.replaceWith(build(fresh))
+}
+const figureId = entry => `case-${entry.index}-${entry.hook}-${entry.panel}`
+function build(entry) {
+  const fig = document.createElement('figure'), cap = document.createElement('figcaption')
+  fig.id = figureId(entry)
+  cap.textContent = `${entry.width}×${entry.height} ${entry.app} ${entry.locale} ${entry.panel ?? ''} ${entry.label ?? ''}`
+  fig.append(cap)
+  if (entry.error) { const pre = document.createElement('pre'); pre.textContent = entry.error; fig.append(pre); return fig }
+  const pane = document.createElement('div'); pane.className = 'pane'
+  Object.assign(pane.style, { width: entry.width + 'px', height: entry.height + 'px', background: entry.app === 'dark' ? '#0f1416' : '#f5fafc', color: entry.app === 'dark' ? '#dee3e6' : '#171c1f' })
+  fig.append(pane)
+  const res = entry.result
+  if (res.kind !== 'scene' && res.kind !== 'svgScene') {
+    const div = document.createElement('div'); div.className = 'text-content'; div.textContent = res.content ?? JSON.stringify(res); pane.append(div); return fig
+  }
+  const scene = res.scene, values = { ...scene.values, ...scene.strings }
+  // A scene with `scroll`, as the host shows one: the pane scrolls over it, `fixed` parts stay over the pane.
+  let content = pane, overlay = pane
+  if (scene.scroll) {
+    const scroller = document.createElement('div')
+    Object.assign(scroller.style, { position: 'absolute', inset: 0, overflow: 'auto', scrollbarWidth: 'none' })
+    content = document.createElement('div')
+    Object.assign(content.style, { position: 'relative', width: scene.width + 'px', height: scene.height + 'px' })
+    overlay = document.createElement('div')
+    Object.assign(overlay.style, { position: 'absolute', inset: 0, pointerEvents: 'none' })
+    scroller.append(content)
+    pane.append(scroller, overlay)
+    const id = figureId(entry), y = scene.scroll.axis !== 'x', asked = values[scene.scroll.value]
+    const at = () => (y ? scroller.scrollTop : scroller.scrollLeft)
+    // Kept through a render that asks for the same place, moved by one that asks for another.
+    // Once the pane is in the page; a timer rather than a frame, which a hidden tab never gets.
+    setTimeout(() => {
+      const kept = scrolled[id]?.asked === asked ? scrolled[id].at : asked
+      if (y) scroller.scrollTop = kept; else scroller.scrollLeft = kept
+      scrolled[id] = { asked, at: at() }
+    })
+    let settle
+    scroller.addEventListener('scroll', () => {
+      scrolled[id] = { asked, at: at() }
+      clearTimeout(settle)
+      if (scene.scroll.event) settle = setTimeout(() => send(entry, { id: '', event: scene.scroll.event }, { phase: 'commit', value: at() }), 200)
+    })
+    // Dragged with the mouse too, as the host allows; a drag is not also a click. One begun on a
+    // `zoom` strip zooms instead: the view stretches about the pane's middle, and the factor is sent.
+    let from, dragged = false, zoom
+    const strips = (scene.controls ?? []).filter(k => k.kind === 'zoom')
+    const fromMiddle = ev => { const r = scroller.getBoundingClientRect(); return Math.abs(y ? ev.clientY - (r.top + r.height / 2) : ev.clientX - (r.left + r.width / 2)) }
+    scroller.addEventListener('pointerdown', ev => {
+      if (ev.button !== 0) return
+      const r = content.getBoundingClientRect(), x = ev.clientX - r.left, yy = ev.clientY - r.top
+      const strip = strips.find(k => x >= k.x && x < k.x + k.width && yy >= k.y && yy < k.y + k.height)
+      zoom = strip ? { strip, at: Math.max(16, fromMiddle(ev)), factor: 1 } : undefined
+      if (zoom || ev.pointerType === 'mouse') { from = [ev.clientX, ev.clientY]; dragged = false }
+    })
+    window.addEventListener('pointermove', ev => {
+      if (!from) return
+      const dx = ev.clientX - from[0], dy = ev.clientY - from[1]
+      if (!dragged && Math.hypot(dx, dy) < 4) return
+      dragged = true
+      if (zoom) {
+        zoom.factor = Math.min(zoom.strip.max, Math.max(zoom.strip.min, fromMiddle(ev) / zoom.at))
+        // As the host shows it: each piece moved to where the zoom puts its middle, at its own size;
+        // a `stretch` layer scaled about the pane's middle instead.
+        const middle = (y ? scroller.scrollTop + scroller.clientHeight / 2 : scroller.scrollLeft + scroller.clientWidth / 2), f = zoom.factor
+        for (const el of content.children) {
+          const start = y ? el.offsetTop : el.offsetLeft, size = y ? el.offsetHeight : el.offsetWidth
+          const shift = y ? 'translateY' : 'translateX', scale = y ? 'scaleY' : 'scaleX'
+          el.style.translate = ''
+          if (el._layer?.stretch) { el.style.transformOrigin = y ? `0 ${middle - start}px` : `${middle - start}px 0`; el.style.scale = y ? `1 ${f}` : `${f} 1` }
+          else el.style.translate = y ? `0 ${(start + size / 2 - middle) * (f - 1)}px` : `${(start + size / 2 - middle) * (f - 1)}px 0`
+        }
+        return
+      }
+      scroller.scrollBy(y ? 0 : -dx, y ? -dy : 0)
+      from = [ev.clientX, ev.clientY]
+    })
+    window.addEventListener('pointerup', () => {
+      if (zoom && dragged && Math.abs(zoom.factor - 1) >= 0.02) send(entry, zoom.strip, { phase: 'commit', value: zoom.factor })
+      else if (zoom) for (const el of content.children) { el.style.translate = ''; el.style.scale = '' }
+      from = undefined; zoom = undefined
+    })
+    scroller.addEventListener('click', ev => { if (dragged) { ev.stopPropagation(); dragged = false } }, true)
+  }
+  const place = (el, fixed) => {
+    // A zoom strip is drawn by nothing and takes no clicks: the scroller watches for drags on it.
+    if (el._zoom) el.style.pointerEvents = 'none'
+    if (fixed && overlay !== pane && el.classList.contains('control')) el.style.pointerEvents = 'auto'
+    ;(fixed ? overlay : content).append(el)
+  }
+  for (const l of scene.layers) {
+    const el = document.createElement('div'); el.className = 'layer'; el._layer = l
+    Object.assign(el.style, { left: l.x + 'px', top: l.y + 'px', width: l.width + 'px', height: l.height + 'px' })
+    if (l.pivot) el.style.transformOrigin = `${l.pivot[0] * 100}% ${l.pivot[1] * 100}%`
+    if (l.svg) el.innerHTML = l.svg
+    if (l.icon) {
+      const i = document.createElement('i'); i.className = `mdi mdi-${l.icon.name.startsWith('fa-') ? 'help-circle-outline' : l.icon.name}`
+      Object.assign(i.style, { fontSize: Math.min(l.width, l.height) + 'px', lineHeight: l.height + 'px', color: l.icon.color ?? 'inherit', display: 'block', textAlign: 'center' })
+      el.append(i)
+    }
+    if (l.text) {
+      const t = l.text; el.classList.add('text')
+      Object.assign(el.style, { fontSize: (t.size ?? 14) + 'px', color: t.color ?? 'inherit', fontWeight: t.fontWeight ?? 400, lineHeight: t.lineHeight ?? 1.2, letterSpacing: (t.letterSpacing ?? 0) + 'px', textAlign: t.align === 'end' ? 'right' : t.align ?? 'left', fontFamily: t.fontFamily === 'RobotoMono' ? "'Roboto Mono', RobotoMono, monospace" : t.fontFamily ?? 'inherit', paddingTop: '2px' })
+      if (t.glow) el.style.textShadow = `0 0 3px ${t.glow}, 0 0 3px ${t.glow}`
+      if (t.literal !== undefined) el.textContent = (t.prefix ?? '') + t.literal + (t.suffix ?? '')
+    }
+    place(el, l.fixed)
+  }
+  for (const c of scene.controls ?? []) {
+    if (c.x === undefined) continue // laid out by `layout`, which this page does not draw
+    // Named as the host names it, for a screen reader: the host shows no tooltips, and draws nothing over a hovered control.
+    const el = document.createElement('div'); el.className = 'control'; el.setAttribute('aria-label', c.label)
+    Object.assign(el.style, { left: c.x + 'px', top: c.y + 'px', width: c.width + 'px', height: c.height + 'px' })
+    // As the host does: a fixed number in a scene value while the pointer is over it, the scene's own after.
+    if (c.hoverSet) {
+      el.addEventListener('pointerenter', () => { values[c.hoverSet.value] = c.hoverSet.to; paint(pane, values) })
+      el.addEventListener('pointerleave', () => { values[c.hoverSet.value] = scene.values[c.hoverSet.value]; paint(pane, values) })
+    }
+    if (c.kind === 'slider') {
+      const set = ev => {
+        const r = el.getBoundingClientRect(), f = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)), step = c.step || 1
+        values[c.value] = c.min + Math.round(f * (c.max - c.min) / step) * step
+        paint(pane, values)
+      }
+      el.addEventListener('pointermove', ev => { if (c.hover || ev.buttons) set(ev) })
+      el.addEventListener('pointerdown', set)
+      if (c.event) el.addEventListener('pointerup', () => send(entry, c, { phase: 'commit', value: values[c.value] }))
+      if (c.hover) el.addEventListener('pointerleave', () => { values[c.value] = scene.values[c.value]; paint(pane, values) })
+    } else if (c.kind === 'knob' && c.value) {
+      // As the host turns one: the wheel steps it (down is less), a drag moves it by `sensitivity` per
+      // unit right or up; each sends its value as a commit.
+      const clamp = v => Math.min(c.max ?? 1, Math.max(c.min ?? 0, v))
+      const commit = () => c.event && send(entry, c, { phase: 'commit', value: values[c.value] })
+      // As the host does from API 12: down and left lower it, and a scroll on a button over it reaches it too.
+      el._scroll = ev => {
+        const sideways = Math.abs(ev.deltaX) > Math.abs(ev.deltaY), down = sideways ? ev.deltaX < 0 : ev.deltaY > 0
+        values[c.value] = clamp(values[c.value] + (down ? -1 : 1) * (c.step || 1)); commit()
+      }
+      el.addEventListener('wheel', ev => { ev.preventDefault(); ev.stopPropagation(); el._scroll(ev) }, { passive: false })
+      let last
+      el.addEventListener('pointerdown', ev => { last = [ev.clientX, ev.clientY]; el.setPointerCapture(ev.pointerId) })
+      el.addEventListener('pointermove', ev => {
+        if (!last) return
+        values[c.value] = clamp(values[c.value] + (c.invertDrag ? -1 : 1) * ((ev.clientX - last[0]) - (ev.clientY - last[1])) * (c.sensitivity ?? 1))
+        last = [ev.clientX, ev.clientY]
+      })
+      el.addEventListener('pointerup', () => { if (last) commit(); last = undefined })
+    } else if (c.kind === 'button' && c.event) {
+      el.classList.add('button')
+      el.addEventListener('click', ev => {
+        if (c.disabled) return
+        // `tapAt`: where along its longer side the click landed, 0 to 1, as the app sends it.
+        const r = el.getBoundingClientRect()
+        send(entry, c, c.tapAt ? { value: r.height > r.width ? (ev.clientY - r.top) / r.height : (ev.clientX - r.left) / r.width } : {})
+      })
+    } else if (c.kind.startsWith('native')) {
+      el.classList.add('native'); el.textContent = `${c.kind} ${c.label}`
+      if (c.event) el.addEventListener('click', () => send(entry, c))
+    }
+    el._zoom = c.kind === 'zoom'
+    place(el, c.fixed)
+  }
+  // A scroll that lands on a button goes to the topmost knob beneath it, as in the host.
+  pane.addEventListener('wheel', ev => {
+    const r = pane.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top
+    const under = [...pane.querySelectorAll('.control')].reverse().find(k => k._scroll && x >= k.offsetLeft && x < k.offsetLeft + k.offsetWidth && y >= k.offsetTop && y < k.offsetTop + k.offsetHeight)
+    if (under) { ev.preventDefault(); under._scroll(ev) }
+  }, { passive: false })
+  paint(pane, values)
+  return fig
+}
+async function load() {
+  try {
+    const data = await (await fetch('/scenes.json', { cache: 'no-store' })).json()
+    if (!data.rendered || data.rendered === lastStamp) return
+    lastStamp = data.rendered
+    info.textContent = `${data.extension} ${data.version} · rendered ${data.rendered}`
+    grid.replaceChildren(...data.results.map(build))
+  } catch {}
+}
+async function checkPage() {
+  try {
+    const v = await (await fetch('/page-version', { cache: 'no-store' })).text()
+    if (pageVersion && v !== pageVersion) location.reload()
+    pageVersion = v
+  } catch {}
+}
+load(); setInterval(() => { load(); checkPage() }, 1000)
+</script></body></html>

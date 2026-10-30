@@ -1,13 +1,14 @@
 {
   "key": "ki2d-solar-panel",
   "name": "KI2D’s Solar Panel",
-  "version": "0.1.0",
+  "version": "0.2.2",
   "description": "Solar indices, propagation conditions and interactive history charts rendered as SVG scenes",
   "category": "dashboard",
   "icon": "white-balance-sunny",
   "domains": [
     "www.hamqsl.com",
-    "services.swpc.noaa.gov"
+    "services.swpc.noaa.gov",
+    "prop.kc2g.com"
   ],
   "hooks": [
     "panel"

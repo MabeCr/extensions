@@ -1,0 +1,21 @@
+{
+  "settingsTitle": "Discord Spotting",
+  "webhooksLabel": "Discord channels",
+  "webhookItemLabel": "Discord channel",
+  "nameLabel": "Name",
+  "namePlaceholder": "Club #spots channel",
+  "urlLabel": "Webhook URL",
+  "templateLabel": "Message",
+  "usernameLabel": "Posted as",
+  "avatarUrlLabel": "Avatar image URL",
+  "helpTitle": "How to set it up",
+  "helpText": "Every self-spot you send also goes to each channel listed here that is switched on.\n\n**Webhook URL**: in Discord, open the channel's settings, then *Integrations → Webhooks → New Webhook*, and copy its URL. Anyone holding that URL can post to the channel, so share it like a password.\n\n**Message**: a template, written the way the app's other templates are. Besides `op` (the operation), it can name the spot itself:\n\n- `spot.freq` — the frequency, in kHz\n- `spot.mode` — the mode\n- `spot.comments` — your spot comment\n- `spot.qcode` — its Q-code, when it starts with one (`QRT`), always in capitals\n- `spot.qrest` — the comment after that Q-code\n\nThese are the names Ham2K Portable Logger's Discord spotting uses, so a template from there keeps its `spot` values (its `spot.qCode` and `spot.qRest` work too) — written in this app's template syntax.\n\n**Posted as** and **Avatar image URL** are templates too, for the name and picture the message appears under — `{{ op.station }}` posts as your callsign. Left empty, Discord shows the webhook's own.\n\nThe editor's preview shows the `spot` values blank; they are filled in when a spot is sent.\n\nA new channel's message posts only the spots whose comment starts with QRV or QRT — `KI2D QRV till 1600 • US-1234 • 14285 SSB` — so the channel hears when you go on and off the air, not every respot. Edit it to change that: a message that comes out blank skips that channel, so a template can choose its spots: `{% if spot.qcode != 'QRT' %}…{% endif %}` posts every spot except the one saying you are going QRT.",
+  "unnamed": "Channel {{n}}",
+  "noWebhooks": "No Discord channel is switched on",
+  "urlRequired": "Enter the webhook URL Discord gave you",
+  "notWebhook": "This is not a Discord webhook URL",
+  "templateError": "The “{{field}}” template has an error: {{error}}",
+  "allSkipped": "No Discord channel's message applies to this spot",
+  "rejected": "Discord answered HTTP {{status}}",
+  "unreachable": "Discord could not be reached: {{error}}"
+}

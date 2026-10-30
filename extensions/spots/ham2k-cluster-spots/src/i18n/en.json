@@ -1,0 +1,14 @@
+{
+  "unsupported": "This version of the app cannot reach a DX cluster",
+  "noCall": "No operator call to log in to the cluster with",
+  "connectFailed": "Could not reach the cluster node",
+  "needsPassword": "The cluster node asks for a password — set it in Settings › DX Cluster",
+  "loginFailed": "The cluster node refused the login",
+  "disconnected": "The cluster node hung up",
+  "timeout": "The cluster node did not answer",
+  "tooSoon": "Another spot went out a moment ago — try again in a few seconds",
+  "invalidCall": "The cluster cannot take that call",
+  "invalidFrequency": "The spot needs a frequency",
+  "refused": "The cluster node said: {{message}}",
+  "notPosted": "The spot was not posted"
+}

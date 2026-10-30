@@ -72,6 +72,7 @@ test("the activity search offers all three runnings, the nearest first, labelled
   t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 9, 15) })
   const suggestions = (await cqww.runHook("activity", "suggest", { searchTerm: "cq" })) as {
     mode: string
+    name: string
     label: string
     shortLabel: string
     relevance: number
@@ -79,6 +80,10 @@ test("the activity search offers all three runnings, the nearest first, labelled
 
   const ranked = [...suggestions].sort((a, b) => b.relevance - a.relevance).map((s) => s.mode)
   assert.deepEqual(ranked, ["SSB", "CW", "RTTY"])
+
+  // Each names the weekend it runs — RTTY already past, so next year's.
+  const dates = Object.fromEntries(suggestions.map((s) => [s.mode, s.name.split(" • ")[1]]))
+  assert.deepEqual(dates, { SSB: "2026-10-24", CW: "2026-11-28", RTTY: "2027-09-25" })
 
   // A suggestion is saved verbatim; a label that differs from decorateRef's
   // would change the moment the operation is edited.
@@ -160,4 +165,42 @@ test("a single segment is not a timeline: the ref passed in is the one scored", 
   })) as { operationSummary: Record<string, { qsos: number }> }
 
   assert.equal(result.operationSummary.cqww.qsos, 0)
+})
+
+test("the ref states the rules for its operator class, and only what they forbid", async () => {
+  // The host forces a switch off for any ref holding `false`, and reads an
+  // absent key as no say: a ref re-decorated after the class changed has to
+  // drop the `false` the old class left on it.
+  const decorate = async (extra: Record<string, unknown>) =>
+    (await cqww.runHook("ref:cqww", "decorateRef", { ref: { type: "cqww", mode: "CW", ...extra } })) as Record<string, unknown>
+
+  const single = await decorate({ operator: "SINGLE-OP" })
+  assert.equal(single.assistance, false)
+  assert.equal(single.selfSpotting, false)
+
+  const assisted = await decorate({ operator: "SINGLE-OP-ASSISTED", assistance: false })
+  assert.equal("assistance" in assisted, false)
+  // Nobody self-spots in CQ WW, whatever the class — undeclared included.
+  assert.equal(assisted.selfSpotting, false)
+  assert.equal((await decorate({})).selfSpotting, false)
+
+  // A suggestion is stored without ever being decorated, so it carries the
+  // rule that holds for every class.
+  const suggestions = (await cqww.runHook("activity", "suggest", { searchTerm: "cq" })) as Record<string, unknown>[]
+  assert.ok(suggestions.every((s) => s.selfSpotting === false && !("assistance" in s)))
+})
+
+test("the setup form shows the rules line that follows the operator class", async () => {
+  const controls = (await cqww.runHook("activity", "operationControls", { operation })) as {
+    input: { form: { elements: { type: string; key?: string; text?: string; visibleWhen?: { field: string; equals: unknown[] } }[] } }
+  }[]
+  const elements = controls[0].input.form.elements
+  const notes = elements.filter((el) => el.type === "markdown")
+  const shownFor = (op: string) => notes.filter((el) => el.visibleWhen?.equals.includes(op)).map((el) => el.text)
+  assert.deepEqual(shownFor("SINGLE-OP"), ["🔴 Assistance: OFF, 🔴 Self-spotting: OFF"])
+  assert.deepEqual(shownFor("MULTI-ONE"), ["🟢 Assistance: ON, 🔴 Self-spotting: OFF"])
+  // After the exchange questions, before the entry ones.
+  const at = (key: string) => elements.findIndex((el) => el.key === key)
+  const first = elements.indexOf(notes[0])
+  assert.ok(at("qth") < first && first < at("operator"))
 })

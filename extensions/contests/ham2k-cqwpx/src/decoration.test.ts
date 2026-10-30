@@ -57,3 +57,17 @@ test("a deliberately emptied received serial projects the blank", async () => {
   assert.equal(patch?.their?.exchange, '')
   assert.equal(patch && 'refs' in patch, false)
 })
+
+test("setup asks for each part of the entry, undeclared until answered", async () => {
+  const elements = ((await contest.runHook('activity', 'operationControls', { operation: { stationCall: 'N0DEV', refs: [] } })) as {
+    input: { form: { elements: { key?: string; value?: string; options?: { value: string; label: string }[] }[] } }
+  }[])[0].input.form.elements
+  for (const key of ['operator', 'band', 'power', 'overlay']) {
+    const select = elements.find((element) => element.key === key)
+    assert.equal(select?.value, '', key)
+    assert.deepEqual(select?.options?.[0], { value: '', label: 'Not declared' })
+  }
+  const overlay = elements.find((element) => element.key === 'overlay')
+  assert.deepEqual(overlay?.options?.map((option) => option.value), ['', 'TB-WIRES', 'ROOKIE', 'CLASSIC', 'YOUTH'])
+  for (const key of ['location', 'operators', 'club']) assert.ok(elements.some((element) => element.key === key), key)
+})

@@ -87,6 +87,9 @@ const { refHandler, activityHook, adifFieldsHook, adifImportHook } = referenceAc
   // Derived from the scorer's own rule, not a separate flag — the UI control
   // and the scorer can't disagree about whether this award allows n-fers.
   allowsMultiple: TOTA_SCORING.allowsMultipleReferences,
+  // From the lookout tower "or within a maximum distance of 200 meters"
+  // (wwtota.com/rules).
+  activationRadius: { activationRadiusInMeters: 200 },
 })
 
 function refsOfType(container: Record<string, unknown>, type: string): Ref[] {

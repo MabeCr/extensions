@@ -17,6 +17,16 @@ const COUNTRY_NAMES: Record<string, string> = {
   NO: "Norway",
 }
 
+// The service's class names, per country, as "<regulator key>:<level code>"
+// pairs from @ham2k/lib-operation-data's LICENSE_LEVELS. Canada's "Basic" is
+// left out: the service folds Basic with Honours into it, and only Honours
+// opens HF, so naming either one would be a guess.
+const LICENSE_LEVELS: Record<string, Record<string, string>> = {
+  US: { Novice: "us:N", Technician: "us:T", General: "us:G", Advanced: "us:A", Extra: "us:E" },
+  CA: { Advanced: "ca:B+A" },
+  DE: { "Class N": "de:N", "Class E": "de:E", "Class A": "de:A" },
+}
+
 defineExtension({
   ...manifest,
   onActivation({ registerHook }) {
@@ -80,7 +90,7 @@ async function lookupCall(
   const county = real(record.county)
   const countryCode = real(record.country)
   const [lat, lon] = cleanLocationParams(real(record.lat), real(record.lon))
-  const result: CallInfoLookup & { online?: boolean } = {
+  const result: CallInfoLookup & { online?: boolean; licenseLevel?: string } = {
     call: real(record.call) ?? call,
     source: 'services.ham2k.net',
     scope: 'general',
@@ -98,6 +108,7 @@ async function lookupCall(
     grid: real(record.grid),
     lat,
     lon,
+    licenseLevel: countryCode ? LICENSE_LEVELS[countryCode]?.[real(record.class) ?? ""] : undefined,
   }
   return [result]
 }

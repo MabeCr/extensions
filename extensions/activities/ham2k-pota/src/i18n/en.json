@@ -8,5 +8,12 @@
   "activationControl": "POTA activation",
   "park": "park",
   "parksPlural": "parks",
-  "p2p": "P2P"
+  "p2p": "P2P",
+  "useDevServers": "Use POTA Dev Servers",
+  "useDevServersDescription": "Spots and park lookups go to devapi.pota.app; spots are read from both servers",
+  "oneParkHunted": "1 Park Hunted",
+  "manyParksHunted": "{{formatted}} Parks Hunted",
+  "httpError": "POTA API returned HTTP {{status}}",
+  "postRefused": "POTA refused the spot for {{calls}}",
+  "alreadyPosted": "{{count}} other spot(s) did go out."
 }

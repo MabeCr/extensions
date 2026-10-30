@@ -2,7 +2,7 @@
   "key": "ham2k-naqp",
   "name": "North American QSO Party",
   "shortName": "NAQP",
-  "version": "0.2.4",
+  "version": "0.2.8",
   "description": "Work North America; January (CW and SSB), late February (RTTY), mid July (RTTY) and August (CW and SSB)",
   "category": "contest",
   "icon": "flag-checkered",

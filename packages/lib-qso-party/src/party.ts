@@ -49,6 +49,7 @@ export interface Party extends QsoPartyParams {
   bonusStationOutOfStateMult: number
   labelForCounties: string
   otherCounties: Record<string, string>
+  adifCounties: Record<string, string>
   pointsByMode: Record<string, number>
   bonusStations: Record<string, number>
   rareCountyMultipliers: Record<string, number>
@@ -121,6 +122,7 @@ export function resolveParty(params: QsoPartyParams): Party {
     labelForCounties: params.labelForCounties ?? 'Counties',
     counties: codeNames(params.counties),
     otherCounties: codeNames(params.otherCounties),
+    adifCounties: codeNames(params.adifCounties),
     pointsByMode: codeNumbers(params.pointsByMode),
     bonusStations: codeNumbers(params.bonusStations),
     rareCountyMultipliers: codeNumbers(params.rareCountyMultipliers),

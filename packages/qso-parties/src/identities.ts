@@ -17,7 +17,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["AZ", "ID", "MT", "NV", "OR", "UT", "WA", "WY"],
     aprsShort: "7QP",
     trackerCode: "7QP",
-    hubPage: "in7qpne_de",
+    hubTablePage: "in7qpne_de",
+    hubSpotPage: "in7qpne_de",
     periods: [{ startMillis: 1777726800000, endMillis: 1777791540000 }],
   },
   {
@@ -27,7 +28,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     short: "ACQP",
     states: ["NB", "NL", "NS", "PE"],
     aprsShort: "ACQP",
-    hubPage: "acqp",
+    hubTablePage: "acqp",
+    hubSpotPage: "acqp",
     periods: [{ startMillis: 1780840800000, endMillis: 1780883940000 }],
   },
   {
@@ -38,7 +40,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["AL"],
     aprsShort: "ALQP",
     trackerCode: "AL",
-    hubPage: "alqp",
+    hubTablePage: "alqp",
+    hubSpotPage: "alqp",
     periods: [{ startMillis: 1784991600000, endMillis: 1785034800000 }],
   },
   {
@@ -49,7 +52,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["AR"],
     aprsShort: "ARQP",
     trackerCode: "AR",
-    hubPage: "arqp",
+    hubTablePage: "arqp",
+    hubSpotPage: "arqp",
     periods: [{ startMillis: 1778940000000, endMillis: 1778983140000 }],
   },
   {
@@ -60,7 +64,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["AZ"],
     aprsShort: "AZQP",
     trackerCode: "AZ",
-    hubPage: "azqp",
+    hubTablePage: "azqp",
+    hubSpotPage: "azqp",
     periods: [{ startMillis: 1791644400000, endMillis: 1791694800000 }],
   },
   {
@@ -70,7 +75,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     short: "BCQP",
     states: ["BC"],
     aprsShort: "BCQP",
-    hubPage: "bcqp",
+    hubTablePage: "bcqp",
+    hubSpotPage: "bcqp",
     periods: [{ startMillis: 1770480000000, endMillis: 1770523140000 }, { startMillis: 1770566400000, endMillis: 1770595140000 }],
   },
   {
@@ -81,7 +87,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["CA"],
     aprsShort: "CQP",
     trackerCode: "CA",
-    hubPage: "cqp",
+    hubTablePage: "caqp",
+    hubSpotPage: "cqp",
     periods: [{ startMillis: 1791043200000, endMillis: 1791151140000 }],
   },
   {
@@ -92,7 +99,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["CO"],
     aprsShort: "COQP",
     trackerCode: "CO",
-    hubPage: "coqp",
+    hubTablePage: "coqp",
+    hubSpotPage: "coqp",
     periods: [{ startMillis: 1789221600000, endMillis: 1789271940000 }],
   },
   {
@@ -102,7 +110,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     short: "CPQP",
     states: ["AB", "MB", "SK"],
     aprsShort: "CPQP",
-    hubPage: "cpqp",
+    hubTablePage: "cpqp",
+    hubSpotPage: "cpqp",
     periods: [{ startMillis: 1778346000000, endMillis: 1778382000000 }],
   },
   {
@@ -113,7 +122,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["DE"],
     aprsShort: "DEQP",
     trackerCode: "DE",
-    hubPage: "in7qpne_de",
+    hubTablePage: "in7qpne_de",
+    hubSpotPage: "in7qpne_de",
     periods: [{ startMillis: 1777741200000, endMillis: 1777852740000 }],
   },
   {
@@ -124,7 +134,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["FL"],
     aprsShort: "FLQP",
     trackerCode: "FL",
-    hubPage: "flqp",
+    hubTablePage: "flqp",
+    hubSpotPage: "fqp",
     periods: [{ startMillis: 1777132800000, endMillis: 1777168740000 }, { startMillis: 1777204800000, endMillis: 1777240740000 }],
   },
   {
@@ -135,7 +146,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["GA"],
     aprsShort: "GAQP",
     trackerCode: "GA",
-    hubPage: "gaqp",
+    hubTablePage: "gaqp",
+    hubSpotPage: "gaqp",
     periods: [{ startMillis: 1775930400000, endMillis: 1775966340000 }, { startMillis: 1776002400000, endMillis: 1776038340000 }],
   },
   {
@@ -146,7 +158,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["HI"],
     aprsShort: "HIQP",
     trackerCode: "HI",
-    hubPage: "hiqp",
+    hubTablePage: "hiqp",
+    hubSpotPage: "hqp",
     periods: [{ startMillis: 1787414400000, endMillis: 1787450340000 }],
   },
   {
@@ -157,7 +170,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["IA"],
     aprsShort: "IAQP",
     trackerCode: "IA",
-    hubPage: "iaqp",
+    hubTablePage: "iaqp",
+    hubSpotPage: "iaqp",
     periods: [{ startMillis: 1789826400000, endMillis: 1789869540000 }],
   },
   {
@@ -168,7 +182,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["ID"],
     aprsShort: "IDQP",
     trackerCode: "ID",
-    hubPage: "idqp",
+    hubTablePage: "idqp",
+    hubSpotPage: "idqp",
     periods: [{ startMillis: 1773504000000, endMillis: 1773547140000 }, { startMillis: 1773583200000, endMillis: 1773626340000 }],
   },
   {
@@ -179,7 +194,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["IL"],
     aprsShort: "ILQP",
     trackerCode: "IL",
-    hubPage: "ilqp",
+    hubTablePage: "ilqp",
+    hubSpotPage: "ilqp",
     periods: [{ startMillis: 1792342800000, endMillis: 1792371600000 }],
   },
   {
@@ -190,7 +206,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["IN"],
     aprsShort: "INQP",
     trackerCode: "IN",
-    hubPage: "in7qpne_de",
+    hubTablePage: "in7qpne_de",
+    hubSpotPage: "in7qpne_de",
     periods: [{ startMillis: 1777734000000, endMillis: 1777777140000 }],
   },
   {
@@ -201,7 +218,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["KS"],
     aprsShort: "KSQP",
     trackerCode: "KS",
-    hubPage: "ksqp",
+    hubTablePage: "ksqp",
+    hubSpotPage: "ksqp",
     periods: [{ startMillis: 1788012000000, endMillis: 1788055140000 }, { startMillis: 1788098400000, endMillis: 1788119940000 }],
   },
   {
@@ -212,7 +230,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["KY"],
     aprsShort: "KYQP",
     trackerCode: "KY",
-    hubPage: "kyqp",
+    hubTablePage: "kyqp",
+    hubSpotPage: "kyqp",
     periods: [{ startMillis: 1780750800000, endMillis: 1780793940000 }],
   },
   {
@@ -223,7 +242,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["LA"],
     aprsShort: "LAQP",
     trackerCode: "LA",
-    hubPage: "laqp",
+    hubTablePage: "laqp",
+    hubSpotPage: "laqp",
     periods: [{ startMillis: 1775311200000, endMillis: 1775354340000 }],
   },
   {
@@ -234,7 +254,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["MD"],
     aprsShort: "MDQP",
     trackerCode: "MD",
-    hubPage: "mdqp",
+    hubTablePage: "mdcqp",
+    hubSpotPage: "mdcqp",
     periods: [{ startMillis: 1786197600000, endMillis: 1786247940000 }],
   },
   {
@@ -245,7 +266,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["ME"],
     aprsShort: "MEQP",
     trackerCode: "ME",
-    hubPage: "meqp",
+    hubTablePage: "meqp",
+    hubSpotPage: "meqp",
     periods: [{ startMillis: 1790424000000, endMillis: 1790510400000 }],
   },
   {
@@ -256,7 +278,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["MI"],
     aprsShort: "MIQP",
     trackerCode: "MI",
-    hubPage: "miqp",
+    hubTablePage: "miqp",
+    hubSpotPage: "miqp",
     periods: [{ startMillis: 1776528000000, endMillis: 1776571140000 }],
   },
   {
@@ -267,7 +290,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["MN"],
     aprsShort: "MNQP",
     trackerCode: "MN",
-    hubPage: "mnqp",
+    hubTablePage: "mnqp",
+    hubSpotPage: "mnqp",
     periods: [{ startMillis: 1770472800000, endMillis: 1770508740000 }],
   },
   {
@@ -278,7 +302,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["MO"],
     aprsShort: "MOQP",
     trackerCode: "MO",
-    hubPage: "moqp",
+    hubTablePage: "moqp",
+    hubSpotPage: "moqp",
     periods: [{ startMillis: 1775916000000, endMillis: 1775966340000 }, { startMillis: 1776002400000, endMillis: 1776023940000 }],
   },
   {
@@ -289,7 +314,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["MS"],
     aprsShort: "MSQP",
     trackerCode: "MS",
-    hubPage: "msqp",
+    hubTablePage: "msqp",
+    hubSpotPage: "msqp",
     periods: [{ startMillis: 1775311200000, endMillis: 1775354340000 }],
   },
   {
@@ -300,7 +326,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["NC"],
     aprsShort: "NCQP",
     trackerCode: "NC",
-    hubPage: "ncqp",
+    hubTablePage: "ncqp",
+    hubSpotPage: "ncqp",
     periods: [{ startMillis: 1772377200000, endMillis: 1772413200000 }],
   },
   {
@@ -311,7 +338,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["ND"],
     aprsShort: "NDQP",
     trackerCode: "ND",
-    hubPage: "ndqp",
+    hubTablePage: "ndqp",
+    hubSpotPage: "ndqp",
     periods: [{ startMillis: 1775930400000, endMillis: 1776016740000 }],
   },
   {
@@ -322,7 +350,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["NE"],
     aprsShort: "NEQP",
     trackerCode: "NE",
-    hubPage: "neqp",
+    hubTablePage: "neqp",
+    hubSpotPage: "neqp",
     periods: [{ startMillis: 1777125600000, endMillis: 1777255140000 }],
   },
   {
@@ -333,7 +362,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["CT", "MA", "ME", "NH", "RI", "VT"],
     aprsShort: "NEWE",
     trackerCode: "NEWE",
-    hubPage: "in7qpne_de",
+    hubTablePage: "in7qpne_de",
+    hubSpotPage: "in7qpne_de",
     periods: [{ startMillis: 1777752000000, endMillis: 1777784340000 }, { startMillis: 1777813200000, endMillis: 1777852740000 }],
   },
   {
@@ -344,7 +374,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["NH"],
     aprsShort: "NHQP",
     trackerCode: "NH",
-    hubPage: "nhqp",
+    hubTablePage: "nhqp",
+    hubSpotPage: "nhqp",
     periods: [{ startMillis: 1789833600000, endMillis: 1789876800000 }, { startMillis: 1789905600000, endMillis: 1789941600000 }],
   },
   {
@@ -355,7 +386,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["NJ"],
     aprsShort: "NJQP",
     trackerCode: "NJ",
-    hubPage: "njqp",
+    hubTablePage: "njqp",
+    hubSpotPage: "njqp",
     periods: [{ startMillis: 1789221600000, endMillis: 1789264800000 }],
   },
   {
@@ -366,7 +398,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["NM"],
     aprsShort: "NMQP",
     trackerCode: "NM",
-    hubPage: "nmqp",
+    hubTablePage: "nmqp",
+    hubSpotPage: "nmqp",
     periods: [{ startMillis: 1775916000000, endMillis: 1775959140000 }],
   },
   {
@@ -376,7 +409,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     short: "NSARA",
     states: ["NS"],
     aprsShort: "NSARA",
-    hubPage: "nsara",
+    hubTablePage: "nsqp",
+    hubSpotPage: "nsqp",
     periods: [{ startMillis: 1740916800000, endMillis: 1740931140000 }, { startMillis: 1740938400000, endMillis: 1740952740000 }],
   },
   {
@@ -387,7 +421,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["NV"],
     aprsShort: "NVQP",
     trackerCode: "NV",
-    hubPage: "nvqp",
+    hubTablePage: "nvqp",
+    hubSpotPage: "nvqp",
     periods: [{ startMillis: 1791601200000, endMillis: 1791752400000 }],
   },
   {
@@ -398,7 +433,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["NY"],
     aprsShort: "NYQP",
     trackerCode: "NY",
-    hubPage: "nyqp",
+    hubTablePage: "nyqp",
+    hubSpotPage: "nyqp",
     periods: [{ startMillis: 1792245600000, endMillis: 1792288740000 }],
   },
   {
@@ -409,7 +445,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["OH"],
     aprsShort: "OHQP",
     trackerCode: "OH",
-    hubPage: "ohqp",
+    hubTablePage: "ohqp",
+    hubSpotPage: "ohqp",
     periods: [{ startMillis: 1787414400000, endMillis: 1787457540000 }],
   },
   {
@@ -420,7 +457,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["OK"],
     aprsShort: "OKQP",
     trackerCode: "OK",
-    hubPage: "okqp",
+    hubTablePage: "okqp",
+    hubSpotPage: "okqp",
     periods: [{ startMillis: 1773496800000, endMillis: 1773539940000 }, { startMillis: 1773586800000, endMillis: 1773611940000 }],
   },
   {
@@ -430,7 +468,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     short: "ONQP",
     states: ["ON"],
     aprsShort: "ONQP",
-    hubPage: "onqp",
+    hubTablePage: "onqp",
+    hubSpotPage: "onqp",
     periods: [{ startMillis: 1776535200000, endMillis: 1776567600000 }, { startMillis: 1776600000000, endMillis: 1776628800000 }],
   },
   {
@@ -441,7 +480,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["PA"],
     aprsShort: "PAQP",
     trackerCode: "PA",
-    hubPage: "paqp",
+    hubTablePage: "paqp",
+    hubSpotPage: "paqp",
     periods: [{ startMillis: 1791648000000, endMillis: 1791691200000 }, { startMillis: 1791723600000, endMillis: 1791756000000 }],
   },
   {
@@ -451,7 +491,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     short: "QCQP",
     states: ["QC"],
     aprsShort: "QCQP",
-    hubPage: "qcqp",
+    hubTablePage: "qcqp",
+    hubSpotPage: "qcqp",
     periods: [{ startMillis: 1776603600000, endMillis: 1776643140000 }],
   },
   {
@@ -462,7 +503,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["SC"],
     aprsShort: "SCQP",
     trackerCode: "SC",
-    hubPage: "scqp",
+    hubTablePage: "scqp",
+    hubSpotPage: "scqp",
     periods: [{ startMillis: 1772290800000, endMillis: 1772330340000 }],
   },
   {
@@ -473,7 +515,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["SD"],
     aprsShort: "SDQP",
     trackerCode: "SD",
-    hubPage: "sdqp",
+    hubTablePage: "sdqp",
+    hubSpotPage: "sdqp",
     periods: [{ startMillis: 1791655200000, endMillis: 1791741600000 }],
   },
   {
@@ -484,7 +527,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["TN"],
     aprsShort: "TNQP",
     trackerCode: "TN",
-    hubPage: "tnqp",
+    hubTablePage: "tnqp",
+    hubSpotPage: "tnqp",
     periods: [{ startMillis: 1788714000000, endMillis: 1788749940000 }],
   },
   {
@@ -495,7 +539,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["TX"],
     aprsShort: "TXQP",
     trackerCode: "TX",
-    hubPage: "txqp",
+    hubTablePage: "txqp",
+    hubSpotPage: "txqp",
     periods: [{ startMillis: 1789826400000, endMillis: 1789869600000 }, { startMillis: 1789912800000, endMillis: 1789934400000 }],
   },
   {
@@ -506,7 +551,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["VA"],
     aprsShort: "VAQP",
     trackerCode: "VA",
-    hubPage: "vaqp",
+    hubTablePage: "vaqp",
+    hubSpotPage: "vaqp",
     periods: [{ startMillis: 1774101600000, endMillis: 1774151940000 }, { startMillis: 1774180800000, endMillis: 1774223940000 }],
   },
   {
@@ -517,7 +563,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["VT"],
     aprsShort: "VTQP",
     trackerCode: "VT",
-    hubPage: "vtqp",
+    hubTablePage: "vtqp",
+    hubSpotPage: "vtqp",
     periods: [{ startMillis: 1770422400000, endMillis: 1770595140000 }],
   },
   {
@@ -528,7 +575,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["WA"],
     aprsShort: "WAQP",
     trackerCode: "WA",
-    hubPage: "waqp",
+    hubTablePage: "waqp",
+    hubSpotPage: "wasr",
     periods: [{ startMillis: 1789833600000, endMillis: 1789887540000 }, { startMillis: 1789920000000, endMillis: 1789948740000 }],
   },
   {
@@ -539,7 +587,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["WI"],
     aprsShort: "WIQP",
     trackerCode: "WI",
-    hubPage: "wiqp",
+    hubTablePage: "wiqp",
+    hubSpotPage: "wiqp",
     periods: [{ startMillis: 1773597600000, endMillis: 1773622740000 }],
   },
   {
@@ -550,7 +599,8 @@ export const PARTY_IDENTITIES: QsoPartyIdentity[] = [
     states: ["WV"],
     aprsShort: "WVQP",
     trackerCode: "WV",
-    hubPage: "wvqp",
+    hubTablePage: "wvqp",
+    hubSpotPage: "wvqp",
     periods: [{ startMillis: 1781971200000, endMillis: 1782014340000 }],
   },
 ]

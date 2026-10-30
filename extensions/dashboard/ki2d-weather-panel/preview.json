@@ -1,0 +1,9 @@
+{
+  "defaults": { "operation": { "grid": "FN30" } },
+  "cases": [
+    { "config": { "theme": "teal" } },
+    { "config": { "theme": "teal" }, "width": 300, "height": 260 },
+    { "config": { "theme": "dark" } },
+    { "config": { "theme": "light" }, "app": "dark" }
+  ]
+}

@@ -48,6 +48,10 @@ const { refHandler, activityHook, adifFieldsHook, adifImportHook } = referenceAc
   linkUrl: (reference: string) => `https://www.gma.rocks/zinfo.php?ref=${encodeURIComponent(reference)}`,
   // One operation can activate several castles at once.
   allowsMultiple: true,
+  // "Activators must be no more than 1 km away from the activated reference",
+  // with national rules that predate WCA's kept: Belgium's castles (ON-) are
+  // activated within 500 m, as BCA has it (wcagroup.org/?page_id=135, 358).
+  activationRadius: (row) => ({ activationRadiusInMeters: row.key.toUpperCase().startsWith('ON-') ? 500 : 1000 }),
 })
 
 /// 50 contacts activate a castle, and a repeat contact counts again on a new

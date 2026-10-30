@@ -12,7 +12,9 @@ import type {
   TitleSuggestion,
 } from "@ham2k/extension-sdk"
 
-import { ourLocationText, str } from "./entry.ts"
+import { withRules } from "@ham2k/lib-contest-rules"
+
+import { ourLocationText, partyRules, str } from "./entry.ts"
 import { COUNTY_LINE_SEPARATOR, nameForLocation, splitLocations } from "./location.ts"
 import type { QsoPartyParams } from "./params.ts"
 import { type Party, resolveParty } from "./party.ts"
@@ -33,7 +35,7 @@ export function qsoPartyRefHandler(params: QsoPartyParams): RefHandlerHook {
 
     async decorateRef({ ref }: { ref: Ref }, _ctx: HookContext): Promise<Ref> {
       const location = str((ref as Record<string, unknown>).location).toUpperCase()
-      return {
+      return withRules({
         ...ref,
         program: 'Contest',
         label: partyLabel(party),
@@ -42,7 +44,7 @@ export function qsoPartyRefHandler(params: QsoPartyParams): RefHandlerHook {
         // ref have to agree on it — `suggest` writes the ref verbatim without
         // ever calling this hook.
         name: partySubtitle(party),
-      }
+      }, partyRules(party, (ref as Record<string, unknown>).operator as JSONValue))
     },
 
     /// "KI2D for NYQP", with the county beneath it.

@@ -22,7 +22,8 @@ const NEQP: QsoPartyIdentity = {
   states: ['CT', 'MA', 'ME', 'NH', 'RI', 'VT'],
   aprsShort: 'NEWE',
   trackerCode: 'NEWE',
-  hubPage: 'in7qpne_de',
+  hubTablePage: 'in7qpne_de',
+  hubSpotPage: 'in7qpne_de',
   periods: [{ startMillis: Date.UTC(2026, 4, 2, 20), endMillis: Date.UTC(2026, 4, 3, 4, 59) }],
 }
 
@@ -34,7 +35,8 @@ const NEBRASKA: QsoPartyIdentity = {
   states: ['NE'],
   aprsShort: 'NEQP',
   trackerCode: 'NE',
-  hubPage: 'neqp',
+  hubTablePage: 'neqp',
+  hubSpotPage: 'neqp',
   periods: [{ startMillis: Date.UTC(2026, 3, 25, 13), endMillis: Date.UTC(2026, 3, 26, 1) }],
 }
 
@@ -46,8 +48,22 @@ const DELAWARE: QsoPartyIdentity = {
   states: ['DE'],
   aprsShort: 'DEQP',
   trackerCode: 'DE',
-  hubPage: 'in7qpne_de',
+  hubTablePage: 'in7qpne_de',
+  hubSpotPage: 'in7qpne_de',
   periods: [{ startMillis: Date.UTC(2026, 4, 2, 17), endMillis: Date.UTC(2026, 4, 3, 23, 59) }],
+}
+
+const CALIFORNIA: QsoPartyIdentity = {
+  refType: 'ca-qso-party',
+  legacyPrefix: 'ca',
+  name: 'California QSO Party',
+  short: 'CQP',
+  states: ['CA'],
+  aprsShort: 'CQP',
+  trackerCode: 'CA',
+  hubTablePage: 'caqp',
+  hubSpotPage: 'cqp',
+  periods: [{ startMillis: Date.UTC(2026, 9, 3, 16), endMillis: Date.UTC(2026, 9, 4, 21, 59) }],
 }
 
 const ONTARIO: QsoPartyIdentity = {
@@ -57,7 +73,8 @@ const ONTARIO: QsoPartyIdentity = {
   short: 'ONQP',
   states: ['ON'],
   aprsShort: 'ONQP',
-  hubPage: 'onqp',
+  hubTablePage: 'onqp',
+  hubSpotPage: 'onqp',
   periods: [{ startMillis: Date.UTC(2026, 3, 18, 18), endMillis: Date.UTC(2026, 3, 19, 18) }],
 }
 
@@ -116,6 +133,11 @@ test("a page with no table, or an empty one, is no spots rather than an error", 
 test("the hub's pages are the party's, and shared where the sponsors share one", () => {
   assert.equal(hubTableUrl(NEQP), 'http://qsopartyhub.com/in7qpne_de-table.php')
   assert.equal(hubSpotUrl(NEBRASKA), 'http://qsopartyhub.com/neqp-spots.php')
+})
+
+test("a party the hub lists under one name and takes spots under another is read and spotted on each", () => {
+  assert.equal(hubTableUrl(CALIFORNIA), 'http://qsopartyhub.com/caqp-table.php')
+  assert.equal(hubSpotUrl(CALIFORNIA), 'http://qsopartyhub.com/cqp-spots.php')
 })
 
 test("a self-spot is the hub's own form, county line and Ham2K tag in the comment", () => {

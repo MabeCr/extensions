@@ -27,6 +27,7 @@ export const PARTY: QsoPartyParams = {
   dcCountsAsMaryland: true,
   dxEntityIsMultiplier: true,
   dxLocationIsPrefix: true,
+  selfSpotting: false,
   pointsByMode: { PHONE: 1, CW: 2, DATA: 2 },
   entryClasses: {
     operator: ["SINGLE-OP", "MULTI-UNLIMITED"],
