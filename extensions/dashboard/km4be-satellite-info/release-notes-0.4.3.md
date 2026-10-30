@@ -1,18 +1,19 @@
 # KM4BE Satellite Info 0.4.3
 
-Orbit data is kept for days, so the list keeps working when CelesTrak is slow, down or has blocked your connection.
+Orbit data now lives in the app's own offline data, so it survives a restart and CelesTrak is asked only every few days.
 
 ## Changed
 
-- **Orbits are fetched every three days, not every six hours.** Satellite orbits drift by only a kilometer or two a day, which moves a pass by well under a minute, so a copy a few days old is as good as a new one. The app keeps the last copy on your device and uses it until it is three days old. This also means far fewer requests to CelesTrak, which asks apps not to fetch the same data often and blocks connections that do.
-- **A server that says no is left alone.** If CelesTrak refuses the request (a 403 or 429), the app waits two hours before asking again, rather than retrying every few seconds and making a block last longer. If it is merely down or slow, the app uses its saved copy and tries again in an hour.
-- **The "Orbits are … old" note** now appears when the copy is a week old, not twelve hours.
+- **The satellites and their orbits are the app's offline data.** The app downloads the satellite list and CelesTrak's orbits itself, keeps them on the device, and refreshes them when they are old: the orbits after three days, the list after a week. They show up in the app's Offline Data settings. Before, the extension fetched them itself and could keep them only until the app was closed, so every start downloaded the orbits again. That is a lot of requests to CelesTrak, which blocks connections that ask too often.
+- **Three days is enough.** Satellite orbits drift by only a kilometer or two a day, which moves a pass by well under a minute.
+- **The first start waits for the download.** Until the app has the satellite list, the pane says "No satellite data yet" and fills in on its own, a few seconds after the data arrives.
+- **"Orbits are … old"** is judged from when CelesTrak made the orbits, and appears when they are a week old.
 
 ## Still true from 0.4.2
 
 - It does not tune or control a radio yet.
 - Not every satellite on the list has public orbit data, so some are listed with frequencies but no passes.
-- On a first run with no saved orbits, a blocked connection still shows no passes until CelesTrak allows requests again.
+- If CelesTrak refuses your connection, the app cannot download orbits until it stops, and the list shows frequencies but no passes.
 - Reports you send go to AMSAT's public status page, only when you confirm them.
 
 Feedback and corrections are welcome. Please reach out to KM4BE with suggestions!

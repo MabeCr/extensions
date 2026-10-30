@@ -10,6 +10,7 @@ import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
 import { forgetAll } from "./memory.ts"
 import { compass, compass8, findPasses, satrecFromOmm } from "./orbit.ts"
 import { radioLines, transponderLine, transponderShort, TRANSPONDERS } from "./radio.ts"
+import { datasetCalls } from "./datasetTesting.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 
 const miami = { lat: 25.76, lon: -80.19 }
@@ -74,6 +75,7 @@ async function panel(environment?: { width: number; height: number }) {
   const id = ++panes
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
+      ...datasetCalls().hostCalls,
       getLocation: () => null,
       kvGet: () => null,
       kvSet: () => undefined,

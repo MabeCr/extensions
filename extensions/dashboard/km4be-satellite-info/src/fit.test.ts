@@ -12,6 +12,7 @@ import { forgetAll } from "./memory.ts"
 import { table } from "./passes.ts"
 import type { Cells } from "./passes.ts"
 import { DEFAULT_LOOK, fitSize, listLook, MIN_ROW_SIZE, rowSize } from "./scene.ts"
+import { datasetCalls } from "./datasetTesting.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 
 const ctx = { online: true }
@@ -33,6 +34,7 @@ async function panel(env?: ReturnType<typeof environment>) {
   const id = ++panes
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
+      ...datasetCalls().hostCalls,
       getLocation: () => null,
       kvGet: () => null,
       kvSet: () => undefined,

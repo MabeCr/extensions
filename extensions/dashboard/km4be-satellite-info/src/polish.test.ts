@@ -13,6 +13,7 @@ import { buildCatalog, ELEMENTS_URL, LIST_URL, parseElements, parseList, statusU
 import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
 import { forgetAll } from "./memory.ts"
 import { findPasses, satrecFromOmm } from "./orbit.ts"
+import { datasetCalls } from "./datasetTesting.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 
 const ctx = { online: true }
@@ -44,6 +45,7 @@ async function panel(options: { offline?: () => boolean; environment?: { width: 
   const id = ++panes
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
+      ...datasetCalls().hostCalls,
       getLocation: () => null,
       kvGet: () => null,
       kvSet: () => undefined,

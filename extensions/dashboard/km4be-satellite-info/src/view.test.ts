@@ -9,6 +9,7 @@ import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
 import { findPasses, lookAt, satrecFromOmm } from "./orbit.ts"
 import { clock, countdown } from "./passes.ts"
 import { forgetAll } from "./memory.ts"
+import { datasetCalls } from "./datasetTesting.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 
 const iso = (s: string) => Date.parse(s)
@@ -71,6 +72,7 @@ async function panel(environment?: { width: number; height: number }) {
   const id = ++panes
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
+      ...datasetCalls().hostCalls,
       getLocation: () => null,
       kvGet: () => null,
       kvSet: () => undefined,

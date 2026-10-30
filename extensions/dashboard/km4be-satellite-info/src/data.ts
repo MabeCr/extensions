@@ -8,9 +8,8 @@
 //   elements  CelesTrak, the `amateur` group (OMM JSON)   where each bird is
 //   curated   data/satellites.json (ours)           what the feeds get wrong or lack
 //
-// Both feeds are cached on the device and a failed fetch falls back to the
-// last good copy, so a flaky connection on a hilltop shows stale data rather
-// than none. CelesTrak asks to be polled no more than every couple of hours.
+// The list and the elements are the app's own offline datasets (see datasets.ts): the app downloads them, keeps them across restarts and
+// refreshes them every few days, and this file reads the rows. AMSAT's reports are fetched here, and kept in memory for ten minutes.
 
 import { host } from "@ham2k/extension-sdk"
 import type { HookContext, JSONValue } from "@ham2k/extension-sdk"
@@ -24,15 +23,9 @@ import type { StatusRow } from "./status.ts"
 export const LIST_URL = "https://polo.ham2k.com/data/satellites.json"
 export const ELEMENTS_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=amateur&FORMAT=json"
 export const statusUrl = (hours: number): string => `https://amsat.org/status/api/v1/summary.php?hours=${hours}`
-const LIST_MAX_AGE_MS = 24 * 3_600_000
-/// How long an element set is used before another is asked for. Orbits drift by a kilometer or two a day, which moves a pass by well under
-/// a minute for days, so there is no reason to ask CelesTrak more often than this. (It asks that a set be fetched no more than once in two
-/// hours, and blocks the addresses that do.)
-export const ELEMENTS_MAX_AGE_MS = 3 * 24 * 3_600_000
-/// After a failure to fetch the elements, while there is a copy to use, the next try is this far off.
-const ELEMENTS_RETRY_MS = 60 * 60_000
-/// After a server says no, as 403 and 429 do, nothing is asked of it for this long: asking again only prolongs a block.
-export const REFUSED_WAIT_MS = 2 * 3_600_000
+/// The categories the two datasets are stored under, which is where the rows are read from.
+export const LIST_CATEGORY = "km4be-satellite-list"
+export const ORBITS_CATEGORY = "km4be-satellite-orbits"
 const STATUS_MAX_AGE_MS = 10 * 60_000
 
 export interface Link {
@@ -118,7 +111,7 @@ export function buildCatalog(
 ): Satellite[] {
   return list.map((s) => {
     const info = corrections[s.name] ?? {}
-    const norad = info.norad === null ? undefined : (info.norad ?? s.norad)
+    const norad = noradOf(s, corrections)
     return {
       ...s,
       norad,
@@ -135,71 +128,40 @@ interface Cached {
   data: JSONValue
 }
 
-/// When each feed last failed, so a feed that is down is not asked for again on every redraw
-/// (the panel draws every minute) but after `BACKOFF_MS`.
+/// When each feed last failed, so a feed that is down is not asked for again on every redraw (the panel draws every minute) but after
+/// `BACKOFF_MS`.
 const failedAt = new Map<string, number>()
-/// How long a feed's last failure is to be waited out, where it is not the usual.
-const waitFor = new Map<string, number>()
 const BACKOFF_MS = 2 * 60_000
-/// With nothing yet to show, a failure is tried again soon: the list is waiting for it.
-const FIRST_RETRY_MS = 4_000
 /// A slow server is given up on in this long, so that a render is not held for the host's whole allowance for one feed.
 export const FETCH_TIMEOUT_MS = 8_000
 
 /// For tests: forget which feeds have failed.
-export const forgetFailures = (): void => (failedAt.clear(), waitFor.clear())
+export const forgetFailures = (): void => failedAt.clear()
 
-/// What has been read or fetched, by key: the same copies as the device's storage holds, kept
-/// where they cost nothing to read. Storage is read once, the first time a key is wanted.
+/// What has been fetched, by key.
 const memory = new Map<string, Cached>()
 onForget(() => {
   failedAt.clear()
-  waitFor.clear()
   memory.clear()
   catalogMemo = undefined
+  reading = undefined
   statusMemo = undefined
 })
 
-/// The copy under `key` while younger than `maxAge`; otherwise fetched, stored and returned; and
-/// when the fetch fails, or one failed a moment ago, whatever copy there is, however old. The copy
-/// comes from memory if it has been read before, and from the device's storage if not.
-///
-/// `essential` is for a feed the list cannot be drawn without: a failure of it is tried again in seconds, and it is tried when the host
-/// says it is offline, for there is nothing else to show. A feed that only adds to the list waits out the usual pause.
-export async function cachedJson(
-  key: string,
-  url: string,
-  maxAge: number,
-  now: number,
-  ctx: HookContext,
-  essential = false,
-  /// How long to wait after a failure while there is a copy to use, for a feed that is not to be asked for as often as the usual.
-  retryMs?: number,
-): Promise<{ data: unknown; at: number } | null> {
-  let have = memory.get(key) ?? null
-  if (!have) {
-    const stored = (await host.kvGet(key)) as Cached | null
-    have = stored && typeof stored.at === "number" ? stored : null
-    if (have) memory.set(key, have)
-  }
+/// The copy under `key` while younger than `maxAge`; otherwise fetched and returned; and when the fetch fails, or one failed a moment
+/// ago, whatever copy there is, however old. It is kept in memory only: a feed worth keeping longer is a dataset (datasets.ts).
+export async function cachedJson(key: string, url: string, maxAge: number, now: number, ctx: HookContext): Promise<{ data: unknown; at: number } | null> {
+  const have = memory.get(key) ?? null
   if (have && now >= have.at && now - have.at < maxAge) return { data: have.data, at: have.at }
   const failed = failedAt.get(key)
-  const backingOff = failed !== undefined && now >= failed && now - failed < (waitFor.get(key) ?? (essential && !have ? FIRST_RETRY_MS : have && retryMs ? retryMs : BACKOFF_MS))
-  // Online as the host believes it, or tried anyway where there is nothing to show: the host's idea of it can lag behind a connection
-  // that has just come up, and a failed fetch is quick when there is none.
-  if ((ctx.online || (essential && !have)) && !backingOff) {
+  const backingOff = failed !== undefined && now >= failed && now - failed < BACKOFF_MS
+  if (ctx.online && !backingOff) {
     try {
       const response = await host.fetch(url, { timeout: FETCH_TIMEOUT_MS })
-      if (response.status !== 200) {
-        if (response.status === 403 || response.status === 429) waitFor.set(key, REFUSED_WAIT_MS)
-        throw new Error(`HTTP ${response.status}`)
-      }
+      if (response.status !== 200) throw new Error(`HTTP ${response.status}`)
       const data = JSON.parse(response.body) as JSONValue
-      const fresh = { at: now, data } satisfies Cached
-      memory.set(key, fresh)
-      await host.kvSet(key, fresh)
+      memory.set(key, { at: now, data })
       failedAt.delete(key)
-      waitFor.delete(key)
       return { data, at: now }
     } catch (error) {
       failedAt.set(key, now)
@@ -211,26 +173,63 @@ export async function cachedJson(
 
 export interface Catalog {
   satellites: Satellite[]
-  /// When the element sets were fetched; 0 when there are none.
+  /// When the newest element set was made; 0 when there are none.
   elementsAt: number
 }
 
-/// The catalog as last built, and which copies of the feeds it was built from. Building it is
-/// reading a hundred orbits and a list of satellites, which is only worth doing when a feed has
-/// changed, not at every redraw.
-let catalogMemo: { listAt: number; elementsAt: number; catalog: Catalog } | undefined
+/// How long what has been read stands: the datasets change every few days, so a read is good for ten minutes, and while there is
+/// nothing yet (the app is still downloading it) another is tried in a few seconds.
+const READ_EVERY_MS = 10 * 60_000
+const READ_AGAIN_MS = 3_000
+/// Orbits are asked for this many at a time.
+const READ_BATCH = 24
 
-export async function loadCatalog(ctx: HookContext, now: number): Promise<Catalog> {
-  const [list, elements] = await Promise.all([
-    cachedJson("list", LIST_URL, LIST_MAX_AGE_MS, now, ctx, true),
-    cachedJson("elements", ELEMENTS_URL, ELEMENTS_MAX_AGE_MS, now, ctx, true, ELEMENTS_RETRY_MS),
-  ])
-  const listAt = list?.at ?? 0
-  const elementsAt = elements?.at ?? 0
-  if (catalogMemo && catalogMemo.listAt === listAt && catalogMemo.elementsAt === elementsAt) return catalogMemo.catalog
+let catalogMemo: { readAt: number; catalog: Catalog } | undefined
+let reading: Promise<Catalog> | undefined
 
-  const catalog = { satellites: buildCatalog(parseList(list?.data), parseElements(elements?.data)), elementsAt }
-  catalogMemo = { listAt, elementsAt, catalog }
+/// The NORAD number a satellite is placed by, with our corrections applied; undefined where there is none to use.
+export function noradOf(s: ListedSatellite, corrections: Record<string, CuratedInfo> = curated as Record<string, CuratedInfo>): number | undefined {
+  const info = corrections[s.name] ?? {}
+  return info.norad === null ? undefined : (info.norad ?? s.norad)
+}
+
+/// The moment an element set was made, in milliseconds: its epoch is UTC, though it is written without a zone.
+const epochOf = (omm: Omm): number => {
+  const at = Date.parse(/Z|[+-]\d\d:?\d\d$/.test(omm.EPOCH) ? omm.EPOCH : `${omm.EPOCH}Z`)
+  return Number.isFinite(at) ? at : 0
+}
+
+async function readCatalog(): Promise<Catalog> {
+  try {
+    const rows = (await host.dbLookupSelectAll(LIST_CATEGORY, "")) as { key: string; name?: string; data?: Record<string, unknown> }[]
+    // The app returns at most a hundred rows.
+    if (rows.length >= 100) host.log("km4be-satellite-info: the satellite list is a hundred rows or more, and the app gives no more than that")
+    const list = parseList([...rows].sort((a, b) => a.key.localeCompare(b.key, "en", { numeric: true })).map((r) => ({ name: r.name ?? r.key, ...(r.data ?? {}) })))
+    const wanted = [...new Set(list.flatMap((s) => noradOf(s) ?? []))]
+    const found: unknown[] = []
+    for (let i = 0; i < wanted.length; i += READ_BATCH) {
+      const batch = await Promise.all(wanted.slice(i, i + READ_BATCH).map((id) => host.dbLookupSelectOne(ORBITS_CATEGORY, String(id))))
+      for (const row of batch) found.push(row?.data)
+    }
+    const elements = parseElements(found)
+    let elementsAt = 0
+    for (const omm of elements.values()) elementsAt = Math.max(elementsAt, epochOf(omm))
+    return { satellites: buildCatalog(list, elements), elementsAt }
+  } catch (error) {
+    host.log(`km4be-satellite-info: reading the satellite datasets: ${error instanceof Error ? error.message : String(error)}`)
+    return { satellites: [], elementsAt: 0 }
+  }
+}
+
+/// The catalog from the app's datasets, read again at most every ten minutes. Until the app has downloaded them it is empty.
+export async function loadCatalog(_ctx: HookContext, now: number): Promise<Catalog> {
+  const memo = catalogMemo
+  const complete = !!memo && memo.catalog.satellites.length > 0 && memo.catalog.elementsAt > 0
+  if (memo && now >= memo.readAt && now - memo.readAt < (complete ? READ_EVERY_MS : READ_AGAIN_MS)) return memo.catalog
+  // Panes asking together share one read.
+  reading ??= readCatalog().finally(() => (reading = undefined))
+  const catalog = await reading
+  catalogMemo = { readAt: now, catalog }
   return catalog
 }
 

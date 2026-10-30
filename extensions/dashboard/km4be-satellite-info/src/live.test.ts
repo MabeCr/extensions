@@ -11,6 +11,7 @@ import { forgetAll } from "./memory.ts"
 import { downlinkDoppler, findPasses, lookAt, rangeRate, satrecFromOmm, uplinkDoppler } from "./orbit.ts"
 import type { Pass } from "./orbit.ts"
 import { liveDoppler, shiftText } from "./radio.ts"
+import { datasetCalls } from "./datasetTesting.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 import { DEFAULT_SKY_COLORS, liveSpot, satelliteIcon, skySvg, skyTrack, skyXY } from "./sky.ts"
 import type { SkyPoint } from "./sky.ts"
@@ -150,6 +151,7 @@ async function panel() {
   const id = ++panes
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
+      ...datasetCalls().hostCalls,
       getLocation: () => null,
       kvGet: () => null,
       kvSet: () => undefined,

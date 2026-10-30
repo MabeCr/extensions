@@ -10,6 +10,7 @@ import { ELEMENTS_URL, LIST_URL, statusUrl } from "./data.ts"
 import { CATALOG, ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
 import { forgetAll } from "./memory.ts"
 import { CATALOG_URL, REPORTS_URL } from "./report.ts"
+import { datasetCalls } from "./datasetTesting.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 
 const ctx = { online: true }
@@ -46,6 +47,7 @@ async function panel(options: { operation?: Record<string, unknown>; answer?: (p
   const posted: Posted[] = []
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
+      ...datasetCalls().hostCalls,
       getLocation: () => null,
       kvGet: (params) => storage.get(String(params.key)) ?? null,
       kvSet: (params) => void storage.set(String(params.key), params.value),

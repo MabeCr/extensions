@@ -10,6 +10,7 @@ import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
 import { downlinkDoppler, findPasses, rangeRate, satrecFromOmm, uplinkDoppler } from "./orbit.ts"
 import { linksFor, radioLines, RADIO_LINES, shiftText } from "./radio.ts"
 import { forgetAll } from "./memory.ts"
+import { datasetCalls } from "./datasetTesting.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 import { passOfOpen, openId, rowOpenId } from "./scene.ts"
 import { compassLayers, skySvg, skyTrack, skyXY } from "./sky.ts"
@@ -189,6 +190,7 @@ async function panel(shown: unknown[] = []) {
   const id = ++panes
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
+      ...datasetCalls().hostCalls,
       getLocation: () => null,
       kvGet: () => null,
       kvSet: () => undefined,

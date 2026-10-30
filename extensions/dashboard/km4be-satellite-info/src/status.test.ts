@@ -7,6 +7,7 @@ import { test } from "node:test"
 import { ELEMENTS_URL, LIST_URL, statusUrl } from "./data.ts"
 import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
 import { forgetAll } from "./memory.ts"
+import { datasetCalls } from "./datasetTesting.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 import { parseSummary, statusFor, statusHours, statusLines } from "./status.ts"
 
@@ -118,6 +119,7 @@ async function panel(summary: () => { status: number; body: string }) {
   const storage = new Map<string, unknown>()
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
+      ...datasetCalls().hostCalls,
       getLocation: () => null,
       kvGet: (params) => storage.get(String(params.key)) ?? null,
       kvSet: (params) => void storage.set(String(params.key), params.value),

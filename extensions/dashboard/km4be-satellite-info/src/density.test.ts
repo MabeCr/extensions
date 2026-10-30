@@ -10,6 +10,7 @@ import { forgetAll } from "./memory.ts"
 import { clock, table } from "./passes.ts"
 import type { Cells } from "./passes.ts"
 import { COMFORTABLE, COMPACT, isCompact } from "./scene.ts"
+import { datasetCalls } from "./datasetTesting.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 
 const t0 = Date.parse("2026-10-07T00:00:00Z")
@@ -85,6 +86,7 @@ async function panel(environment?: { width: number; height: number }) {
   const id = ++panes
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
+      ...datasetCalls().hostCalls,
       getLocation: () => null,
       kvGet: () => null,
       kvSet: () => undefined,

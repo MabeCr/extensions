@@ -16,6 +16,7 @@
     "panel"
   ],
   "hooks": [
+    "dataFile",
     "panel"
   ],
   "domains": [
