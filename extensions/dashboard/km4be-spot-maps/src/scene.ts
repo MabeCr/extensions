@@ -146,8 +146,10 @@ export function buildScene(m: MapModel): PanelScene {
     svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">${canZoom ? `<g transform="translate(0 ${stripY})">${bar}${arrows}</g>` : ""}${buttons.join("")}</svg>`,
   })
   if (canZoom) {
-    // The factors are of the zoom as it is now: down to 1, and up to what the pane's height allows.
-    controls.push({ id: "stretch", kind: "zoom", label: "Zoom", event: "stretch", min: +(1 / g.zoom).toFixed(4), max: +(g.zoomMax / g.zoom).toFixed(4), x: 0, y: stripY, width: W, height: STRIP_HEIGHT, fixed: true })
+    // The factors are of the zoom as it is now: down to 1, and up to what the pane's height allows. The strip scrolls with the scene, as
+    // the app requires of a zoom strip, and is as long as the scene, so that it is under the pane wherever the scene is scrolled to; the
+    // ruler that shows where it is, is drawn on the fixed layer above.
+    controls.push({ id: "stretch", kind: "zoom", label: "Zoom", event: "stretch", min: +(1 / g.zoom).toFixed(4), max: +(g.zoomMax / g.zoom).toFixed(4), x: 0, y: stripY, width: g.width, height: STRIP_HEIGHT })
   }
 
   // Over the map: the two dropdowns, and how many stations there are.

@@ -268,7 +268,9 @@ test("there is a strip to zoom on where the pane is tall enough to zoom, and non
   const tall = (await (await panel([spot("A1A")])).render()).scene
   const strip = tall.controls.find((c) => c.id === "stretch")!
   assert.equal(strip.kind, "zoom")
-  assert.equal(strip.fixed, true)
+  assert.equal(strip.fixed, undefined, "it scrolls with the scene, as the app requires of a zoom strip")
+  assert.equal(strip.x, 0)
+  assert.equal(strip.width, tall.width, "and is as long as the scene, so that it is under the pane wherever that is scrolled to")
   assert.ok(strip.min! <= 1 && strip.max! > 1, `factors from ${strip.min} to ${strip.max}`)
   assert.equal(strip.min, 1, "at the whole world there is no zooming out")
   assert.equal(tall.controls.find((c) => c.id === "zoomOut")!.disabled, true)
