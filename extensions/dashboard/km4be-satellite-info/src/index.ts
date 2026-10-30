@@ -35,7 +35,7 @@ import { PREVIEW_SVG } from "./preview.ts"
 import { statusFor, statusHours, statusLines } from "./status.ts"
 import type { Kind, StatusRow } from "./status.ts"
 import {
-  PAGE_SIZE,
+  MAX_ROWS,
   buildDetailScene,
   buildReportScene,
   buildScene,
@@ -80,7 +80,8 @@ interface PaneState {
   view: "list" | "detail"
   /// Not known until the stored choice has been read, which the first view of the pane does.
   mode?: Mode
-  page: number
+  /// How far down the list is scrolled, as the pane last said, in scene units.
+  scroll: number
   utc: boolean
   /// The pass the detail view shows: its satellite and when it ends.
   detail?: { name: string; los: number; tab: Tab }
@@ -91,7 +92,7 @@ const panes = new Map<string, PaneState>()
 const paneState = (args: PanelRenderArgs): PaneState => {
   const id = args.instanceId ?? args.panelKey
   let state = panes.get(id)
-  if (!state) panes.set(id, (state = { draft: freshDraft(), view: "list", page: 0, utc: args.config?.utc === true }))
+  if (!state) panes.set(id, (state = { draft: freshDraft(), view: "list", scroll: 0, utc: args.config?.utc === true }))
   return state
 }
 
@@ -114,12 +115,11 @@ const empty = (header: string, state: PaneState, compact = false, look: ListLook
   hint: "",
   mode: state.mode ?? "all",
   utc: state.utc,
-  page: 0,
-  pageCount: 1,
-  range: "",
   columns: "",
   legend: false,
   rows: [],
+  more: 0,
+  scroll: state.scroll,
 })
 
 interface Ready {
@@ -184,10 +184,8 @@ function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, co
   const mode = state.mode ?? "all"
   const followed = r.favorites.length > 0
   const showing = mode === "all" ? r.passes : r.passes.filter((p) => r.favorites.includes(p.satellite.name))
-  const pageCount = Math.max(1, Math.ceil(showing.length / PAGE_SIZE))
-  state.page = Math.min(Math.max(0, state.page), pageCount - 1)
-  const first = state.page * PAGE_SIZE
-  const page = showing.slice(first, first + PAGE_SIZE)
+  // Every pass of the day, up to what a scene holds: the pane scrolls through them.
+  const page = showing.slice(0, MAX_ROWS)
   // The mark ends the line, where a mark drawn wider than one character in some font cannot push the columns out of line.
   // On a phone each line has to fit, or it wraps and the row is twice as tall: a single space between columns, and days
   // after today as +1 and not as a date.
@@ -221,20 +219,20 @@ function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, co
     if (r.elementsAt > 0 && now - r.elementsAt > STALE_ORBITS_MS) hint += `${hint ? " · " : ""}Orbits are ${span(now - r.elementsAt)} old.`
   }
 
+  const more = showing.length - rows.length
   return {
-    header: `${r.place.grid} · min ${r.minEl}° · ${tracked} of ${r.satellites.length} satellites tracked`,
+    header: `${r.place.grid} · min ${r.minEl}° · ${tracked} of ${r.satellites.length} satellites tracked${more > 0 ? ` · the first ${rows.length} passes` : ""}`,
     hint,
     mode,
     utc: state.utc,
-    page: state.page,
-    pageCount,
-    range: showing.length ? `${first + 1}–${first + rows.length} of ${showing.length}` : "",
     columns: showing.length ? columns : "",
     legend: showing.length > 0,
     compact,
     rows,
+    more,
     look,
     size: rowSize(size),
+    scroll: state.scroll,
   }
 }
 
@@ -306,9 +304,13 @@ async function snapshot(args: PanelRenderArgs, ctx: HookContext): Promise<View> 
   return { kind: "list", model: listModel(ready, state, now, args.config?.listSeconds === true, compactNow, look) }
 }
 
-const patchOf = (view: View): PanelSceneEventResult =>
+/// The words of the list that every list has, which is all an answer may name: how many rows there are changes between All and
+/// Favorites, and an answer cannot name a row the pane has not got. The render the pane asks for after an event has the rows.
+const listPatchStrings = (m: Model): Record<string, string> => ({ mode: m.mode, header: m.header, hint: m.hint, columns: m.columns })
+
+const patchOf = (view: View, options: { scroll?: boolean } = {}): PanelSceneEventResult =>
   view.kind === "list"
-    ? { values: valuesOf(view.model), strings: stringsOf(view.model) }
+    ? { values: options.scroll ? valuesOf(view.model) : { utc: view.model.utc ? 1 : 0 }, strings: listPatchStrings(view.model) }
     : view.kind === "report"
       ? { values: reportValues(view.model), strings: reportStrings(view.model) }
       : { values: detailValues(view.model), strings: detailStrings(view.model) }
@@ -450,6 +452,12 @@ export const PassesPanel: PanelHook = {
       state.view = "list"
       return stay()
     }
+    // Where the operator has scrolled the list to, once it has come to rest: kept, so that a list drawn again, or come back to
+    // from a pass's page, is where they left it, and the pane is not told to move.
+    if (event.action === "scrolled") {
+      if (typeof event.value === "number" && Number.isFinite(event.value)) state.scroll = Math.max(0, event.value)
+      return stay()
+    }
     // A tab's chip names its page in its action; the text is for a control that carries one.
     const page = event.action.startsWith("tab-") ? event.action.slice(4) : event.action === "tab" ? event.text : undefined
     if (page && state.detail && (page === "sky" || page === "radio" || page === "report")) {
@@ -473,12 +481,12 @@ export const PassesPanel: PanelHook = {
 
     if (event.action === "mode" && (event.text === "favorites" || event.text === "all")) {
       state.mode = event.text
-      state.page = 0
+      // A different list starts from its top.
+      state.scroll = 0
       await saveMode(event.text)
+      return patchOf(await snapshot(args, ctx), { scroll: true })
     }
     if (event.action === "utc" && event.value !== undefined) state.utc = event.value === 1
-    if (event.action === "prev") state.page -= 1
-    if (event.action === "next") state.page += 1
     if (event.action === "star") {
       const name = satelliteOfStar(event.controlId)
       if (name) await setFavorite(name, !(await loadFavorites()).includes(name))

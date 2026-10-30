@@ -127,83 +127,81 @@ type Geometry = { id: string; kind?: string; x?: number; y?: number; width?: num
 /// Where the list's controls are in its artwork, by the kind of control.
 const geometry = (scene: { controls: Geometry[] }) => {
   const of = (test: (id: string) => boolean) => scene.controls.filter((c) => test(c.id) && c.opacity !== 0)
-  return { stars: of((id) => id.startsWith("star:")), rows: of((id) => /^open:.*:row\d$/.test(id)), chevrons: of((id) => /^open:.*:\d$/.test(id)) }
+  return { stars: of((id) => id.startsWith("star:")), rows: of((id) => /^open:.*:row\d+$/.test(id)) }
 }
+/// Every row's text, in the order of the list: there is no page, so all of them are in the scene.
+const allRows = (strings: Record<string, string>) =>
+  Object.keys(strings)
+    .filter((k) => /^row\d+$/.test(k))
+    .sort((a, b) => Number(a.slice(3)) - Number(b.slice(3)))
+    .map((k) => strings[k])
 /// How many spaces separate the first two columns: what is left of the title row's start after the name column.
 const nameGap = (columns: string, names: string[]) => columns.indexOf("Type") - Math.max("Sat".length, ...names.map((n) => n.length))
 
-test("a desktop pane's list is laid out as it always was", async () => {
+test("a desktop pane's list is as wide as the pane, with the roomy spacing", async () => {
   const p = await panel({ width: 1000, height: 700 })
-  const scene = (await p.render(cfg)) as unknown as { width: number; height: number; layout: { padding: number; spacing: number; column: LayoutNode[] }; controls: Geometry[]; strings: Record<string, string>; layers: { id: string }[] }
-  assert.equal(scene.layout.padding, 12)
-  assert.equal(scene.layout.spacing, 8)
-  // The list is artwork as wide as the pane's room, so it is drawn as it is.
-  assert.equal(scene.width, 1000 - 24)
-  const art = scene.layout.column.find((n) => n.scene)!
-  assert.equal(art.height, scene.height)
-  const { stars, rows, chevrons } = geometry(scene)
-  assert.ok(stars.length > 0 && stars.length === rows.length && rows.length === chevrons.length)
-  for (const c of [...stars, ...chevrons]) assert.deepEqual([c.width, c.height], [56, 44], "a star and a chevron are a button wide")
-  for (const c of rows) assert.deepEqual([c.kind, c.x, c.width, c.height], ["button", 56, 1000 - 24 - 112, 44], "the line between them is one hit area")
+  const scene = (await p.render(cfg)) as unknown as { width: number; height: number; controls: Geometry[]; strings: Record<string, string>; layers: TestLayer[]; scroll: { axis: string } }
+  // It scrolls, and is as wide as the pane, so that it is drawn as it is. Nothing is laid out: every piece has its place.
+  assert.equal(scene.width, 1000)
+  assert.ok(scene.height >= 700)
+  assert.equal(scene.scroll.axis, "y")
+  const { stars, rows } = geometry(scene)
+  assert.ok(stars.length > 5 && stars.length === rows.length, "every pass, not five")
+  for (const c of stars) assert.deepEqual([c.x, c.width, c.height], [12, 56, 44], "a star is a button wide, inside the padding")
+  for (const c of rows) assert.deepEqual([c.kind, c.x, c.width, c.height], ["button", 68, 1000 - 24 - 56, 44], "the line after it is one hit area")
+  // The chevron at its end is an icon, which the hit area under it makes work.
+  assert.equal(layersOf(scene).filter((l) => /^chevron\d+$/.test(l.id)).length, rows.length)
   // The key to the marks is drawn under the rows, as the marks are, with the whole words where they fit.
   assert.deepEqual(layersOf(scene).filter((l) => l.id.startsWith("keyText-")).map((l) => l.text!.literal), ["heard", "telemetry only", "not heard"])
-  const names = [0, 1, 2, 3, 4].map((i) => scene.strings[`row${i}`]?.split(/ +/)[0]).filter(Boolean)
+  const names = allRows(scene.strings).map((r) => r.split(/ +/)[0])
   assert.equal(nameGap(scene.strings.columns, names), 2, "two spaces between columns")
-  assert.ok([0, 1, 2, 3, 4].every((i) => !/\+1\b/.test(scene.strings[`row${i}`] ?? "")))
+  assert.ok(allRows(scene.strings).every((r) => !/\+1\b/.test(r)))
 })
 
 test("the same list in a phone's pane is packed tighter, and has the same controls", async () => {
-  const wide = await (await panel({ width: 1000, height: 700 })).render(cfg)
+  const wide = (await (await panel({ width: 1000, height: 700 })).render(cfg)) as unknown as { controls: Geometry[]; strings: Record<string, string> }
   const phone = await panel({ width: 390, height: 700 })
-  const tight = (await phone.render(cfg)) as typeof wide & { width: number; controls: Geometry[] }
+  const tight = (await phone.render(cfg)) as unknown as { width: number; controls: Geometry[]; strings: Record<string, string>; layers: TestLayer[] }
 
-  assert.deepEqual(tight.controls.map((c) => c.id), wide.controls.map((c) => c.id), "only the layout differs")
-  assert.equal(tight.layout.padding, 8)
-  assert.equal(tight.layout.spacing, 3)
-  assert.equal(tight.width, 390 - 16)
-  const { stars, rows, chevrons } = geometry(tight)
-  for (const c of [...stars, ...chevrons]) assert.deepEqual([c.width, c.height], [44, 36], "narrower and shorter than a desktop's")
-  for (const c of rows) assert.deepEqual([c.x, c.width, c.height], [44, 390 - 16 - 88, 36])
-  const pager = (scene: { layout: { column: LayoutNode[] } }) => scene.layout.column.find((n) => n.row?.some((c) => c.control === "prev"))!
-  assert.equal(pager(tight).height, 40, "the pager is no taller than a row")
-  assert.equal(pager(wide).height, undefined, "and on a desktop is as it was")
+  assert.deepEqual(tight.controls.filter((c) => /^(star|open):/.test(c.id)).map((c) => c.id), wide.controls.filter((c) => /^(star|open):/.test(c.id)).map((c) => c.id), "the same rows; only their places differ")
+  assert.equal(tight.width, 390)
+  const { stars, rows } = geometry(tight)
+  for (const c of stars) assert.deepEqual([c.x, c.width, c.height], [8, 44, 36], "narrower and shorter than a desktop's")
+  for (const c of rows) assert.deepEqual([c.x, c.width, c.height], [52, 390 - 16 - 44, 36])
   // The key fits the phone's width, shortened if it has to be.
   const keys = layersOf(tight).filter((l) => l.id.startsWith("keyText-"))
   assert.equal(keys.length, 3)
-  assert.ok(keys.every((l) => l.x + l.width <= tight.width), "within the artwork")
-  const tightNames = [0, 1, 2, 3, 4].map((i) => tight.strings[`row${i}`]?.split(/ +/)[0]).filter(Boolean)
+  assert.ok(keys.every((l) => l.x + l.width <= tight.width), "within the pane")
+  const tightNames = allRows(tight.strings).map((r) => r.split(/ +/)[0])
   assert.equal(nameGap(tight.strings.columns, tightNames), 1, "one space between columns")
-  assert.ok(tight.strings.columns.length < wide.strings.columns.length)
+  assert.ok(tight.strings.columns.length < (wide.strings.columns as string).length)
 })
 
-test("a later page of the phone's list shows tomorrow's passes as +1 and every line fits", async () => {
+test("the phone's list shows tomorrow's passes as +1, and every line fits", async () => {
   const phone = await panel({ width: 390, height: 700 })
-  const config = { ...cfg, minElevation: 0 }
-  const lines: string[] = []
-  // From six in the evening, so the next day's worth of passes crosses midnight.
+  // From six in the evening, so the next day's worth of passes crosses midnight; and the whole day is one scroll.
   const evening = t0 + 18 * 3_600_000
-  for (let page = 0; page < 8; page++) {
-    const scene = await phone.render(config, evening)
-    lines.push(...[0, 1, 2, 3, 4].map((i) => scene.strings[`row${i}`]).filter(Boolean))
-    await phone.event(config, evening, "next", "next")
-  }
+  const scene = await phone.render({ ...cfg, minElevation: 0 }, evening)
+  const lines = allRows(scene.strings)
+  assert.ok(lines.length > 5)
   assert.ok(lines.some((l) => /\d\d:\d\dZ\+1\b/.test(l)), "something is tomorrow")
   assert.ok(lines.every((l) => !/\d\d-\d\d /.test(l)), "and no line carries a date")
-  // About what fits between two 44-pixel buttons on 390 pixels in a monospaced face: 36 characters.
-  assert.ok(lines.every((l) => l.length <= 36), `the longest is ${Math.max(...lines.map((l) => l.length))}: ${lines.sort((a, b) => b.length - a.length)[0]}`)
+  // About what fits between a 44-pixel button and a chevron on 390 pixels in a monospaced face: 36 characters.
+  assert.ok(lines.every((l) => l.length <= 36), `the longest is ${Math.max(...lines.map((l) => l.length))}: ${[...lines].sort((a, b) => b.length - a.length)[0]}`)
 })
 
 test("the Spacing setting overrides the pane's size", async () => {
+  const star = (scene: unknown) => geometry(scene as { controls: Geometry[] }).stars[0]
   const bigButTight = await (await panel({ width: 1000, height: 700 })).render({ ...cfg, density: "compact" })
-  assert.equal(bigButTight.layout.padding, 8)
+  assert.deepEqual([star(bigButTight).x, star(bigButTight).width, star(bigButTight).height], [8, 44, 36])
   // A pane that is not wide, with the roomy spacing asked for, and room enough still for every column.
   const smallButRoomy = await (await panel({ width: 470, height: 700 })).render({ ...cfg, density: "comfortable" })
-  assert.equal(smallButRoomy.layout.padding, 12)
-  assert.equal(smallButRoomy.layout.spacing, 8)
-  const roomyNames = [0, 1, 2, 3, 4].map((i) => smallButRoomy.strings[`row${i}`]?.split(/ +/)[0]).filter(Boolean)
+  assert.deepEqual([star(smallButRoomy).x, star(smallButRoomy).width, star(smallButRoomy).height], [12, 56, 44])
+  const roomyNames = allRows(smallButRoomy.strings).map((r) => r.split(/ +/)[0])
   assert.equal(nameGap(smallButRoomy.strings.columns, roomyNames), 2)
   // And a host that does not report the pane's size gets the roomy layout.
-  assert.equal((await (await panel()).render(cfg)).layout.padding, 12)
+  const unknown = await (await panel()).render(cfg)
+  assert.deepEqual([star(unknown).x, star(unknown).width, star(unknown).height], [12, 56, 44])
 })
 
 test("the pass's page is packed tighter in a phone's pane too, and as it was on a desktop's", async () => {

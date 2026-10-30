@@ -92,13 +92,17 @@ test("the titles and the rows are drawn as text in one face at one size, in the 
   const texts = scene.layers.filter((l) => l.text)
   assert.equal(new Set(texts.map((l) => l.text.size)).size, 1)
   assert.equal(new Set(texts.map((l) => l.text.fontFamily)).size, 1)
-  const lines = scene.layers.filter((l) => /^(columns|row\d)$/.test(l.id))
-  assert.deepEqual(lines.map((l) => l.text.value), ["columns", "row0", "row1", "row2", "row3", "row4"])
-  assert.equal(lines[0].text.fontFamily, "RobotoMono")
-  assert.equal(lines[0].text.color, "#445566")
-  assert.ok(lines.slice(1).every((l) => l.text.color === "#112233" || l.text.color === "#43a047"), "the primary color, or green for a pass that is up")
+  const lines = scene.layers.filter((l) => /^(columns|row\d+)$/.test(l.id))
+  const rowKeys = Object.keys(scene.strings).filter((k) => /^row\d+$/.test(k))
+  assert.ok(rowKeys.length > 5)
+  // The rows are first, and the header, which stays and is drawn over them as they scroll under it, after.
+  assert.deepEqual(lines.map((l) => l.text.value), [...rowKeys.map((_, i) => `row${i}`), "columns"])
+  const titles = lines[lines.length - 1]
+  assert.equal(titles.text.fontFamily, "RobotoMono")
+  assert.equal(titles.text.color, "#445566")
+  assert.ok(lines.slice(0, -1).every((l) => l.text.color === "#112233" || l.text.color === "#43a047"), "the primary color, or green for a pass that is up")
   assert.equal(new Set(lines.map((l) => l.x)).size, 1, "all start at the same place, so the columns line up")
-  assert.equal(scene.width, 411 - 16)
+  assert.equal(scene.width, 411, "as wide as the pane, which scrolls")
 })
 
 test("on a phone with the operator's text enlarged, the text is made smaller to fit, and every column stays", async () => {

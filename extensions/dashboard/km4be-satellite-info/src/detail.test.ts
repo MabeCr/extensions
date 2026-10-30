@@ -228,19 +228,18 @@ async function panel(shown: unknown[] = []) {
 test("the whole row is a hit area that opens its pass, as the chevron at its end does", async () => {
   const p = await panel()
   const list = await p.render(t0)
-  const rows = (list.controls as (Control & { kind?: string; label?: string; event?: string })[]).filter((c) => /^open:.*:row\d$/.test(c.id))
-  assert.equal(rows.length, 5)
+  const rows = (list.controls as (Control & { kind?: string; label?: string; event?: string })[]).filter((c) => /^open:.*:row\d+$/.test(c.id))
+  assert.ok(rows.length > 5, "every pass is a row, not five")
   const shown = rows.filter((c) => c.opacity !== 0)
-  assert.ok(shown.length > 0)
+  assert.equal(shown.length, rows.length, "and none is hidden")
   shown.forEach((c, i) => {
     // An invisible area over the row's line, which is drawn as text: a button's label is in the wrong face to line up.
     assert.equal(c.kind, "button")
     assert.equal(c.event, "open")
     assert.match(c.label!, /^Open the \S+ pass$/)
     assert.ok(list.strings[`row${i}`].length > 0, "and the line under it has its text")
-    const chevron = list.controls.find((o) => o.id === c.id.replace(/row(\d)$/, "$1"))
-    assert.ok(chevron, "the chevron stays, as the cue that the row opens")
-    assert.deepEqual(passOfOpen(c.id), passOfOpen(chevron!.id))
+    assert.ok((list as unknown as { layers: { id: string }[] }).layers.some((l) => l.id === `chevron${i}`), "the chevron stays, as the cue that the row opens: an icon, over the hit area")
+    assert.ok(passOfOpen(c.id), "and the pass it opens is named in its id")
   })
 
   assert.deepEqual(await p.event(t0, shown[0].id, "open"), { values: { utc: 0 } })

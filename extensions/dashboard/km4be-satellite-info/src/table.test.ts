@@ -152,24 +152,22 @@ test("the list has titles over its columns, which line up with every row, and it
   assert.match(columns, /^Sat +Type +Start +Max +Path +Len$/)
   assert.ok(!hint.includes("heard"), "the hint is not the key")
 
-  const rows = [0, 1, 2, 3, 4].map((i) => scene.strings[`row${i}`]).filter(Boolean)
-  assert.equal(rows.length, 5)
+  const rows = Object.keys(scene.strings).filter((k) => /^row\d+$/.test(k)).map((k) => scene.strings[k])
+  assert.ok(rows.length > 5, "every pass, not five")
   const lenEnd = columns.indexOf("Len") + 3
   for (const row of rows) assert.equal(row.length, lenEnd, row)
 
-  // The titles are drawn first, over the rows, in the same artwork, so they share its face and its size.
-  const nameOf = (n: { control?: string; row?: { control: string }[]; scene?: boolean }): string => (n.scene ? "artwork" : (n.control ?? n.row?.map((c) => c.control)[0] ?? ""))
-  const order = scene.layout.column.map((n) => nameOf(n as { control?: string; row?: { control: string }[]; scene?: boolean }))
-  assert.ok(order.indexOf("artwork") >= 0)
-  assert.equal(order[order.length - 1], "prev", "the pager is the last of the layout; the key is in the artwork")
-  const all = (scene as unknown as { layers: { id: string; y: number; text?: { value?: string; literal?: string; size: number; fontFamily: string } }[] }).layers
-  const layers = all.filter((l) => /^(columns|row\d)$/.test(l.id))
-  assert.equal(layers[0].id, "columns")
-  assert.ok(all.filter((l) => l.text).every((l) => l.text!.size === layers[0].text!.size && l.text!.fontFamily === layers[0].text!.fontFamily), "one face and one size for titles, rows and key")
-  assert.deepEqual(layers.map((l) => l.text!.value), ["columns", "row0", "row1", "row2", "row3", "row4"])
-  assert.ok(layers.slice(1).every((l, i) => l.y > (i ? layers[i].y : layers[0].y)), "the rows follow the titles, one under the next")
-  const key = all.find((l) => l.id === "key-heard")!
-  assert.ok(key.y > layers[layers.length - 1].y, "the key is under the last row")
+  // The titles are drawn in the same artwork as the rows, so they share its face and its size; the key is in it too.
+  const all = (scene as unknown as { layers: { id: string; y: number; fixed?: boolean; text?: { value?: string; literal?: string; size: number; fontFamily: string } }[] }).layers
+  const titles = all.find((l) => l.id === "columns")!
+  assert.ok(titles)
+  assert.ok(all.filter((l) => l.text).every((l) => l.text!.size === titles.text!.size && l.text!.fontFamily === titles.text!.fontFamily), "one face and one size for titles, rows and key")
+  // The rows are one under the next, below the titles; the titles and the key stay where they are as the rows scroll.
+  const rowLayers = all.filter((l) => /^row\d+$/.test(l.id))
+  assert.equal(rowLayers.length, rows.length)
+  assert.ok(rowLayers.every((l, i) => l.y > (i ? rowLayers[i - 1].y : titles.y)), "the rows follow the titles, one under the next")
+  assert.equal(titles.fixed, true, "the titles stay")
+  assert.equal(all.find((l) => l.id === "key-heard")!.fixed, true, "and so does the key")
 })
 
 test("with no rows there are no titles and no legend to explain, though the controls stay", async () => {
@@ -179,5 +177,5 @@ test("with no rows there are no titles and no legend to explain, though the cont
   assert.match(scene.strings.hint, /No passes of 10° or more/)
   assert.equal(scene.strings.columns, "")
   assert.ok(!(scene as unknown as { layers: { id: string }[] }).layers.some((l) => l.id === "markTitle" || l.id.startsWith("key-")), "no title over the marks and no key to them")
-  assert.ok(scene.controls.some((c) => c.id === "prev"))
+  assert.ok(scene.controls.some((c) => c.id === "mode") && scene.controls.some((c) => c.id === "utc"), "the chips and the switch stay")
 })
