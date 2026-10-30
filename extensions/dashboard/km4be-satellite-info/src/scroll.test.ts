@@ -199,8 +199,10 @@ test("a star does not move the list; choosing All or Favorites takes it back to 
   assert.equal(answer.values.scroll, undefined, "an answer to a star does not name the scroll")
   assert.equal((await p.render(cfg, t0)).values.scroll, 240)
 
+  // A different list starts at its top: the scene drawn after the answer has the scroll at 0, which moves the pane. The answer
+  // itself names only the switch and the UTC value, which the view the pane is on and the view it goes to both have.
   const mode = await p.event(cfg, t0, "mode", "mode", { text: "favorites" })
-  assert.equal(mode.values.scroll, 0, "a different list starts at its top, and the answer says so")
+  assert.deepEqual(mode, { values: { utc: 1 }, strings: { mode: "favorites" } })
   assert.equal((await p.render(cfg, t0)).values.scroll, 0)
 })
 

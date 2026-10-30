@@ -32,6 +32,8 @@ import type { Cells, SatellitePass } from "./passes.ts"
 import { linksFor } from "./radio.ts"
 import { SCRUB_VALUE } from "./scrub.ts"
 import { PREVIEW_SVG } from "./preview.ts"
+import { buildNow, buildNowScene, upNow, upNowHint } from "./upnow.ts"
+import type { NowModel } from "./upnow.ts"
 import { statusFor, statusHours, statusLines } from "./status.ts"
 import type { Kind, StatusRow } from "./status.ts"
 import {
@@ -236,7 +238,7 @@ function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, co
   }
 }
 
-type View = { kind: "list"; model: Model } | { kind: "detail"; model: DetailModel } | { kind: "report"; model: ReportModel }
+type View = { kind: "list"; model: Model } | { kind: "detail"; model: DetailModel } | { kind: "report"; model: ReportModel } | { kind: "now"; model: NowModel }
 
 /// The Report page of a pass: what AMSAT's form offers for the satellite, and what the operator has filled in,
 /// starting from their own callsign and where they are.
@@ -301,6 +303,12 @@ async function snapshot(args: PanelRenderArgs, ctx: HookContext): Promise<View> 
     }
     state.view = "list" // it has ended, or the settings no longer list it
   }
+  // The sky: what is up this moment, on one plot.
+  if (state.mode === "now") {
+    const dots = upNow(ready.passes, ready.place, ready.favorites, now)
+    const next = nowAndNext(ready.passes.filter((p) => p.aos > now), now)
+    return { kind: "now", model: { mode: "now", utc: state.utc, hint: upNowHint(dots.length, next), compact: compactNow, dots, ...buildNow(dots, themeOf(args.environment?.colors)) } }
+  }
   return { kind: "list", model: listModel(ready, state, now, args.config?.listSeconds === true, compactNow, look) }
 }
 
@@ -309,7 +317,9 @@ async function snapshot(args: PanelRenderArgs, ctx: HookContext): Promise<View> 
 const listPatchStrings = (m: Model): Record<string, string> => ({ mode: m.mode, header: m.header, hint: m.hint, columns: m.columns })
 
 const patchOf = (view: View, options: { scroll?: boolean } = {}): PanelSceneEventResult =>
-  view.kind === "list"
+  view.kind === "now"
+    ? { values: { utc: view.model.utc ? 1 : 0 }, strings: { mode: view.model.mode, hint: view.model.hint } }
+    : view.kind === "list"
     ? { values: options.scroll ? valuesOf(view.model) : { utc: view.model.utc ? 1 : 0 }, strings: listPatchStrings(view.model) }
     : view.kind === "report"
       ? { values: reportValues(view.model), strings: reportStrings(view.model) }
@@ -420,6 +430,8 @@ export const PassesPanel: PanelHook = {
     // a countdown that is not fresh is wrong; every two seconds while the satellite is overhead, so it is seen to cross
     // the sky; and not at all otherwise, when the panel's own minute is enough.
     if (view.kind === "report") return { kind: "scene", scene: buildReportScene(view.model), triggers: [], title: TAB_TITLE }
+    // The satellites cross the sky in minutes: the plot is drawn again every few seconds.
+    if (view.kind === "now") return { kind: "scene", scene: buildNowScene(view.model), triggers: ["tick:3"], title: TAB_TITLE }
     const onSky = view.kind === "detail" && view.model.tab === "sky"
     // The Radio page has the Doppler-corrected frequencies for right now, which are only right for a moment: while the
     // satellite is up they are redrawn as the plot is.
@@ -479,12 +491,13 @@ export const PassesPanel: PanelHook = {
       return stay()
     }
 
-    if (event.action === "mode" && (event.text === "favorites" || event.text === "all")) {
+    if (event.action === "mode" && (event.text === "favorites" || event.text === "all" || event.text === "now")) {
       state.mode = event.text
-      // A different list starts from its top.
+      // A different list starts from its top: the scene drawn next says so, which moves the pane.
       state.scroll = 0
       await saveMode(event.text)
-      return patchOf(await snapshot(args, ctx), { scroll: true })
+      // The answer names only what the scene the pane has and the one it is about to have both hold: the switch, and the UTC value.
+      return { values: { utc: state.utc ? 1 : 0 }, strings: { mode: event.text } }
     }
     if (event.action === "utc" && event.value !== undefined) state.utc = event.value === 1
     if (event.action === "star") {

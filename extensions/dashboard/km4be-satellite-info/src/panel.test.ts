@@ -125,7 +125,7 @@ test("a new install opens on All, and Favorites with nobody followed says how to
   assert.match(scene.strings.header, /^EL95vs · min 10° · 2 of 4 satellites tracked$/)
   assert.match(scene.strings.hint, /^(Next: \S+ in .+|\S+ up now, .+ left)/, "what is up and what is next")
   assert.equal(scene.strings.mode, "all")
-  assert.deepEqual((scene.controls.find((c) => c.id === "mode") as unknown as { options: { value: string }[] }).options.map((o) => o.value), ["all", "favorites"], "All on the left")
+  assert.deepEqual((scene.controls.find((c) => c.id === "mode") as unknown as { options: { value: string }[] }).options.map((o) => o.value), ["all", "favorites", "now"], "All on the left, and the sky of what is up now after the lists")
   assert.equal(scene.values.utc, 1, "the setting starts the pane in UTC")
   const rows = rowTexts(scene.strings)
   assert.equal(rows.length, 5)
@@ -153,7 +153,8 @@ test("a star follows a satellite without changing the list, and Favorites then s
   const only = await p.event(cfg, t0, "mode", "mode", { text: "favorites" })
   const favorites = await p.render(cfg, t0)
   assert.ok(rowTexts(favorites.scene.strings).every((r) => r.startsWith(name)))
-  assert.match(only.strings!.hint, /^(Next: \S+ in .+|\S+ up now, .+ left)/)
+  assert.deepEqual(only, { values: { utc: 0 }, strings: { mode: "favorites" } }, "an answer names the switch and the UTC value, which every view has")
+  assert.match(favorites.scene.strings.hint, /^(Next: \S+ in .+|\S+ up now, .+ left)/)
 
   // All shows every satellite again, the followed one's star filled.
   await p.event(cfg, t0, "mode", "mode", { text: "all" })
@@ -223,9 +224,9 @@ test("feeds are cached, a failed one falls back to what is stored, and a tap doe
 test("Favorites with nobody followed is an empty page that says how to fill it, not everything", async () => {
   const p = await panel()
   await p.render(cfg, t0)
-  const patch = await p.event(cfg, t0, "mode", "mode", { text: "favorites" })
-  assert.match(patch.strings!.hint, /^Add some favorites to see them here: tap a star on the All page\.$/)
+  await p.event(cfg, t0, "mode", "mode", { text: "favorites" })
   const scene = (await p.render(cfg, t0)).scene
+  assert.match(scene.strings.hint, /^Add some favorites to see them here: tap a star on the All page\.$/)
   assert.deepEqual(rowTexts(scene.strings), [])
   assert.equal(scene.strings.columns, "")
   const ids = (scene.layers as { id: string }[]).map((l) => l.id)

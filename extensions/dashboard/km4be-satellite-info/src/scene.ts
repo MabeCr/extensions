@@ -203,6 +203,13 @@ export interface Model {
   scroll: number
 }
 
+/// The choices of the switch over the list, in the order they are drawn: All on the left.
+export const MODE_OPTIONS = [
+  { label: "All", value: "all" },
+  { label: "Favorites", value: "favorites" },
+  { label: "Up now", value: "now" },
+]
+
 export const STAR_PREFIX = "star:"
 
 /// Row `i`'s star control id. The satellite is in it, so a tap lands on the satellite the
@@ -384,10 +391,7 @@ export function buildScene(m: Model): PanelScene {
       label: "Passes to show",
       value: "mode",
       event: "mode",
-      options: [
-        { label: "All", value: "all" },
-        { label: "Favorites", value: "favorites" },
-      ],
+      options: MODE_OPTIONS,
       x: pad,
       y: pad,
       width: W - 3 * pad - SWITCH_WIDTH,

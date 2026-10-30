@@ -71,14 +71,20 @@ export interface SkyColors {
 
 export const DEFAULT_SKY_COLORS: SkyColors = { grid: "#8a8a8a", path: "#4aa3ff", rise: "#3ac46b", peak: "#ffffff", set: "#ff5a5a" }
 
+/// The rings at 0, 30 and 60 degrees and the crosshair on the compass points, as SVG elements: the plot with nothing on it.
+export function skyGrid(colors: SkyColors = DEFAULT_SKY_COLORS): string {
+  const ring = (elevation: number) => `<circle cx="${CENTER}" cy="${CENTER}" r="${+(((90 - elevation) / 90) * RADIUS).toFixed(1)}"/>`
+  return (
+    `<g fill="none" stroke="${colors.grid}" stroke-opacity="0.6" stroke-width="1">${[0, 30, 60].map(ring).join("")}` +
+    `<path d="M${CENTER} ${CENTER - RADIUS}V${CENTER + RADIUS}M${CENTER - RADIUS} ${CENTER}H${CENTER + RADIUS}"/></g>`
+  )
+}
+
 /// The plot as a self-contained SVG document: rings at 0, 30 and 60 degrees, a
 /// crosshair on the compass points, the path, and dots for rise, peak and set. The
 /// compass letters are text layers (see `compassLayers`), not drawn here.
 export function skySvg(track: SkyPoint[], pass: Pass, colors: SkyColors = DEFAULT_SKY_COLORS, now?: number, here?: SkyLook): string {
-  const ring = (elevation: number) => `<circle cx="${CENTER}" cy="${CENTER}" r="${+(((90 - elevation) / 90) * RADIUS).toFixed(1)}"/>`
-  const grid =
-    `<g fill="none" stroke="${colors.grid}" stroke-opacity="0.6" stroke-width="1">${[0, 30, 60].map(ring).join("")}` +
-    `<path d="M${CENTER} ${CENTER - RADIUS}V${CENTER + RADIUS}M${CENTER - RADIUS} ${CENTER}H${CENTER + RADIUS}"/></g>`
+  const grid = skyGrid(colors)
 
   const line = track.map((p, i) => {
     const { x, y } = skyXY(p.azimuth, p.elevation)
