@@ -60,6 +60,10 @@ import {
 import type { ListLook, Mode, Model, ReportModel } from "./scene.ts"
 
 const REFRESH_SECONDS = 60
+/// How soon a list that is waiting asks again: for the satellites, which a few seconds' wait may bring, and for the operator's place, which
+/// may be a long time coming, or never if the operator has not allowed it.
+const WAITING_FOR_DATA = "tick:3"
+const WAITING_FOR_PLACE = "tick:10"
 
 /// The pane's tab, short enough to read whole on a phone: the descriptor's own title is longer, for the list of panels.
 const TAB_TITLE = "Satellites"
@@ -136,18 +140,24 @@ interface Ready {
   hours: number
 }
 
-/// Everything the views are made from, or the sentence saying why there is nothing yet.
-async function gather(args: PanelRenderArgs, ctx: HookContext): Promise<Ready | string> {
-  const place = await findPlace(args.config, args.operation, nowMillis(args))
-  if (!place) return "No location. Allow location access, or enter a grid square in this panel's settings."
+/// Why there is nothing to show yet, and what it waits for.
+interface Waiting {
+  waitingFor: "place" | "data"
+  message: string
+}
 
+/// Everything the views are made from, or why there is nothing yet.
+async function gather(args: PanelRenderArgs, ctx: HookContext): Promise<Ready | Waiting> {
   const now = nowMillis(args)
-  const { satellites, elementsAt } = await loadCatalog(ctx, now)
-  if (!satellites.length) return "No satellite data yet. Check the connection."
-
   const minEl = minElevation(args.config)
   const hours = statusHours(args.config)
-  const [favorites, reports] = await Promise.all([loadFavorites(), loadStatus(ctx, now, hours)])
+  // All of it at once: where the operator is, the satellites and their orbits, who follows what and what AMSAT has heard. Each waits for a
+  // device or a server, and one after another they add up to a first render the host runs out of patience for.
+  const [place, catalog, favorites, reports] = await Promise.all([findPlace(args.config, args.operation, now), loadCatalog(ctx, now), loadFavorites(), loadStatus(ctx, now, hours)])
+  if (!place) return { waitingFor: "place", message: "No location. Allow location access, or enter a grid square in this panel's settings." }
+  const { satellites, elementsAt } = catalog
+  if (!satellites.length) return { waitingFor: "data", message: "No satellite data yet. Check the connection." }
+
   return { place, satellites, elementsAt, minEl, favorites, passes: upcomingPasses(satellites, place, now, minEl, elementsAt), reports, hours }
 }
 
@@ -238,7 +248,7 @@ function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, co
   }
 }
 
-type View = { kind: "list"; model: Model } | { kind: "detail"; model: DetailModel } | { kind: "report"; model: ReportModel } | { kind: "now"; model: NowModel }
+type View = { kind: "list"; model: Model; waiting?: "place" | "data" } | { kind: "detail"; model: DetailModel } | { kind: "report"; model: ReportModel } | { kind: "now"; model: NowModel }
 
 /// The Report page of a pass: what AMSAT's form offers for the satellite, and what the operator has filled in,
 /// starting from their own callsign and where they are.
@@ -279,7 +289,8 @@ async function snapshot(args: PanelRenderArgs, ctx: HookContext): Promise<View> 
   const ready = await gather(args, ctx)
   const compactNow = isCompact(args.config, args.environment)
   const look = listLook(args.environment, compactNow)
-  if (typeof ready === "string") return { kind: "list", model: empty(ready, state, compactNow, look) }
+  // Still waiting for a place or for the satellites: the list says what for, and is drawn again in a few seconds.
+  if ("waitingFor" in ready) return { kind: "list", model: empty(ready.message, state, compactNow, look), waiting: ready.waitingFor }
 
   if (state.view === "detail" && state.detail) {
     const { name, los, tab } = state.detail
@@ -437,7 +448,9 @@ export const PassesPanel: PanelHook = {
     // satellite is up they are redrawn as the plot is.
     const onRadio = view.kind === "detail" && view.model.tab === "radio"
     const tick = onSky && countdownOn(args.config) ? "tick:1" : (onSky || onRadio) && view.kind === "detail" && view.model.underWay ? "tick:2" : undefined
-    return { kind: "scene", scene: view.kind === "list" ? buildScene(view.model) : buildDetailScene(view.model), triggers: tick ? [tick] : [], title: TAB_TITLE }
+    // A list that has nothing to show yet asks again in a few seconds, not at the panel's minute: it is what the operator is looking at.
+    const triggers = view.kind === "list" && view.waiting ? [view.waiting === "place" ? WAITING_FOR_PLACE : WAITING_FOR_DATA] : tick ? [tick] : []
+    return { kind: "scene", scene: view.kind === "list" ? buildScene(view.model) : buildDetailScene(view.model), triggers, title: TAB_TITLE }
   },
 
   async onEvent(args, ctx): Promise<PanelSceneEventResult> {
