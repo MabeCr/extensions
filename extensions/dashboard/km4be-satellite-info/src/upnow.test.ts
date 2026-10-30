@@ -12,6 +12,7 @@ import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
 import { forgetAll } from "./memory.ts"
 import { findPasses, satrecFromOmm } from "./orbit.ts"
 import type { SatellitePass } from "./passes.ts"
+import { datasetCalls } from "./datasetTesting.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 import { SKY_SIZE } from "./sky.ts"
 import { buildNow, buildNowScene, DOT, HIT, upNow, upNowHint } from "./upnow.ts"
@@ -59,6 +60,7 @@ async function panel(settings = new Map<string, unknown>()) {
   const id = ++panes
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
+      ...datasetCalls().hostCalls,
       getLocation: () => null,
       kvGet: () => null,
       kvSet: () => undefined,

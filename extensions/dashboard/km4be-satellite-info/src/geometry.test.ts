@@ -11,6 +11,7 @@ import { buildCatalog, ELEMENTS_URL, LIST_URL, parseElements, parseList, statusU
 import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
 import { forgetAll } from "./memory.ts"
 import { findPasses, satrecFromOmm } from "./orbit.ts"
+import { datasetCalls } from "./datasetTesting.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 import { violations } from "./sceneRules.ts"
 import type { SceneLike } from "./sceneRules.ts"
@@ -53,6 +54,7 @@ async function panel(width: number | undefined, height: number | undefined) {
   const id = ++panes
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
+      ...datasetCalls().hostCalls,
       getLocation: () => null,
       kvGet: () => null,
       kvSet: () => undefined,

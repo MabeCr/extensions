@@ -13,6 +13,7 @@ import { buildCatalog, ELEMENTS_URL, LIST_URL, parseElements, parseList, statusU
 import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
 import { forgetAll } from "./memory.ts"
 import { findPasses, satrecFromOmm } from "./orbit.ts"
+import { datasetCalls } from "./datasetTesting.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 
 const ctx = { online: true }
@@ -44,6 +45,7 @@ async function panel(options: { offline?: () => boolean; environment?: { width: 
   const id = ++panes
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
+      ...datasetCalls().hostCalls,
       getLocation: () => null,
       kvGet: () => null,
       kvSet: () => undefined,
@@ -141,10 +143,13 @@ test("before the first pass the list says what is next, and the orbits' age is s
   const early = await p.render(cfg, best.aos - 30 * 60_000)
   assert.match(early.scene.strings.hint, /^Next: \S+ in \d+ min$|^Next: \S+ in \d+ h/, "and nothing about the orbits, which are minutes old")
   assert.ok(!early.scene.strings.hint.includes("Orbits"))
-  // Thirteen hours on with the connection down: the copy is the one fetched then, and says how old it is.
+  // A day on, the orbits are still good and nothing is said. Eight days on with the connection down: the copy is the one fetched then,
+  // and says how old it is.
   offline = true
-  const later = await p.render(cfg, best.aos - 30 * 60_000 + 13 * 3_600_000)
-  assert.match(later.scene.strings.hint, /Orbits are 13 h old\.$/)
+  const day = await p.render(cfg, best.aos - 30 * 60_000 + 24 * 3_600_000)
+  assert.ok(!day.scene.strings.hint.includes("Orbits"))
+  const later = await p.render(cfg, best.aos - 30 * 60_000 + 8 * 24 * 3_600_000)
+  assert.match(later.scene.strings.hint, /Orbits are .+ old.$/)
 })
 
 test("the pane's tab is short on every page, though the panel's name in the list of panels is not", async () => {

@@ -8,6 +8,8 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 
 import { buildCatalog, ELEMENTS_URL, FETCH_TIMEOUT_MS, LIST_URL, parseElements, parseList, statusUrl } from "./data.ts"
+import { datasetCalls } from "./datasetTesting.ts"
+import type { Downloaded } from "./datasetTesting.ts"
 import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
 import { forgetAll } from "./memory.ts"
 import { findPlace } from "./location.ts"
@@ -26,6 +28,8 @@ interface Script {
   location?: ({ latitude: number; longitude: number } | null)[]
   /// Whether each feed's fetch fails (called in order).
   failing?: Set<string>
+  /// What the app has downloaded of the two datasets so far: the default is both, and null is a file it has not got yet.
+  files?: Downloaded
   /// Holds every answer of the position and the feeds until this many have been asked for: code that asks for one and waits for it before
   /// asking for the next never gets its answer.
   gate?: number
@@ -45,8 +49,14 @@ async function panel(script: Script = {}, online = true) {
           if (waiters.length >= script.gate!) waiters.splice(0).forEach((w) => w())
         })
       : value
+  const datasets = datasetCalls(script.files)
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
+      dbLookupSelectAll: (params) => {
+        calls.push("lookup " + String(params.category))
+        return held(datasets.hostCalls.dbLookupSelectAll(params))
+      },
+      dbLookupSelectOne: datasets.hostCalls.dbLookupSelectOne,
       getLocation: () => {
         calls.push("getLocation")
         const answer = script.location ? script.location[Math.min(located, script.location.length - 1)] : { latitude: 25.76, longitude: -80.19 }
@@ -97,49 +107,50 @@ async function panel(script: Script = {}, online = true) {
 
 const rows = (scene: { strings: Record<string, string> }) => Object.keys(scene.strings).filter((k) => /^row\d+$/.test(k)).length
 
-test("the place, the satellites, the orbits and AMSAT's reports are asked for together, not one after another", async () => {
-  // The host answers none of the four until all four have been asked for. A render that asked for one and waited would never ask for the
+test("the place, the satellites and AMSAT's reports are asked for together, not one after another", async () => {
+  // The host answers none of the three until all three have been asked for. A render that asked for one and waited would never ask for the
   // next, and never be answered.
-  const p = await panel({ gate: 4 })
+  const p = await panel({ gate: 3 })
   const outcome = await Promise.race([p.render(cfg, t0), new Promise<string>((resolve) => setTimeout(() => resolve("stuck"), 1500))])
   assert.notEqual(outcome, "stuck", "asked for one thing and waited for it before asking for the next")
   assert.ok(rows((outcome as { scene: { strings: Record<string, string> } }).scene) > 0)
-  assert.deepEqual([...p.calls].filter((c) => c === "getLocation" || c.startsWith("fetch ")).sort(), ["fetch " + ELEMENTS_URL, "fetch " + LIST_URL, "fetch " + statusUrl(24), "getLocation"].sort())
+  assert.deepEqual([...p.calls].filter((c) => c === "getLocation" || c.startsWith("fetch ") || c.startsWith("lookup ")).sort(), ["fetch " + statusUrl(24), "getLocation", "lookup km4be-satellite-list"].sort())
 })
 
-test("every fetch has a time limit, shorter than the host's own, so that a slow server cannot hold the first render", async () => {
+test("the satellites and their orbits are never fetched by the extension: they are the app's datasets, and a fetch it makes has a time limit", async () => {
   const p = await panel()
   await p.render(cfg, t0)
-  assert.equal(p.fetchOptions.length, 3)
+  assert.deepEqual(p.calls.filter((c) => c.startsWith("fetch ")), ["fetch " + statusUrl(24)])
+  assert.equal(p.fetchOptions.length, 1)
   for (const o of p.fetchOptions) assert.equal(o.timeout, FETCH_TIMEOUT_MS)
   assert.ok(FETCH_TIMEOUT_MS >= 3_000 && FETCH_TIMEOUT_MS <= 10_000)
+  assert.ok(!p.calls.includes("fetch " + LIST_URL) && !p.calls.includes("fetch " + ELEMENTS_URL))
 })
 
-test("with the satellites not yet come, the list says so and asks again in three seconds, and is there when they do", async () => {
-  const failing = new Set([LIST_URL, ELEMENTS_URL])
-  const p = await panel({ failing })
+test("with the app not yet through downloading the satellites, the list says so and reads again in three seconds, and is there when they come", async () => {
+  const files: Downloaded = { list: null, orbits: null }
+  const p = await panel({ files })
   const first = await p.render(cfg, t0)
   assert.match(first.scene.strings.header, /No satellite data yet/)
   assert.equal(rows(first.scene), 0)
   assert.deepEqual(first.triggers, ["tick:3"])
-  // Too soon to ask again: not at once. After a few seconds, with the servers back, there is a list.
-  const soon = p.fetchOptions.length
+  // Too soon to read again: not at once. After a few seconds, with the files downloaded, there is a list.
+  const reads = () => p.calls.filter((c) => c.startsWith("lookup ")).length
+  const soon = reads()
   await p.render(cfg, t0 + 1_000)
-  assert.equal(p.fetchOptions.length, soon, "not hammered")
-  failing.clear()
+  assert.equal(reads(), soon, "not hammered")
+  files.list = LIST
+  files.orbits = ELEMENTS
   const later = await p.render(cfg, t0 + 6_000)
   assert.ok(rows(later.scene) > 0, "the list is there")
   assert.notDeepEqual(later.triggers, ["tick:3"], "and no longer waiting")
 })
 
-test("with the host saying it is offline and nothing to show, the feeds are tried anyway; with something to show, they are not", async () => {
+test("the list is drawn from the app's datasets with the host saying it is offline: nothing is fetched for it", async () => {
   const p = await panel({}, false)
   const first = await p.render(cfg, t0)
-  assert.ok(rows(first.scene) > 0, "the connection had come up before the host knew")
-  // Everything is held now, so a host that says it is offline asks nothing more.
-  const asked = p.fetchOptions.length
-  await p.render(cfg, t0 + 3 * 3_600_000)
-  assert.equal(p.fetchOptions.length, asked)
+  assert.ok(rows(first.scene) > 0)
+  assert.ok(!p.calls.some((c) => c.startsWith("fetch ")), "not even AMSAT's reports, which wait until the host says it is online")
 })
 
 test("AMSAT's reports, which only add to the list, are not tried again every few seconds when they fail", async () => {

@@ -7,6 +7,7 @@ import { test } from "node:test"
 import { ELEMENTS_URL, LIST_URL, statusUrl } from "./data.ts"
 import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
 import { forgetAll } from "./memory.ts"
+import { datasetCalls } from "./datasetTesting.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 
 const ctx = { online: true }
@@ -37,6 +38,7 @@ async function panel(options: { device?: { latitude: number; longitude: number }
   const fetched: string[] = []
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
+      ...datasetCalls().hostCalls,
       getLocation: () => options.device ?? null,
       kvGet: (params) => storage.get(String(params.key)) ?? null,
       kvSet: (params) => void storage.set(String(params.key), params.value),
@@ -111,11 +113,10 @@ test("with no place the panel says so, and asks again in ten seconds, not every 
   const { scene } = first
   assert.match(scene.strings.header, /No location/)
   assert.deepEqual(rowTexts(scene.strings), [])
-  // The feeds are asked for with the place, not after it, so that the list is as soon as the place is; they are asked once.
-  assert.equal(p.fetched.length, 3)
+  assert.equal(p.fetched.length, 1, "the reports are fetched once; the satellites are the app's datasets, read with the place, not after it")
   assert.deepEqual((first as unknown as { triggers: string[] }).triggers, ["tick:10"])
   await p.render({}, t0 + 10_000)
-  assert.equal(p.fetched.length, 3, "and not again")
+  assert.equal(p.fetched.length, 1, "and not again")
 })
 
 test("the device's location is used, rounded to its grid square", async () => {
@@ -213,14 +214,14 @@ test("a short list has just its rows: no blank ones hidden", async () => {
   assert.equal(new Set(stars.map((c) => c.id)).size, stars.length, "ids stay unique")
 })
 
-test("feeds are cached, a failed one falls back to what is stored, and a tap does not refetch", async () => {
+test("AMSAT's reports are cached, a failed one falls back to what is kept, and a tap does not refetch", async () => {
   let offline = false
   const p = await panel({ offline: () => offline })
   await p.render(cfg, t0)
-  assert.equal(p.fetched.length, 3, "the list, the orbits and AMSAT's reports")
+  assert.equal(p.fetched.length, 1, "AMSAT's reports: the list and the orbits are the app's datasets")
   await p.render(cfg, t0 + 60_000)
   await p.event(cfg, t0 + 61_000, "mode", "mode", { text: "all" })
-  assert.equal(p.fetched.length, 3, "still inside the cache window")
+  assert.equal(p.fetched.length, 1, "still inside the cache window")
   offline = true
   const later = await p.render(cfg, t0 + 30 * 3_600_000)
   assert.match(later.scene.strings.header, /2 of 4 satellites tracked/, "stale orbits are better than none")

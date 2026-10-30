@@ -5,6 +5,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 
 import { buildCatalog, ELEMENTS_URL, loadCatalog, LIST_URL, parseElements, parseList, statusUrl } from "./data.ts"
+import { datasetCalls } from "./datasetTesting.ts"
 import { ELEMENTS, LIST, SUMMARY } from "./fixtures.ts"
 import { forgetAll } from "./memory.ts"
 import { passesComputed, upcomingPasses } from "./passes.ts"
@@ -16,7 +17,7 @@ const MINUTE = 60_000
 const HOUR = 3_600_000
 let panes = 0
 
-type Counts = { getLocation: number; kvGet: number; kvSet: number; getSettings: number; setSettings: number; fetch: number; fetched: string[] }
+type Counts = { getLocation: number; kvGet: number; kvSet: number; getSettings: number; setSettings: number; fetch: number; fetched: string[]; lookups: string[] }
 
 /// A panel whose host counts what it is asked for: the point of this file is how seldom that is.
 /// `storage` is what `kvSet` keeps, `settings` the extension's own settings group: pass them on to a
@@ -28,9 +29,11 @@ async function panel(
 ) {
   forgetAll()
   const id = ++panes
-  const counts: Counts = { getLocation: 0, kvGet: 0, kvSet: 0, getSettings: 0, setSettings: 0, fetch: 0, fetched: [] }
+  const datasets = datasetCalls()
+  const counts: Counts = { getLocation: 0, kvGet: 0, kvSet: 0, getSettings: 0, setSettings: 0, fetch: 0, fetched: [], lookups: datasets.calls }
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
+      ...datasets.hostCalls,
       getLocation: () => {
         counts.getLocation += 1
         return device()
@@ -77,6 +80,7 @@ async function panel(
   const reset = () => {
     counts.getLocation = counts.kvGet = counts.kvSet = counts.getSettings = counts.setSettings = counts.fetch = 0
     counts.fetched.length = 0
+    counts.lookups.length = 0
   }
   return {
     counts,
@@ -91,17 +95,19 @@ async function panel(
 }
 
 const cfg = { grid: "EL95vs" }
-const quiet = (c: Counts) => ({ getLocation: c.getLocation, kvGet: c.kvGet, kvSet: c.kvSet, getSettings: c.getSettings, setSettings: c.setSettings, fetch: c.fetch })
+const quiet = (c: Counts) => ({ getLocation: c.getLocation, kvGet: c.kvGet, kvSet: c.kvSet, getSettings: c.getSettings, setSettings: c.setSettings, fetch: c.fetch, lookups: c.lookups.length })
 
 test("a redraw within the time things are good for asks the host for nothing at all", async () => {
   const p = await panel()
   await p.render(cfg, t0)
-  assert.ok(p.counts.fetch === 3 && p.counts.kvSet === 3, "the first draw fetches and stores the three feeds")
+  assert.deepEqual(p.counts.fetched, [statusUrl(24)], "only AMSAT's reports are fetched: the satellites and their orbits are the app's datasets")
+  assert.ok(p.counts.lookups[0] === "all km4be-satellite-list" && p.counts.lookups.length > 1, "and they are read: the list, then each orbit")
+  assert.equal(p.counts.kvSet + p.counts.kvGet, 0, "nothing goes in the extension's own storage, which is memory, and holds 4096 characters an entry")
   p.reset()
 
   await p.render(cfg, t0 + 20_000)
   await p.render(cfg, t0 + 40_000)
-  assert.deepEqual(quiet(p.counts), { getLocation: 0, kvGet: 0, kvSet: 0, getSettings: 0, setSettings: 0, fetch: 0 })
+  assert.deepEqual(quiet(p.counts), { getLocation: 0, kvGet: 0, kvSet: 0, getSettings: 0, setSettings: 0, fetch: 0, lookups: 0 })
 })
 
 test("going from the Sky page back to the list is free", async () => {
@@ -117,7 +123,7 @@ test("going from the Sky page back to the list is free", async () => {
   await p.event(cfg, t0 + 12_000, "back", "back")
   const back = await p.render(cfg, t0 + 12_000)
   assert.match(back.scene.strings.header, /^EL95vs /)
-  assert.deepEqual(quiet(p.counts), { getLocation: 0, kvGet: 0, kvSet: 0, getSettings: 0, setSettings: 0, fetch: 0 })
+  assert.deepEqual(quiet(p.counts), { getLocation: 0, kvGet: 0, kvSet: 0, getSettings: 0, setSettings: 0, fetch: 0, lookups: 0 })
 })
 
 test("each thing is asked for again when it is out of date, and only that thing", async () => {
@@ -127,40 +133,33 @@ test("each thing is asked for again when it is out of date, and only that thing"
 
   // A minute on: the device is asked where it is, nothing else.
   await p.render(cfg, t0 + MINUTE + 1)
-  assert.deepEqual(quiet(p.counts), { getLocation: 1, kvGet: 0, kvSet: 0, getSettings: 0, setSettings: 0, fetch: 0 })
+  assert.deepEqual(quiet(p.counts), { getLocation: 1, kvGet: 0, kvSet: 0, getSettings: 0, setSettings: 0, fetch: 0, lookups: 0 })
   p.reset()
 
-  // Ten minutes: AMSAT's reports.
+  // Ten minutes: AMSAT's reports, and the datasets are read again.
   await p.render(cfg, t0 + 10 * MINUTE + 1)
   assert.deepEqual(p.counts.fetched, [statusUrl(24)])
+  assert.ok(p.counts.lookups.length > 1)
   p.reset()
 
-  // Six hours: the orbits as well, which are fetched once, and the passes are worked out again for them.
-  await p.render(cfg, t0 + 6 * HOUR + 1)
-  assert.ok(p.counts.fetched.includes(ELEMENTS_URL))
-  assert.ok(!p.counts.fetched.includes(LIST_URL))
-  p.reset()
-
-  // A day: the list of satellites.
-  await p.render(cfg, t0 + 25 * HOUR)
-  assert.ok(p.counts.fetched.includes(LIST_URL))
+  // Days: the extension never asks CelesTrak or Ham2K for the orbits or the list. The app does, when its own copy is old enough.
+  for (const days of [1, 4, 30]) await p.render(cfg, t0 + days * 24 * HOUR)
+  assert.ok(!p.counts.fetched.includes(ELEMENTS_URL) && !p.counts.fetched.includes(LIST_URL))
 })
 
-test("what is stored on the device is read once, when the panel starts, and not again", async () => {
+test("after a restart the extension's memory is gone and the app's datasets are not: the list is there at once", async () => {
   const first = await panel()
   await first.render(cfg, t0)
-  const { storage, settings } = first
+  const { settings } = first
 
-  // A restart: memory is gone, the device's storage is not.
-  const second = await panel(() => null, storage, settings)
-  await second.render(cfg, t0 + HOUR)
-  assert.equal(second.counts.fetch, 1, "only the reports, which are an hour old and good for ten minutes")
-  assert.deepEqual(second.counts.fetched, [statusUrl(24)])
-  assert.equal(second.counts.kvGet, 3, "the list, the orbits and the reports, once each")
-  assert.equal(second.counts.getSettings, 1, "and the favorites, once")
+  const second = await panel(() => null, new Map(), settings)
+  const drawn = await second.render(cfg, t0 + HOUR)
+  assert.ok(Object.keys(drawn.scene.strings).some((k) => /^row\d+$/.test(k)), "with the passes")
+  assert.deepEqual(second.counts.fetched, [statusUrl(24)], "only the reports are fetched, which are an hour old and good for ten minutes")
+  assert.equal(second.counts.getSettings, 1, "and the favorites are read, once")
   second.reset()
   await second.render(cfg, t0 + HOUR + 20_000)
-  assert.deepEqual(quiet(second.counts), { getLocation: 0, kvGet: 0, kvSet: 0, getSettings: 0, setSettings: 0, fetch: 0 })
+  assert.deepEqual(quiet(second.counts), { getLocation: 0, kvGet: 0, kvSet: 0, getSettings: 0, setSettings: 0, fetch: 0, lookups: 0 })
 })
 
 test("favorites are written once when they change and never read again", async () => {
@@ -240,14 +239,18 @@ test("the passes are worked out once in six hours, not at every draw, and the li
   assert.ok(later.some((q) => q.aos > t0 + 24 * HOUR), "it reaches past what the first call listed")
 })
 
-test("the parsed catalog is built once and handed out again until a feed changes", async () => {
+test("the catalog is read from the app's datasets once in ten minutes, and handed out again until then", async () => {
   const p = await panel()
   await p.render(cfg, t0)
   const stub = { online: true } as never
   // Through the same memory the panel used: nothing is asked of the host, and the same object comes back.
+  p.reset()
   const a = await loadCatalog(stub, t0 + MINUTE)
   const b = await loadCatalog(stub, t0 + 2 * MINUTE)
   assert.equal(a, b)
-  const afterSixHours = await loadCatalog(stub, t0 + 6 * HOUR + 1)
-  assert.notEqual(afterSixHours, a, "the orbits were fetched again, so the catalog is rebuilt")
+  assert.equal(p.counts.lookups.length, 0)
+  const later = await loadCatalog(stub, t0 + 11 * MINUTE)
+  assert.notEqual(later, a, "read again, and so built again")
+  assert.ok(p.counts.lookups.length > 1)
+  assert.deepEqual(later.satellites.map((s) => s.name), a.satellites.map((s) => s.name))
 })

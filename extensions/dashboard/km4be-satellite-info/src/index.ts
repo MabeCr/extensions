@@ -19,6 +19,7 @@ import type { HookContext, PanelContent, PanelDescriptor, PanelHook, PanelRender
 
 import manifest from "../manifest.json" with { type: "json" }
 import { expireStatus, loadCatalog, loadStatus } from "./data.ts"
+import { listFile, orbitsFile } from "./datasets.ts"
 import type { Satellite } from "./data.ts"
 import { buildDetail, themeOf } from "./detail.ts"
 import type { DetailModel, Tab } from "./detail.ts"
@@ -156,7 +157,7 @@ async function gather(args: PanelRenderArgs, ctx: HookContext): Promise<Ready | 
   const [place, catalog, favorites, reports] = await Promise.all([findPlace(args.config, args.operation, now), loadCatalog(ctx, now), loadFavorites(), loadStatus(ctx, now, hours)])
   if (!place) return { waitingFor: "place", message: "No location. Allow location access, or enter a grid square in this panel's settings." }
   const { satellites, elementsAt } = catalog
-  if (!satellites.length) return { waitingFor: "data", message: "No satellite data yet. Check the connection." }
+  if (!satellites.length) return { waitingFor: "data", message: "No satellite data yet. The app downloads it in the background; check the connection." }
 
   return { place, satellites, elementsAt, minEl, favorites, passes: upcomingPasses(satellites, place, now, minEl, elementsAt), reports, hours }
 }
@@ -186,7 +187,7 @@ export function nowAndNext(passes: SatellitePass[], now: number): string {
 
 /// How old a set of orbits has to be before the pane says so: they are fetched every six hours, so a copy twice that is
 /// stale, which is what an operator offline sees.
-const STALE_ORBITS_MS = 12 * 3_600_000
+const STALE_ORBITS_MS = 7 * 24 * 3_600_000
 
 /// What is left out of a line, in this order, when it will not fit the pane at a size that can be read. The mark is
 /// never in the line: it is an icon, in a column of its own.
@@ -525,5 +526,7 @@ defineExtension({
   ...manifest,
   onActivation({ registerHook }) {
     registerHook("panel", { key: manifest.key, hook: PassesPanel })
+    registerHook("dataFile", { key: listFile.key, hook: listFile })
+    registerHook("dataFile", { key: orbitsFile.key, hook: orbitsFile })
   },
 })
