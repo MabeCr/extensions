@@ -148,7 +148,7 @@ test("the list has titles over its columns, which line up with every row, and it
   const render = await panel()
   const { scene } = await render({ grid: "EL95vs", utc: true, minElevation: 0, listSeconds: true })
   const { columns, hint } = scene.strings
-  // The marks are icons in a column of their own, titled Rpt in the artwork, and not in the text.
+  // The marks are icons in a column of their own, titled Status in the artwork, and not in the text.
   assert.match(columns, /^Sat +Type +Start +Max +Path +Len$/)
   assert.ok(!hint.includes("heard"), "the hint is not the key")
 

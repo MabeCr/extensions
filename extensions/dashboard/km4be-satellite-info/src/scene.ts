@@ -139,13 +139,20 @@ export const MIN_ROW_SIZE = 10
 /// and no larger than the face's own. It can come out below `MIN_ROW_SIZE`, which says the line does not fit at a size that
 /// can be read; `rowSize` is what to draw in then.
 export function fitSize(chars: number, look: ListLook, compact: boolean): number {
-  const room = look.width - densityOf(compact).button - CHEVRON - 4 - markColumn(compact)
+  // The title of the marks' column reaches over the end of the text by as much as it is wider than the icons, less the gap.
+  const reach = Math.max(0, Math.ceil(markTitleWidth(look.size, look.os) / 2 - markSize(compact) / 2) - 4)
+  const room = look.width - densityOf(compact).button - CHEVRON - 4 - markColumn(compact) - reach
   const fits = Math.floor((room / ((chars + 1) * CHAR_RATIO * look.os)) * 2) / 2
   return Math.min(look.size, fits)
 }
 
 /// The room the chevron at the end of a row takes. It is an icon only: the whole line is the hit area.
 export const CHEVRON = 32
+
+/// The title over the column of marks. It is wider than the icons under it, and centered on them, so it reaches over the end of the
+/// text on its left, which has to leave it room.
+export const MARK_TITLE = "Status"
+const markTitleWidth = (size: number, os: number): number => Math.ceil(MARK_TITLE.length * size * os * CHAR_RATIO) + 6
 
 /// The report marks are drawn as icons in a column of their own, between the line and the chevron.
 export const markSize = (compact: boolean): number => (compact ? 16 : 18)
@@ -207,7 +214,7 @@ export interface Model {
 export const MODE_OPTIONS = [
   { label: "All", value: "all" },
   { label: "Favorites", value: "favorites" },
-  { label: "Up now", value: "now" },
+  { label: "Up Now", value: "now" },
 ]
 
 export const STAR_PREFIX = "star:"
@@ -326,7 +333,8 @@ export function buildScene(m: Model): PanelScene {
   // In a wide pane they would otherwise be a hand's breadth from the rows they belong to.
   const chars = Math.max(m.columns.length, ...m.rows.map((r) => r.text.length))
   const textEnd = textX + Math.ceil((chars + 1) * charW)
-  const markX = Math.min(W - pad - CHEVRON - icon - 6, textEnd + 10)
+  const markX = Math.min(W - pad - CHEVRON - icon - 6, textEnd + 18)
+  const titleW = markTitleWidth(m.size, L.os)
   const textW = markX - textX - 4
   const chevronX = W - pad - icon - 8
   const layerText = (value: string, color: string) => ({ value, size: m.size, color, fontFamily: L.family, lineHeight: 1.3 })
@@ -379,7 +387,7 @@ export function buildScene(m: Model): PanelScene {
   layers.push({ id: "columns", x: textX, y: titleY + 2, width: textW, height: titleH - 2, fixed: true, text: layerText("columns", L.title) })
   if (m.legend) {
     // The title of the marks' column, centered over them.
-    layers.push({ id: "markTitle", x: markX + icon / 2 - 20, y: titleY + 2, width: 40, height: titleH - 2, fixed: true, text: { literal: "Rpt", size: m.size, color: L.title, fontFamily: L.family, lineHeight: 1.3, align: "center" } })
+    layers.push({ id: "markTitle", x: markX + icon / 2 - titleW / 2, y: titleY + 2, width: titleW, height: titleH - 2, fixed: true, text: { literal: MARK_TITLE, size: m.size, color: L.title, fontFamily: L.family, lineHeight: 1.3, align: "center" } })
     layers.push({ id: "footBg", x: 0, y: footY, width: W, height: footH, fixed: true, blocksPointer: true, svg: background(footH) })
     layers.push(...keyLayers(m, textX, footY + 6, icon, lineH, W - pad))
   }
