@@ -4,7 +4,12 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
+import manifest from "../manifest.json" with { type: "json" }
+import { statusUrl } from "./data.ts"
 import {
+  CATALOG_URL,
+  REPORTS_URL,
+  wasCorrection,
   errorText,
   cleanCall,
   cleanGrid,
@@ -54,9 +59,9 @@ test("a report's time is the start of its quarter hour, in UTC, as the API takes
   assert.equal(reportedAt(Date.parse("2026-01-05T03:44:59Z")), "2026-01-05T03:30:00Z")
   assert.equal(reportedAt(Date.parse("2026-12-31T23:59:59Z")), "2026-12-31T23:45:00Z")
   assert.equal(reportedAt(Date.parse("2027-01-01T00:00:00Z")), "2027-01-01T00:00:00Z")
-  assert.equal(quarterText(at), "21:00–21:15Z")
-  assert.equal(quarterText(Date.parse("2026-10-22T21:50:00Z")), "21:45–22:00Z")
-  assert.equal(quarterText(Date.parse("2026-10-22T23:50:00Z")), "23:45–00:00Z")
+  assert.equal(quarterText(at), "21:00–21:14Z")
+  assert.equal(quarterText(Date.parse("2026-10-22T21:50:00Z")), "21:45–21:59Z")
+  assert.equal(quarterText(Date.parse("2026-10-22T23:50:00Z")), "23:45–23:59Z")
 })
 
 test("what is sent is the API's own fields, as JSON, with the grid left out when there is none", () => {
@@ -109,10 +114,26 @@ test("what is missing is said, one thing at a time, and an empty grid is fine", 
 })
 
 test("the summary says everything that will be sent", () => {
-  assert.equal(summaryOf(report), "AO-7 [U/v]: heard, 21:00–21:15Z, as KM4BE, EL95vs")
-  assert.equal(summaryOf({ ...report, kind: "notHeard", grid: "" }), "AO-7 [U/v]: not heard, 21:00–21:15Z, as KM4BE, no grid")
+  assert.equal(summaryOf(report), "AO-7 [U/v]: heard, 21:00–21:14Z, as KM4BE, EL95vs")
+  assert.equal(summaryOf({ ...report, kind: "notHeard", grid: "" }), "AO-7 [U/v]: not heard, 21:00–21:14Z, as KM4BE, no grid")
 })
 
 test("a page is read as its words", () => {
   assert.equal(textOf("<html><style>p{}</style><body><p>Thank&nbsp;you</p><script>x()</script><b>KM4BE</b></body>"), "Thank you KM4BE")
+})
+
+test("AMSAT is asked at status.amsat.org, which is where the manifest lets the extension go", () => {
+  for (const url of [statusUrl(24), CATALOG_URL, REPORTS_URL]) {
+    assert.equal(new URL(url).hostname, "status.amsat.org", url)
+    assert.ok(manifest.domains.includes(new URL(url).hostname), `${url} is not in the manifest's domains`)
+  }
+  assert.ok(!manifest.domains.some((d) => d === "amsat.org" || d === "www.amsat.org"), "the old addresses only redirect")
+})
+
+test("a report AMSAT took is a correction when its reply says so", () => {
+  assert.equal(wasCorrection(JSON.stringify({ data: { id: 5, correction: true } })), true)
+  assert.equal(wasCorrection(JSON.stringify({ data: { id: 5, correction: false } })), false)
+  // The reply of API 1.0, which counted what it replaced, and a reply that is not JSON, are not.
+  assert.equal(wasCorrection(JSON.stringify({ data: { id: 5, replaced_count: 1 } })), false)
+  assert.equal(wasCorrection("<html>"), false)
 })

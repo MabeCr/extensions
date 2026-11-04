@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //
 // Telling AMSAT whether a satellite was heard: the report an operator would otherwise
-// fill in at amsat.org/status. AMSAT has a status API for it (amsat.org/status/api), with
+// fill in at status.amsat.org. AMSAT has a status API for it (status.amsat.org/api), with
 // no login: a satellite as AMSAT names it (`AO-7_[U/v]`), what was heard, a time, a
 // callsign, and a grid square if wanted, sent as JSON. It answers 201 when it has the
 // report and a message when it has not, which the old web form's page did not.
@@ -17,8 +17,8 @@ import { onForget } from "./memory.ts"
 import { isOwnVariant } from "./status.ts"
 import type { Kind } from "./status.ts"
 
-export const CATALOG_URL = "https://www.amsat.org/status/api/v1/catalog.php"
-export const REPORTS_URL = "https://www.amsat.org/status/api/v1/reports.php"
+export const CATALOG_URL = "https://status.amsat.org/api/v1/catalog.php"
+export const REPORTS_URL = "https://status.amsat.org/api/v1/reports.php"
 
 /// What the API's `report` field says for each kind of report.
 export const REPORT_VALUES: Record<Kind, string> = { heard: "Heard", telemetry: "Telemetry Only", notHeard: "Not Heard" }
@@ -60,18 +60,19 @@ export function namesFor(all: string[], satellite: Pick<Satellite, "name" | "mod
 const two = (n: number): string => String(n).padStart(2, "0")
 
 /// The start of the quarter hour a time is in, as the API takes it: `2026-10-22T21:00:00Z`. AMSAT keeps a report by the
-/// quarter hour, so a later one for the same satellite and callsign in it replaces the earlier.
+/// quarter hour, so a later one for the same satellite and callsign in it is a correction of the earlier, which is what
+/// its lists then show.
 export function reportedAt(millis: number): string {
   const d = new Date(Math.floor(millis / 900_000) * 900_000)
   return `${d.getUTCFullYear()}-${two(d.getUTCMonth() + 1)}-${two(d.getUTCDate())}T${two(d.getUTCHours())}:${two(d.getUTCMinutes())}:00Z`
 }
 
-/// `21:00–21:15Z`: what the quarter hour of a report is.
+/// `21:00–21:14Z`: what the quarter hour of a report is. AMSAT's periods run :00–:14, :15–:29, :30–:44 and :45–:59
+/// (API 1.1; they ended on the next quarter before).
 export function quarterText(millis: number): string {
   const d = new Date(millis)
   const start = Math.floor(d.getUTCMinutes() / 15) * 15
-  const end = start + 15
-  return `${two(d.getUTCHours())}:${two(start)}–${end === 60 ? two((d.getUTCHours() + 1) % 24) + ":00" : `${two(d.getUTCHours())}:${two(end)}`}Z`
+  return `${two(d.getUTCHours())}:${two(start)}–${two(d.getUTCHours())}:${two(start + 14)}Z`
 }
 
 export interface Report {
@@ -180,6 +181,16 @@ export function errorText(status: number, body: string): string {
   return `AMSAT did not take it (HTTP ${status})${words ? `: ${words}` : ""}.`
 }
 
+/// Whether AMSAT says the report it took corrects an earlier one of the same callsign, satellite and period: the 201's
+/// `data.correction` (API 1.1), which replaced a count of the reports it replaced.
+export function wasCorrection(body: string): boolean {
+  try {
+    return (JSON.parse(body) as { data?: { correction?: unknown } })?.data?.correction === true
+  } catch {
+    return false
+  }
+}
+
 /// Sends the report to AMSAT's status API. A 201 is the report taken; anything else is said as AMSAT said it, so that a
 /// report that did not land is not taken for one that did.
 export async function sendReport(report: Report): Promise<Outcome> {
@@ -190,7 +201,7 @@ export async function sendReport(report: Report): Promise<Outcome> {
       body: JSON.stringify(payloadOf(report)),
     })
     if (response.status !== 201) return { ok: false, message: errorText(response.status, response.body) }
-    return { ok: true, message: `Sent to AMSAT: ${summaryOf(report)}. It is on their status page now.` }
+    return { ok: true, message: `Sent to AMSAT: ${summaryOf(report)}. ${wasCorrection(response.body) ? "It corrects your earlier report for that period, and is on their status page now." : "It is on their status page now."}` }
   } catch (error) {
     host.log(`km4be-satellite-info: ${REPORTS_URL}: ${error instanceof Error ? error.message : String(error)}`)
     return { ok: false, message: "Could not reach AMSAT. Nothing was sent." }
