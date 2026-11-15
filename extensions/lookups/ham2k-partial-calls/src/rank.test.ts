@@ -12,7 +12,7 @@ import type { Sources } from "./rank.ts"
 
 const NOW = Date.UTC(2026, 10, 13)
 const found = (call: string, match: "exact" | "partial" | "oneEdit", count = 1, lastAtMillis: number | null = NOW) => ({ call, match, count, lastAtMillis })
-const scp = (key: string, match: "exact" | "partial" | "oneEdit", data: Record<string, number>) => ({ key, match, data })
+const scp = (key: string, match: "exact" | "partial" | "oneEdit", data: Record<string, number>) => ({ category: "ham2k-partial-calls", key, match, data })
 const none: Sources = { operation: [], contest: [], logs: [], scp: [] }
 const calls = (sources: Partial<Sources>, context: { mode?: string; contestRefTypes?: string[] } = {}) =>
   rankCandidates({ ...none, ...sources }, { contestRefTypes: [], nowMillis: NOW, ...context }).map((c) => c.call)

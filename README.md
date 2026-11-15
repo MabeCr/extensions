@@ -305,8 +305,6 @@ band map:
   arranged by the app's grid (ranked, by source or by match, each call
   optionally explained), and a tap sets the call with `host.updateDraft`;
   the line and the panel share one search per keystroke.
-  Until SDK 1.25 publishes, the API 25 calls and types are `src/sdkGap.ts`
-  copies.
 
 The SVG reference panels carry `ki2d-` keys and install from a file.
 See [dashboard development](extensions/dashboard/README.md) for building and

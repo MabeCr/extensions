@@ -7,6 +7,8 @@
 
 import { host } from "@ham2k/extension-sdk"
 import type {
+  CandidateVerdict,
+  HookContext,
   JSONValue,
   PanelContent,
   PanelDescriptor,
@@ -23,7 +25,6 @@ import type {
 import { compareLetters, letterRuns } from "./letters.ts"
 import type { Letter, LetterKind } from "./letters.ts"
 import type { Candidate } from "./rank.ts"
-import type { CandidateVerdict, HookContext25 } from "./sdkGap.ts"
 import { searchCalls, searchError, typedCall } from "./search.ts"
 import type { Sources } from "./search.ts"
 
@@ -315,7 +316,7 @@ export function matchesScene(
 
 /// The verdicts for [ranked]'s calls, asked in the batches
 /// `scoreCandidates` takes: null where the scorers have nothing to say.
-async function verdictsFor(ranked: Candidate[], qso: Record<string, JSONValue> | undefined, operationUuid: string, ctx: HookContext25) {
+async function verdictsFor(ranked: Candidate[], qso: Record<string, JSONValue> | undefined, operationUuid: string, ctx: HookContext) {
   const score = ctx.scoreCandidates?.bind(ctx)
   if (!score) return null
   const mode = typeof qso?.mode === "string" ? qso.mode : undefined
@@ -341,7 +342,7 @@ export function partialCallsPanel(deps: { t: (ctx: unknown) => Translate; source
     },
 
     async render(args, hookCtx): Promise<PanelContent> {
-      const ctx = hookCtx as HookContext25
+      const ctx = hookCtx
       const t = deps.t(hookCtx)
       const operationUuid = args.operation.uuid as string
       const typed = typedCall(args.qso)

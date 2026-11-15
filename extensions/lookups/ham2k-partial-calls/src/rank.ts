@@ -8,7 +8,7 @@
 // matches the text adds to that, and SCP's own counts order the calls only
 // it knows.
 
-import type { CallMatchKind, FoundCall, FoundLookupRow } from "./sdkGap.ts"
+import type { CallMatchKind, FoundCall, FoundLookupRow } from "@ham2k/extension-sdk"
 
 export interface Sources {
   /// This operation's log.

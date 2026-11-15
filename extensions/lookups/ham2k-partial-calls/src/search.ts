@@ -5,13 +5,12 @@
 // suggestion line and the panel wake for the same keystroke, so the one that
 // asks second takes the first one's answer instead of asking again.
 
-import type { JSONValue } from "@ham2k/extension-sdk"
+import { host } from "@ham2k/extension-sdk"
+import type { FoundCall, FoundLookupRow, HookContext, JSONValue } from "@ham2k/extension-sdk"
 
 import manifest from "../manifest.json" with { type: "json" }
 import { isContestRef, rankCandidates } from "./rank.ts"
 import type { Candidate } from "./rank.ts"
-import { dbLookupFindCalls } from "./sdkGap.ts"
-import type { FoundCall, FoundLookupRow, HookContext25 } from "./sdkGap.ts"
 
 /// The lookup category SCP's rows fill.
 const SCP_CATEGORY = manifest.key
@@ -72,7 +71,7 @@ let shared: { key: string; atMillis: number; search: Promise<Search> } | null = 
 /// Every call [typed] could be, in [operation], likeliest first; null where
 /// the host has no `findCalls`.
 export function searchCalls(
-  ctx: HookContext25,
+  ctx: HookContext,
   sources: Sources,
   args: { operation: Record<string, JSONValue>; typed: string; mode?: string; clock: { nowMillis: number; realNowMillis: number } },
 ): Promise<Search> | null {
@@ -92,7 +91,7 @@ export function searchCalls(
       sources.searchActivity ? findCalls(typed, { operation: operationUuid }) : none,
       sources.searchLogs && refTypes.length > 0 ? findCalls(typed, { refType: refTypes, excludeOperation: operationUuid }) : none,
       sources.searchLogs ? findCalls(typed, { excludeOperation: operationUuid }) : none,
-      sources.useScp ? dbLookupFindCalls(SCP_CATEGORY, typed, { limit: SCP_LIMIT }) : Promise.resolve([] as FoundLookupRow[]),
+      sources.useScp ? host.dbLookupFindCalls(SCP_CATEGORY, typed, { limit: SCP_LIMIT }) : Promise.resolve([] as FoundLookupRow[]),
     ])
     const found = <T,>(result: PromiseSettledResult<T[]>): T[] => (result.status === "fulfilled" ? result.value : [])
     const ranked = rankCandidates(

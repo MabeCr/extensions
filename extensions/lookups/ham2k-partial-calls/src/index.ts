@@ -21,8 +21,6 @@ import type {
 
 import manifest from "../manifest.json" with { type: "json" }
 import { partialCallsPanel } from "./panel.ts"
-import { bindHostCall, draftSuggestions } from "./sdkGap.ts"
-import type { HookContext25, SqliteDataFileDefinition } from "./sdkGap.ts"
 import type { Candidate } from "./rank.ts"
 import { contestRefTypes, searchCalls, searchError, typedCall } from "./search.ts"
 
@@ -41,7 +39,7 @@ const SCORED = 12
 /// Offered: the line under the call info shows what fits of them.
 const OFFERED = 6
 
-const scpDataFile: SqliteDataFileDefinition = {
+const scpDataFile: DataFileDefinition = {
   key: SCP,
   name: (_args: Record<string, never>, ctx: HookContext) => tFor(ctx)("scpName"),
   description: (_args: Record<string, never>, ctx: HookContext) => tFor(ctx)("scpDescription"),
@@ -110,7 +108,7 @@ const offered = new Set<string>()
 
 async function withdraw(operationUuid: string): Promise<void> {
   if (!offered.delete(operationUuid)) return
-  await draftSuggestions.clear({ operationUuid })
+  await host.draftSuggestions.clear({ operationUuid })
 }
 
 /// Posts the likeliest of [all] under the call info for [typed], with what
@@ -121,7 +119,7 @@ async function offer(
   typed: string,
   qso: Record<string, JSONValue> | undefined,
   mode: string | undefined,
-  ctx: HookContext25,
+  ctx: HookContext,
 ): Promise<void> {
   const ranked = all.slice(0, SCORED)
   if (ranked.length === 0) return withdraw(operationUuid)
@@ -139,7 +137,7 @@ async function offer(
     notices: verdicts?.[call]?.notices ?? [],
     alerts: verdicts?.[call]?.alerts ?? [],
   }))
-  const { accepted } = await draftSuggestions.post({ forCall: typed, drafts, operationUuid })
+  const { accepted } = await host.draftSuggestions.post({ forCall: typed, drafts, operationUuid })
   if (accepted) offered.add(operationUuid)
 }
 
@@ -158,7 +156,7 @@ const PartialCallsAssistant: AssistantHook = {
   },
 
   async observe({ operation, qso, clock }: ObserveArgs, hookCtx: HookContext): Promise<void> {
-    const ctx = hookCtx as HookContext25
+    const ctx = hookCtx
     const operationUuid = operation.uuid as string
     if (settings.onlyContests && contestRefTypes(operation).length === 0) return withdraw(operationUuid)
 
@@ -185,12 +183,11 @@ const PartialCallsAssistant: AssistantHook = {
 defineExtension({
   ...manifest,
   async onActivation(api) {
-    bindHostCall((api as { hostCall?: unknown }).hostCall)
     api.registerHook("settingsPanel", { hook: SettingsPanel, key: manifest.key })
     api.registerHook("assistant", { hook: PartialCallsAssistant, key: manifest.key })
     api.registerHook("panel", { hook: partialCallsPanel({ t: (ctx) => tFor(ctx as HookContext), sources: () => settings }), key: manifest.key })
     // After everything else: registering the data file waits on the setting.
     settings = await loadSettings()
-    if (settings.useScp) api.registerHook("dataFile", { hook: scpDataFile as unknown as DataFileDefinition, key: SCP })
+    if (settings.useScp) api.registerHook("dataFile", { hook: scpDataFile, key: SCP })
   },
 })
