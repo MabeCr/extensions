@@ -23,23 +23,24 @@ webhooks, and HamAlert's alerts.
 
 ## What is here
 
-115 extensions, grouped by the manifest's own `category`:
+116 extensions, grouped by the manifest's own `category`:
 
 | directory | manifest `category` | n | of which |
 |---|---|--:|---|
 | `extensions/activities/` | `activity` | 21 | 18 ported built-ins, 3 new programs |
 | `extensions/contests/` | `contest` | 72 | 14 ported built-ins, 4 new contests, 49 QSO party events, 5 park events |
 | `extensions/awards/` | `award` | 2 | 2 new award checklists |
-| `extensions/lookups/` | `lookup` | 7 | 5 ported built-ins, 2 offline callsign sets |
+| `extensions/lookups/` | `lookup` | 8 | 5 ported built-ins, 2 offline callsign sets, Partial Calls |
 | `extensions/spots/` | `spots` | 7 | 1 ported built-in, 6 new spotting sources |
 | `extensions/dashboard/` | `dashboard` | 6 | 1 ported built-in, 2 new panels, 3 SVG reference panels |
-| **total** | | **115** | **39 ported, 73 new, 3 SVG reference panels** |
+| **total** | | **116** | **39 ported, 74 new, 3 SVG reference panels** |
 
-The 39 are the app's own extensions, ported one for one. The 73 are new:
+The 39 are the app's own extensions, ported one for one. The 74 are new:
 three activity programs, four contests and events the app has never shipped
 separately, five state-park
 events, six spotting sources, two award programs, Worked All States and
-DXCC checklists, two offline callsign sets, a rate chart and a band map:
+DXCC checklists, two offline callsign sets, Partial Calls, a rate chart and a
+band map:
 
 - **`ham2k-hota`** — [History on the Air](https://cqhota.app), historic sites
   over 200 years old, written for the catalog from cqhota.app's own
@@ -290,6 +291,22 @@ DXCC checklists, two offline callsign sets, a rate chart and a band map:
   `ham2k-lookup`, so with a network the online record answers first and is
   stored as one, and it answers under its own `source`: the app reads a
   stored answer from `services.ham2k.net` as one that took the network.
+
+- **`ham2k-partial-calls`** offers the calls the text being typed could be,
+  under the call info (`host.draftSuggestions`, extension API 25): the ones
+  worked in this operation, in its contest in past years, anywhere in the
+  logs (`ctx.findCalls`), and on [Super Check Partial](https://www.supercheckpartial.com)'s
+  list of calls active in contests, kept on the device as a `sqlite` data
+  file (SCP.DB, read into the lookups with no mapper) and matched with
+  `host.dbLookupFindCalls`. It offers in contests only unless its Only for
+  Contests setting is off; a contest is a ref the app marks `contest: true`,
+  or any other operation ref that is not an activation. Its panel lists up
+  to 30 of the same calls in any operation, as a scene of drawn cells
+  arranged by the app's grid (ranked, by source or by match, each call
+  optionally explained), and a tap sets the call with `host.updateDraft`;
+  the line and the panel share one search per keystroke.
+  Until SDK 1.25 publishes, the API 25 calls and types are `src/sdkGap.ts`
+  copies.
 
 The SVG reference panels carry `ki2d-` keys and install from a file.
 See [dashboard development](extensions/dashboard/README.md) for building and

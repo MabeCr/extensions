@@ -116,9 +116,14 @@ interface Registration {
 /// registered. A fresh context per bundle, because two extensions loaded into
 /// one would share the SDK's module-level state and the second could read as
 /// working on the strength of the first.
-function loadBundle(source: string): { definition: Record<string, unknown>; registrations: Registration[] } {
+///
+/// Waits for an async onActivation to finish: a hook registered after it
+/// awaits a setting is still one the extension registers, and the app takes it
+/// whenever it lands.
+async function loadBundle(source: string): Promise<{ definition: Record<string, unknown>; registrations: Registration[] }> {
   const registrations: Registration[] = []
   let definition: Record<string, unknown> | undefined
+  let activation: unknown
 
   const sandbox: Record<string, unknown> = {}
   sandbox.globalThis = sandbox
@@ -133,8 +138,8 @@ function loadBundle(source: string): { definition: Record<string, unknown>; regi
     hostCall: async () => ({}),
     defineExtension(def: Record<string, unknown>) {
       definition = def
-      const onActivation = def.onActivation as (api: unknown) => void
-      onActivation({
+      const onActivation = def.onActivation as (api: unknown) => unknown
+      activation = onActivation({
         registerHook(category: string, { hook, key }: { hook: Record<string, unknown>; key: string }) {
           registrations.push({ category, key, hook })
         },
@@ -143,6 +148,7 @@ function loadBundle(source: string): { definition: Record<string, unknown>; regi
   }
 
   runInContext(source, createContext(sandbox))
+  await activation
 
   assert.ok(definition, "the bundle evaluated without ever calling defineExtension")
   return { definition, registrations }
@@ -238,7 +244,7 @@ test("every extension builds, packs and loads", async (t) => {
       assert.ok(typeof packed.manifest.about === "string" && packed.manifest.about.trim(), `${name} has no ABOUT.md`)
       await rm(dirname(outPath), { recursive: true, force: true })
 
-      const { definition, registrations } = loadBundle(bundle)
+      const { definition, registrations } = await loadBundle(bundle)
       assert.equal(definition.key, manifest.key)
 
       // An export must be configurable before an operation is open.
