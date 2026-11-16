@@ -5,7 +5,7 @@
 // horizon at the edge and straight overhead at the center, with the satellite's
 // path across it.
 
-import { lookAt } from "./orbit.ts"
+import { compass, lookAt } from "./orbit.ts"
 import type { Observer, Pass } from "./orbit.ts"
 import type { SatRec } from "./vendor/satellite.js/index.js"
 
@@ -27,6 +27,16 @@ export const READOUT_BOXES = [
 
 /// Where the time and elevation of the moment being scrubbed to go: the bottom left corner, outside the circle.
 export const SCRUB_BOX = { x: 4, y: 336, width: 120, height: 20 }
+
+/// Where the compass heading of the satellite goes, while it is up or being scrubbed to: just above the
+/// time and elevation, in the same bottom left corner. At this height the circle starts at x 126, so the box is clear of it.
+export const HEADING_BOX = { x: 4, y: 320, width: 120, height: 16 }
+
+/// An azimuth as a compass heading, like `Az 245° WSW`.
+export function headingText(azimuth: number): string {
+  const a = Math.round((((azimuth % 360) + 360) % 360)) % 360
+  return `Az ${a}° ${compass(a)}`
+}
 
 /// Where the satellite is in the sky, as an azimuth and an elevation.
 export interface SkyLook {

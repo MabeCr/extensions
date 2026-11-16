@@ -15,7 +15,7 @@ import { liveDoppler, RADIO_LINES, radioLines, shiftText } from "./radio.ts"
 import type { LiveShift } from "./radio.ts"
 import { placeLabels } from "./labels.ts"
 import type { Box, Disc } from "./labels.ts"
-import { arrowSpot, compassLayers, DEFAULT_SKY_COLORS, DOT_RADIUS, liveSpot, READOUT_BOXES, SCRUB_BOX, SKY_SIZE, skySvg, skyTrack, skyXY } from "./sky.ts"
+import { arrowSpot, compassLayers, DEFAULT_SKY_COLORS, DOT_RADIUS, HEADING_BOX, headingText, liveSpot, READOUT_BOXES, SCRUB_BOX, SKY_SIZE, skySvg, skyTrack, skyXY } from "./sky.ts"
 import { buildScrub, hideWhileScrubbing } from "./scrub.ts"
 import type { Scrub } from "./scrub.ts"
 import type { SkyLook } from "./sky.ts"
@@ -70,6 +70,13 @@ export function readoutLayers(live: { down?: LiveShift; up?: LiveShift } | null,
   return layers
 }
 
+/// The satellite's compass heading right now, in the bottom left corner of the plot beside the time readout's place,
+/// to go with the elevation written by the satellite. Nothing when it is not up.
+export function headingLayers(here: SkyLook | null | undefined, color: string) {
+  if (!here) return []
+  return [{ id: "azNow", ...HEADING_BOX, text: { literal: headingText(here.azimuth), size: 12, color, align: "start" as const, fontWeight: 600 } }]
+}
+
 /// The three labels on the plot, each beside its dot and clear of everything else drawn there:
 /// the dots, the ring where the satellite is now, the arrowhead, the compass letters, and each
 /// other. The rise and set go first, being the longer, and so have the most choice of place.
@@ -104,6 +111,7 @@ export function plotLabels(
 
   const boxes: Box[] = letters.map((l) => ({ x: l.x, y: l.y, width: l.width, height: l.height }))
   if (readout || scrub) boxes.push(...READOUT_BOXES)
+  if (live || scrub) boxes.push(HEADING_BOX)
   if (scrub) boxes.push(SCRUB_BOX)
   const placed = placeLabels(
     [
@@ -177,7 +185,8 @@ export function buildDetail(
   const here = underWay && satrec ? lookAt(satrec, observer, now) : null
   const live = underWay ? liveDoppler(satellite, observer, now) : null
   const scrub = buildScrub(satellite, observer, pass, track, utc, theme.text, theme.sky.path)
-  const readout = scrub ? hideWhileScrubbing(readoutLayers(live, theme.text), scrub.rest) : readoutLayers(live, theme.text)
+  const shown = [...readoutLayers(live, theme.text), ...headingLayers(here, theme.text)]
+  const readout = scrub ? hideWhileScrubbing(shown, scrub.rest) : shown
   const radio = radioLines(satellite, observer, pass, now)
   while (radio.length < RADIO_LINES) radio.push("")
   const compassLetters = compassLayers(theme.text)
@@ -210,7 +219,7 @@ export function buildDetail(
         now,
         compassLetters,
         here ?? undefined,
-        readout.length > 0,
+        readout.some((l) => l.id !== "azNow"),
         scrub !== null,
       ),
       readout,

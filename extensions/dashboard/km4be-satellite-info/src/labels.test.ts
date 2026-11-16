@@ -12,7 +12,7 @@ import { labelWidth, LABEL_HEIGHT, MARGIN, placeLabels } from "./labels.ts"
 import type { Box, Disc } from "./labels.ts"
 import { findPasses, lookAt, satrecFromOmm } from "./orbit.ts"
 import type { Observer, Omm } from "./orbit.ts"
-import { arrowSpot, compassLayers, DOT_RADIUS, READOUT_BOXES, skyTrack, skyXY } from "./sky.ts"
+import { arrowSpot, compassLayers, DOT_RADIUS, HEADING_BOX, READOUT_BOXES, skyTrack, skyXY } from "./sky.ts"
 import type { SkyLook } from "./sky.ts"
 
 // --- what a label must keep clear of, worked out here and not by the code under test -------
@@ -39,6 +39,7 @@ function problems(pass: Parameters<typeof plotLabels>[1], labels: ReturnType<typ
   const letters = compassLayers("#000").map((l) => ({ name: `letter ${l.text.literal}`, x: l.x, y: l.y, width: l.width, height: l.height }))
   // The Doppler readout in the top corners is on the plot only while the satellite is.
   if (here) READOUT_BOXES.forEach((b, i) => letters.push({ name: `readout ${i}`, ...b }))
+  if (here) letters.push({ name: "heading", ...HEADING_BOX })
   void track
 
   labels.forEach((label, i) => {
