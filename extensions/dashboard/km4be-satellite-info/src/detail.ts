@@ -15,7 +15,7 @@ import { liveDoppler, RADIO_LINES, radioLines, shiftText } from "./radio.ts"
 import type { LiveShift } from "./radio.ts"
 import { placeLabels } from "./labels.ts"
 import type { Box, Disc } from "./labels.ts"
-import { arrowSpot, compassLayers, DEFAULT_SKY_COLORS, DOT_RADIUS, HEADING_BOX, headingText, liveSpot, READOUT_BOXES, SCRUB_BOX, SKY_SIZE, skySvg, skyTrack, skyXY } from "./sky.ts"
+import { arrowSpot, compassLayers, DEFAULT_SKY_COLORS, DOT_RADIUS, ELEVATION_BOX, elevationText, HEADING_BOX, headingText, liveSpot, READOUT_BOXES, SCRUB_BOX, SKY_SIZE, skySvg, skyTrack, skyXY } from "./sky.ts"
 import { buildScrub, hideWhileScrubbing } from "./scrub.ts"
 import type { Scrub } from "./scrub.ts"
 import type { SkyLook } from "./sky.ts"
@@ -44,7 +44,7 @@ export interface DetailModel {
   /// The slider over the plot that scrubs along the pass, and what it draws; null with no orbit to work from.
   scrub: Scrub | null
   /// The sky plot, with the compass letters, the times of rise, peak and set, and, while it is
-  /// under way, the satellite's elevation and the Doppler shift written on it.
+  /// under way, the satellite's elevation and heading in the bottom left corner and the Doppler shift at the top.
   sky: {
     svg: string
     compass: ReturnType<typeof compassLayers>
@@ -70,20 +70,23 @@ export function readoutLayers(live: { down?: LiveShift; up?: LiveShift } | null,
   return layers
 }
 
-/// The satellite's compass heading right now, in the bottom left corner of the plot beside the time readout's place,
-/// to go with the elevation written by the satellite. Nothing when it is not up.
-export function headingLayers(here: SkyLook | null | undefined, color: string) {
+/// Where the satellite is right now, as numbers: its elevation over its compass heading, together in the bottom
+/// left corner of the plot. The satellite on its path is the picture of the same thing. Nothing when it is not up.
+export function positionLayers(here: SkyLook | null | undefined, color: string) {
   if (!here) return []
-  return [{ id: "azNow", ...HEADING_BOX, text: { literal: headingText(here.azimuth), size: 12, color, align: "start" as const, fontWeight: 600 } }]
+  const line = (id: string, box: typeof HEADING_BOX, literal: string) => ({ id, ...box, text: { literal, size: 12, color, align: "start" as const, fontWeight: 600 } })
+  return [line("elNow", ELEVATION_BOX, elevationText(here.elevation)), line("azNow", HEADING_BOX, headingText(here.azimuth))]
 }
 
-/// The three labels on the plot, each beside its dot and clear of everything else drawn there:
+const POSITION_IDS = ["elNow", "azNow"]
+
+/// The three labels on the plot (the satellite itself has none: its numbers are in the corner), each beside its dot and clear of everything else drawn there:
 /// the dots, the ring where the satellite is now, the arrowhead, the compass letters, and each
 /// other. The rise and set go first, being the longer, and so have the most choice of place.
 export function plotLabels(
   track: ReturnType<typeof skyTrack>,
   pass: Pass,
-  texts: { rise: string; peak: string; set: string; now?: string },
+  texts: { rise: string; peak: string; set: string },
   theme: Theme,
   now: number | undefined,
   letters: ReturnType<typeof compassLayers>,
@@ -106,17 +109,15 @@ export function plotLabels(
   if (arrow) discs.push({ ...arrow.p, r: DOT_RADIUS.arrow })
 
   // With the satellite on top of the peak, the peak's dot is under it and its label would only say what the
-  // satellite's own says: the elevation. Left out, then, and not pushed out beside the icon.
+  // corner says: the elevation. Left out, then, and not pushed out beside the icon.
   const peakCovered = live !== null && Math.hypot(live.x - peak.x, live.y - peak.y) < DOT_RADIUS.now + DOT_RADIUS.peak
 
   const boxes: Box[] = letters.map((l) => ({ x: l.x, y: l.y, width: l.width, height: l.height }))
   if (readout || scrub) boxes.push(...READOUT_BOXES)
-  if (live || scrub) boxes.push(HEADING_BOX)
+  if (live || scrub) boxes.push(ELEVATION_BOX, HEADING_BOX)
   if (scrub) boxes.push(SCRUB_BOX)
   const placed = placeLabels(
     [
-      // The satellite's own label first: it is what is being watched, so it has the most choice of place.
-      ...(live && texts.now ? [{ id: "nowAt", text: texts.now, x: live.x, y: live.y, r: DOT_RADIUS.now, color: theme.text }] : []),
       { id: "riseAt", text: texts.rise, ...rise, r: DOT_RADIUS.end, color: theme.sky.rise },
       { id: "setAt", text: texts.set, ...set, r: DOT_RADIUS.end, color: theme.sky.set },
       ...(peakCovered ? [] : [{ id: "peakAt", text: texts.peak, ...peak, r: DOT_RADIUS.peak, color: theme.text }]),
@@ -125,8 +126,8 @@ export function plotLabels(
     boxes,
     SKY_SIZE,
   )
-  // Placed in order of choice, listed in the order of the pass: rise, peak, set, and where it is now.
-  return ["riseAt", "peakAt", "setAt", "nowAt"].flatMap((id) => placed.filter((l) => l.id === id))
+  // Placed in order of choice, listed in the order of the pass: rise, peak, set.
+  return ["riseAt", "peakAt", "setAt"].flatMap((id) => placed.filter((l) => l.id === id))
 }
 
 /// What the plot is drawn in: the host's own colors when it reports them, so the plot
@@ -185,7 +186,7 @@ export function buildDetail(
   const here = underWay && satrec ? lookAt(satrec, observer, now) : null
   const live = underWay ? liveDoppler(satellite, observer, now) : null
   const scrub = buildScrub(satellite, observer, pass, track, utc, theme.text, theme.sky.path)
-  const shown = [...readoutLayers(live, theme.text), ...headingLayers(here, theme.text)]
+  const shown = [...readoutLayers(live, theme.text), ...positionLayers(here, theme.text)]
   const readout = scrub ? hideWhileScrubbing(shown, scrub.rest) : shown
   const radio = radioLines(satellite, observer, pass, now)
   while (radio.length < RADIO_LINES) radio.push("")
@@ -214,12 +215,12 @@ export function buildDetail(
       labels: plotLabels(
         track,
         pass,
-        { rise: exact(pass.aos), peak: deg(pass.maxElevation), set: exact(pass.los), now: here ? deg(here.elevation) : undefined },
+        { rise: exact(pass.aos), peak: deg(pass.maxElevation), set: exact(pass.los) },
         theme,
         now,
         compassLetters,
         here ?? undefined,
-        readout.some((l) => l.id !== "azNow"),
+        readout.some((l) => !POSITION_IDS.includes(l.id)),
         scrub !== null,
       ),
       readout,

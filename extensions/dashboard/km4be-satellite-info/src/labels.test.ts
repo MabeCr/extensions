@@ -12,7 +12,7 @@ import { labelWidth, LABEL_HEIGHT, MARGIN, placeLabels } from "./labels.ts"
 import type { Box, Disc } from "./labels.ts"
 import { findPasses, lookAt, satrecFromOmm } from "./orbit.ts"
 import type { Observer, Omm } from "./orbit.ts"
-import { arrowSpot, compassLayers, DOT_RADIUS, HEADING_BOX, READOUT_BOXES, skyTrack, skyXY } from "./sky.ts"
+import { arrowSpot, compassLayers, DOT_RADIUS, ELEVATION_BOX, HEADING_BOX, READOUT_BOXES, skyTrack, skyXY } from "./sky.ts"
 import type { SkyLook } from "./sky.ts"
 
 // --- what a label must keep clear of, worked out here and not by the code under test -------
@@ -39,7 +39,7 @@ function problems(pass: Parameters<typeof plotLabels>[1], labels: ReturnType<typ
   const letters = compassLayers("#000").map((l) => ({ name: `letter ${l.text.literal}`, x: l.x, y: l.y, width: l.width, height: l.height }))
   // The Doppler readout in the top corners is on the plot only while the satellite is.
   if (here) READOUT_BOXES.forEach((b, i) => letters.push({ name: `readout ${i}`, ...b }))
-  if (here) letters.push({ name: "heading", ...HEADING_BOX })
+  if (here) letters.push({ name: "elevation", ...ELEVATION_BOX }, { name: "heading", ...HEADING_BOX })
   void track
 
   labels.forEach((label, i) => {
@@ -134,7 +134,7 @@ test("across thousands of passes, no label is ever on a dot, the ring, the arrow
           const labels = plotLabels(
             track,
             pass,
-            { rise: "12:45:09Z", peak: "81°", set: "12:57:41Z", ...(here ? { now: "42°" } : {}) },
+            { rise: "12:45:09Z", peak: "81°", set: "12:57:41Z" },
             DEFAULT_THEME,
             now,
             compassLayers("#000"),
@@ -147,16 +147,15 @@ test("across thousands of passes, no label is ever on a dot, the ring, the arrow
           if (found.length) bad.push(`${omm.INCLINATION}°/${omm.MEAN_MOTION} node ${omm.RA_OF_ASC_NODE} at ${observer.lat},${observer.lon}: ${found.map((f) => `${f.label} on ${f.what}`).join(", ")}`)
           // How natural: the label is still near its dot.
           const dots: Record<string, { x: number; y: number }> = { riseAt: skyXY(pass.aosAzimuth, 0), setAt: skyXY(pass.losAzimuth, 0), peakAt: skyXY(pass.maxAzimuth, pass.maxElevation) }
-          if (here) dots.nowAt = skyXY(here.azimuth, here.elevation)
-          // A label for each dot, and one for the satellite when it is up; the peak's is left out while the satellite covers it.
+          // A label for each dot; the peak's is left out while the satellite covers it. The satellite has none: its numbers are in the corner.
           const covered = here ? Math.hypot(skyXY(here.azimuth, here.elevation).x - dots.peakAt.x, skyXY(here.azimuth, here.elevation).y - dots.peakAt.y) < DOT_RADIUS.now + DOT_RADIUS.peak : false
-          assert.equal(labels.length, 3 + (here ? 1 : 0) - (covered ? 1 : 0))
+          assert.equal(labels.length, 3 - (covered ? 1 : 0))
           assert.equal(labels.some((l) => l.id === "peakAt"), !covered)
           total += labels.length
           for (const l of labels) {
             const d = dots[l.id]
             // How far the text is from the edge of what it labels: the dots are 6 across from their centers, the satellite 19.
-            const away = nearest(d.x, d.y, { x: l.x, y: l.y, width: l.width, height: l.height }) - (l.id === "nowAt" ? DOT_RADIUS.now : l.id === "peakAt" ? DOT_RADIUS.peak : DOT_RADIUS.end)
+            const away = nearest(d.x, d.y, { x: l.x, y: l.y, width: l.width, height: l.height }) - (l.id === "peakAt" ? DOT_RADIUS.peak : DOT_RADIUS.end)
             if (away > 14) far += 1
             around.add(l.text.align)
           }
