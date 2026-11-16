@@ -33,12 +33,10 @@
   "overlay_CLASSIC": "Clásico",
   "overlay_ROOKIE": "Novato",
   "overlay_YOUTH": "Juvenil",
-  "operatorsLabel": "Operadores",
-  "operatorsPlaceholder": "ej. K1ABC W2DEF (multi-operador)",
-  "clubLabel": "Club",
-  "clubPlaceholder": "Nombre completo del club — en blanco usa el de tu perfil",
   "locationLabel": "Nuestro Estado / Provincia / Sección (EE. UU. y Canadá)",
   "locationPlaceholder": "ej. MA, WMA, ON",
   "operator_MULTI-UNLIMITED": "Multi-Transmisor",
-  "overlay_TB-WIRES": "Tribanda / Alambres"
+  "overlay_TB-WIRES": "Tribanda / Alambres",
+  "prefixOne": "1 prefijo",
+  "prefixMany": "{{formatted}} prefijos"
 }

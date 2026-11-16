@@ -37,7 +37,7 @@ import type {
 } from "@ham2k/extension-sdk"
 
 import { rulesNote, withRules, type ContestRules } from "@ham2k/lib-contest-rules"
-import { ALL_SECTIONS, CALL_AREA_FOR_SECTION, PREFIX_TO_LOCATION } from "./sections.ts"
+import { ALL_SECTIONS, CALL_AREA_FOR_SECTION, PREFIX_TO_LOCATION, stateForSection } from "./sections.ts"
 import { CLASS_REGEX, OBJECTIVE_KEYS, TYPE, WFDScorer, contestTitle, refOfType } from "./scorer.ts"
 import { nextRunningYear, relevanceFor, winterFieldDayDate } from "./schedule.ts"
 import { tFor } from "./i18n.ts"
@@ -279,7 +279,16 @@ const ActivityHook = {
     if (!exchange) return null
 
     const their = ((args.qso.their as Record<string, JSONValue>) ?? {})
-    return { their: { ...their, exchange } as unknown as JSONValue }
+    // Their State, from the section they sent: a station's own word on where
+    // it is, ahead of whatever a lookup guessed. Re-filled on every save, so
+    // fixing a mistyped section fixes the State with it. `MX`, `DX` and a
+    // section that names no single state leave the State alone.
+    const section = str(qsoRef?.location).toUpperCase()
+    const state = stateForSection(section, str(their.call), str(their.state).toUpperCase())
+    // And their ARRL Section itself, where ADIF's ARRL_SECT reads it in the
+    // files this extension does not write: a POTA activation's, a SOTA one's.
+    const arrlSection = section in ALL_SECTIONS && section !== their.arrlSection ? { arrlSection: section } : {}
+    return { their: { ...their, exchange, ...(state ? { state } : {}), ...arrlSection } as unknown as JSONValue }
   },
 
   /// Two fields per QSO, both writing to the same ref, which the core folds

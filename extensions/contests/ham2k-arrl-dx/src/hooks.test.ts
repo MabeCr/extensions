@@ -65,3 +65,14 @@ test("the setup form's rules line follows the operator class", async () => {
   assert.deepEqual(shownFor("SINGLE-OP"), ["🔴 Assistance: OFF, 🟢 Self-spotting: ON"])
   assert.deepEqual(shownFor("MULTI-ONE"), ["🟢 Assistance: ON, 🟢 Self-spotting: ON"])
 })
+
+test("a DX station's received state or province fills their State; a W/VE station's received power does not", async () => {
+  const save = async (stationType: string, theirExchange: string) =>
+    ((await contest.runHook("activity", "processQsoBeforeSave", {
+      operation: fixtureOperation({ stationCall: "N0DEV", refs: [{ type: "arrl-dx", mode: "CW", stationType }] }),
+      qso: { their: { call: "W1AW" }, refs: [{ type: "arrl-dx", theirExchange }] },
+    })) as { their?: Record<string, unknown> } | null)?.their
+
+  assert.deepEqual(await save("dx", "CT"), { exchange: "CT", state: "CT" })
+  assert.deepEqual(await save("wve", "100"), { exchange: "100" })
+})

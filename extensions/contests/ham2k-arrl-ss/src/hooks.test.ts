@@ -11,7 +11,7 @@ import { fixtureOperation, loadExtension } from "./sdkGapTesting.ts"
 const contest = await loadExtension(() => import("./index.ts"), { hostCalls: { getSettings: () => ({ operatorSection: 'eny' }) } })
 
 type Suggestion = { mode?: string; name: string; label: string; shortLabel: string; relevance: number }
-type Control = { key: string; input: Record<string, unknown> & { form?: { elements: { type?: string; key?: string; value?: unknown }[] } } }
+type Control = { key: string; label?: string; input: Record<string, unknown> & { form?: { elements: { type?: string; key?: string; value?: unknown }[] } } }
 
 const configured = fixtureOperation({
   stationCall: 'N0DEV',
@@ -46,7 +46,7 @@ test("the setup seeds our section from the profile", async () => {
   const controls = (await contest.runHook("activity", "operationControls", { operation: fixtureOperation() })) as Control[]
   const elements = controls[0].input.form!.elements
   // The rules line, one note per verdict, sits between the exchange and the rest of the entry.
-  assert.deepEqual(elements.map((e) => e.key ?? e.type), ['mode', 'entry', 'check', 'section', 'markdown', 'markdown', 'operators', 'club'])
+  assert.deepEqual(elements.map((e) => e.key ?? e.type), ['mode', 'entry', 'check', 'section', 'markdown', 'markdown', 'club'])
   assert.equal(elements.find((e) => e.key === 'section')!.value, 'ENY')
 })
 
@@ -66,25 +66,59 @@ test("logging asks for our serial, then theirs, precedence, check and section, i
   assert.deepEqual(controls.map((c) => c.key), [
     'arrl-ss/ourSerial', 'arrl-ss/theirSerial', 'arrl-ss/theirPrecedence', 'arrl-ss/theirCheck', 'arrl-ss/theirSection',
   ])
+  assert.deepEqual(controls.slice(0, 2).map((c) => c.label), ['Our #', 'Their #'])
   assert.equal(controls[0].input.kind, 'serial')
   assert.deepEqual(controls[4].input.preferredCodes, ['CT'])
   // Off-contest, nothing.
   assert.deepEqual(await contest.runHook("activity", "loggingControls", { operation: fixtureOperation() }), [])
 })
 
-test("saving projects both exchanges where the QSO row and plain ADIF can see them", async () => {
+test("saving projects only their exchange, so the QSO row shows what was copied rather than the same sent exchange on every line", async () => {
   const patch = await contest.runHook("activity", "processQsoBeforeSave", {
     operation: configured,
     qso: { their: { call: 'W9JJ' }, refs: [{ type: 'arrl-ss', ourSerial: 123, theirSerial: '043', theirPrecedence: 'm', theirCheck: '31', theirSection: 'il' }] },
   })
-  assert.deepEqual(patch, { our: { exchange: '123 A 79 CT' }, their: { exchange: '43 M 31 IL' } })
+  assert.deepEqual(patch, { their: { exchange: '43 M 31 IL', state: 'IL', arrlSection: 'IL' } })
 
-  // Nothing of theirs entered yet: only ours projects.
+  // Nothing of theirs entered yet: nothing projects.
   const ours = await contest.runHook("activity", "processQsoBeforeSave", {
     operation: configured,
     qso: { their: { call: 'W9JJ' }, refs: [{ type: 'arrl-ss', ourSerial: 7 }] },
   })
-  assert.deepEqual(ours, { our: { exchange: '7 A 79 CT' } })
+  assert.equal(ours, null)
+})
+
+test("their State is filled from the section they sent", async () => {
+  const stateFor = async (call: string, section: string, state?: string) => {
+    const patch = (await contest.runHook("activity", "processQsoBeforeSave", {
+      operation: configured,
+      qso: { their: { call, ...(state ? { state } : {}) }, refs: [{ type: 'arrl-ss', theirSerial: '1', theirPrecedence: 'A', theirCheck: '79', theirSection: section }] },
+    })) as { their: Record<string, string> }
+    return patch.their.state
+  }
+  // A section that is its state, one of a split state's, and a Canadian one.
+  assert.equal(await stateFor('W1AW', 'CT'), 'CT')
+  assert.equal(await stateFor('K6ABC', 'sdg'), 'CA')
+  assert.equal(await stateFor('W2ABC', 'NLI'), 'NY')
+  assert.equal(await stateFor('VE3ABC', 'GH'), 'ON')
+  assert.equal(await stateFor('VE2ABC', 'QC'), 'QC')
+  // The section is the station's own word, so it replaces a lookup's state...
+  assert.equal(await stateFor('K6ABC', 'SDG', 'NY'), 'CA')
+  // ...and one already right is left alone.
+  assert.equal(await stateFor('K6ABC', 'SDG', 'CA'), undefined)
+  // MDC is Maryland and DC both: a DC station stays DC.
+  assert.equal(await stateFor('W3ABC', 'MDC'), 'MD')
+  assert.equal(await stateFor('W3ABC', 'MDC', 'DC'), undefined)
+  // PAC is Hawaii, but not for a Pacific possession.
+  assert.equal(await stateFor('KH6ABC', 'PAC'), 'HI')
+  assert.equal(await stateFor('AH6Y', 'PAC'), 'HI')
+  assert.equal(await stateFor('KH2ABC', 'PAC'), undefined)
+  // No single state: Puerto Rico, the Virgin Islands, the Territories.
+  for (const [call, section] of [['KP4ABC', 'PR'], ['KP2ABC', 'VI'], ['VY1ABC', 'TER']]) {
+    assert.equal(await stateFor(call, section), undefined, section)
+  }
+  // Nor does a section that isn't one.
+  assert.equal(await stateFor('W9JJ', 'ILL'), undefined)
 })
 
 test("a part that isn't a valid value is kept as typed, so the exchange never looks complete when it isn't", async () => {
@@ -92,7 +126,7 @@ test("a part that isn't a valid value is kept as typed, so the exchange never lo
     operation: fixtureOperation({ refs: [{ type: 'arrl-ss', mode: 'CW', entry: 'SO-LOW', check: '1979', section: 'NYC' }] }),
     qso: { their: { call: 'W9JJ' }, refs: [{ type: 'arrl-ss', ourSerial: 1, theirSerial: '43', theirPrecedence: 'x', theirCheck: '7', theirSection: 'ill' }] },
   })
-  assert.deepEqual(patch, { our: { exchange: '1 A 1979 NYC' }, their: { exchange: '43 X 7 ILL' } })
+  assert.deepEqual(patch, { their: { exchange: '43 X 7 ILL' } })
 })
 
 test("an unknown section is flagged in the entry field rather than accepted", async () => {
@@ -121,4 +155,63 @@ test("the setup form's rules line follows the entry", async () => {
   const shownFor = (entry: string) => notes.filter((el) => el.visibleWhen?.equals.includes(entry)).map((el) => el.text)
   assert.deepEqual(shownFor("SO-HIGH"), ["🔴 Assistance: OFF, 🟢 Self-spotting: ON"])
   assert.deepEqual(shownFor("MULTI-LOW"), ["🟢 Assistance: ON, 🟢 Self-spotting: ON"])
+})
+
+/// How the app compiles an exchange pattern: anchored, case-insensitive.
+const anchored = (source: unknown) => new RegExp(`^(?:${source as string})$`, 'i')
+
+test("our serial carries the rest of what we send, and sits out the Space walk", async () => {
+  const controls = (await contest.runHook("activity", "loggingControls", { operation: configured, qso: { their: { call: 'W1AW' } } })) as Control[]
+  const ours = controls.find((c) => c.key === 'arrl-ss/ourSerial')! as Control & { skipFocus?: boolean }
+  // Precedence, OUR CALL, check, section: what goes out after the number, in
+  // the order it is sent. Without the call the operator reads a wrong exchange.
+  assert.equal(ours.input.ourExchange, 'A N0DEV 79 CT')
+  // Seen only while no number is held, so it says a number goes first; the
+  // host adds our exchange after it while the operator includes it.
+  assert.equal(ours.input.placeholder, '#')
+  // The sequence fills it; Space and Tab go from the call to their exchange.
+  assert.equal(ours.skipFocus, true)
+})
+
+test("our serial's field grows a digit once the series passes 999", async () => {
+  const qsoWith = (serial: number) => ({ refs: [{ type: 'arrl-ss', ourSerial: serial }] })
+  const widthAt = async (serials: number[]) => {
+    const controls = (await contest.runHook(
+      "activity",
+      "loggingControls",
+      { operation: { ...configured, uuid: 'op-1' }, qso: { their: { call: 'W1AW' } } },
+      { ctx: { getQsos: async () => serials.map(qsoWith) } as never },
+    )) as Control[]
+    return (controls.find((c) => c.key === 'arrl-ss/ourSerial')!.input.chars as { min: number }).min
+  }
+  // 3 digits for the first 999 contacts gives the row's room to the fields
+  // still to be copied; the 1000th must not be clipped.
+  assert.equal(await widthAt([]), 3)
+  assert.equal(await widthAt([998]), 3)
+  assert.equal(await widthAt([999]), 4)
+})
+
+test("their exchange is one group typed straight through: 4A20ENY splits into its four parts", async () => {
+  const controls = (await contest.runHook("activity", "loggingControls", { operation: configured, qso: { their: { call: 'W1AW' } } })) as (Control & { group?: string })[]
+  const their = controls.filter((c) => c.key !== 'arrl-ss/ourSerial')
+  assert.deepEqual(their.map((c) => c.group), ['their', 'their', 'their', 'their'])
+  const [serial, precedence, check] = their.map((c) => c.input)
+  // A letter ends the serial and goes on to the precedence…
+  assert.ok(!anchored(serial.autoadvanceBefore).test('4'))
+  assert.ok(anchored(serial.autoadvanceBefore).test('4A'))
+  // …a valid precedence moves on by itself…
+  assert.ok(anchored(precedence.autoadvanceWhen).test('a'))
+  assert.ok(!anchored(precedence.autoadvanceWhen).test('X'))
+  // …and so does the check, at two digits.
+  assert.ok(!anchored(check.autoadvanceWhen).test('2'))
+  assert.ok(anchored(check.autoadvanceWhen).test('20'))
+})
+
+test("editing a contact that holds a copy of ours clears it", async () => {
+  const patch = await contest.runHook("activity", "processQsoBeforeSave", {
+    operation: configured,
+    qso: { their: { call: 'W9JJ' }, our: { exchange: '123 A 79 CT' }, refs: [{ type: 'arrl-ss', ourSerial: 124, theirSerial: '43', theirPrecedence: 'M', theirCheck: '31', theirSection: 'IL' }] },
+  })
+  // Left alone, the row would keep showing 123 after the serial became 124.
+  assert.deepEqual(patch, { their: { exchange: '43 M 31 IL', state: 'IL', arrlSection: 'IL' }, our: { exchange: '' } })
 })

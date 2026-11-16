@@ -2,7 +2,7 @@
   "key": "ham2k-pota",
   "name": "POTA: Parks on the Air",
   "shortName": "POTA",
-  "version": "0.2.14",
+  "version": "0.2.18",
   "description": "Activate and chase parks worldwide; spots on pota.app",
   "category": "activity",
   "icon": "pine-tree",
@@ -34,7 +34,8 @@
   "domains": [
     "api.pota.app",
     "devapi.pota.app",
-    "pota.app"
+    "pota.app",
+    "services.ham2k.net"
   ],
   "sharedDependencies": {
     "@ham2k/lib-callsigns": "^1.0.0",

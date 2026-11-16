@@ -95,6 +95,24 @@ test('the summary names the session and its score, over the arithmetic', () => {
   assert.equal((summary.longSummary as string).split('\n')[0], '2 QSOs, 2 pts × 2 mults')
 })
 
+test('each callsign counts on the band it was first worked on, so the band lines add up', () => {
+  // The multiplier is whole-session; crediting a callsign on every band it is
+  // worked on would show more callsigns across the bands than the score
+  // multiplies by. And 40m reads above 20m whichever was worked first.
+  const { sheet } = run([qso('W1AW', '20m'), qso('K5XYZ', '20m'), qso('W1AW', '40m'), qso('N2ABC', '40m')])
+  const summary = CWTScorer.summarizeScore({ scoresheet: sheet, operation, ref: sessionRef, scope: 'operation' }, ctx).cwt
+  const lines = (summary.longSummary as string).split('\n').filter((line) => line.startsWith('**'))
+  assert.deepEqual(lines, [
+    '**160m**: —',
+    '**80m**: —',
+    '**40m**: 2 QSOs, 2 pts, 1 mult',
+    '**20m**: 2 QSOs, 2 pts, 2 mults',
+    '**15m**: —',
+    '**10m**: —',
+  ])
+  assert.equal(summary.mults, 3)
+})
+
 test('offers no per-day summary', () => {
   // Multipliers are counted over the whole session, so a day's share of the
   // score is not a number the contest defines.

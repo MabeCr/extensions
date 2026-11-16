@@ -13,5 +13,10 @@
   "parkActivatedMany": "{{formatted}} parks activated",
   "parkWorkedOne": "1 park worked",
   "parkWorkedMany": "{{formatted}} parks worked",
-  "powerMultiplier": "{{formatted}} power"
+  "powerMultiplier": "{{formatted}} power",
+  "activatingHeading": "Activating",
+  "parkContacts": "{{park}} ({{formatted}})",
+  "parkContactsOf": "{{park}} ({{formatted}} of {{needed}})",
+  "bonusStationHeading": "Bonus station",
+  "parksWorkedOf": "{{worked}} of {{total}} parks worked"
 }

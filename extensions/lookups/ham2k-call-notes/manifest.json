@@ -1,7 +1,7 @@
 {
   "key": "ham2k-call-notes",
   "name": "Callsign Notes",
-  "version": "0.2.2",
+  "version": "0.2.4",
   "api": 1,
   "description": "Annotates calls from shared notes files",
   "category": "lookup",
@@ -23,6 +23,7 @@
   "domains": [
     "ham2k.com"
   ],
+  "requiresAnyDataFileUrl": true,
   "sharedDependencies": {
     "@ham2k/lib-callsigns": "^1.0.0",
     "@ham2k/lib-country-files": "^1.0.0",

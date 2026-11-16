@@ -38,7 +38,8 @@
 
 import { fmtInteger } from "@ham2k/lib-format-tools"
 import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
-import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
+import type { ContestScorer, HookContext, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
+import { bandBreakdown } from "@ham2k/lib-contest-summary"
 
 import {
   EXCLUDED_BANDS, HOST_STATION, HOST_STATION_BONUS, MANY_PARKS_BONUS, MANY_PARKS_OVER,
@@ -70,7 +71,15 @@ export type TxspotaScoresheet = {
   /// Base call → the listed parks we worked it in, for §6.4.3.
   parksByCall: Record<string, string[]>
   hostStation?: boolean
+  /// band → contacts on it.
   bands: Record<string, number>
+  /// band → the points its contacts scored. This and `bandParks` are optional:
+  /// a checkpoint cached before they existed has neither, and its band lines
+  /// show only contacts until the log is rescored.
+  bandPoints?: Record<string, number>
+  /// band → the listed parks first worked on it, so the bands' parks add up to
+  /// the parks-worked term of the multiplier.
+  bandParks?: Record<string, number>
   qsos: number
   points: number
   dupes: number
@@ -109,7 +118,7 @@ export function totalsFor(sheet: TxspotaScoresheet): TxspotaTotals {
 export const TxspotaScorer: ContestScorer<TxspotaScoresheet> = {
   startScoresheet(): TxspotaScoresheet {
     return {
-      worked: {}, activated: {}, hunted: {}, parksByCall: {}, bands: {},
+      worked: {}, activated: {}, hunted: {}, parksByCall: {}, bands: {}, bandPoints: {}, bandParks: {},
       qsos: 0, points: 0, dupes: 0,
     }
   },
@@ -189,6 +198,10 @@ export const TxspotaScorer: ContestScorer<TxspotaScoresheet> = {
 
     for (const park of newToSlot) {
       if (!isListed(park)) continue
+      if (sheet.hunted[park] === undefined) {
+        sheet.bandParks ??= {}
+        sheet.bandParks[band] = (sheet.bandParks[band] ?? 0) + 1
+      }
       sheet.hunted[park] = (sheet.hunted[park] ?? 0) + 1
       const parks = (sheet.parksByCall[baseCall] ??= [])
       if (!parks.includes(park)) parks.push(park)
@@ -196,6 +209,8 @@ export const TxspotaScorer: ContestScorer<TxspotaScoresheet> = {
 
     const value = contacts * pointsForMode(mode)
     sheet.bands[band] = (sheet.bands[band] ?? 0) + contacts
+    sheet.bandPoints ??= {}
+    sheet.bandPoints[band] = (sheet.bandPoints[band] ?? 0) + value
     sheet.qsos += contacts
     sheet.points += value
 
@@ -223,33 +238,44 @@ export const TxspotaScorer: ContestScorer<TxspotaScoresheet> = {
       title: manifest.shortName,
       total: sheet.points * totals.mult + totals.bonus,
       arithmetic: contestArithmetic({ qsos: sheet.qsos, points: sheet.points, mults: totals.mult, multParts, bonus: totals.bonus }, ctx),
-      detail: longSummaryFor(sheet, totals),
+      detail: longSummaryFor(sheet, totals, ctx),
       extra: { points: sheet.points, mults: totals.mult, qsos: sheet.qsos },
     }, ctx)
   },
 }
 
-function longSummaryFor(sheet: TxspotaScoresheet, totals: TxspotaTotals): string {
-  const parts: string[] = [
-    `**Multipliers:** power ${fmtInteger(totals.power)} + parks worked ${fmtInteger(totals.worked)} + parks activated ${fmtInteger(totals.activated)}`,
-  ]
+function longSummaryFor(sheet: TxspotaScoresheet, totals: TxspotaTotals, ctx: HookContext): string {
+  const t = tFor(ctx)
+  const parts: string[] = []
 
   const ours = Object.entries(sheet.activated)
   if (ours.length > 0) {
-    parts.push(`### Activating\n${ours
-      .map(([park, contacts]) => `${park} (${fmtInteger(contacts)}${contacts < QSOS_TO_ACTIVATE ? ` of ${QSOS_TO_ACTIVATE}` : ''})`)
+    parts.push(`### ${t('activatingHeading')}\n${ours
+      .map(([park, contacts]) => (contacts < QSOS_TO_ACTIVATE
+        ? t('parkContactsOf', { park, formatted: fmtInteger(contacts), needed: fmtInteger(QSOS_TO_ACTIVATE) })
+        : t('parkContacts', { park, formatted: fmtInteger(contacts) })))
       .join(' • ')}`)
   }
 
-  parts.push(`### Bonus station\n${sheet.hostStation ? `**~~${HOST_STATION}~~**` : HOST_STATION}`)
+  parts.push(`### ${t('bonusStationHeading')}\n${sheet.hostStation ? `**~~${HOST_STATION}~~**` : HOST_STATION}`)
 
   const parkList = [...PARKS].map((park) => (sheet.hunted[park] !== undefined ? `**~~${park}~~**` : park)).join(' ')
-  parts.push(`### ${fmtInteger(totals.worked)} of ${fmtInteger(PARKS.size)} parks worked\n${parkList}`)
+  parts.push(`### ${t('parksWorkedOf', { worked: fmtInteger(totals.worked), total: fmtInteger(PARKS.size) })}\n${parkList}`)
 
-  const bands = Object.keys(sheet.bands).sort()
-  if (bands.length > 0) {
-    parts.push(bands.map((band) => `**${band}**: ${fmtInteger(sheet.bands[band])} QSOs`).join('\n'))
-  }
+  // Of the multiplier's three terms only the parks worked belong to a band —
+  // power and parks activated are the entry's — so the band lines name that
+  // term rather than claim to add up to the whole multiplier.
+  const bands = bandBreakdown(
+    Object.entries(sheet.bands).map(([band, qsos]) => ({
+      band,
+      qsos,
+      points: sheet.bandPoints?.[band],
+      mults: sheet.bandParks ? (sheet.bandParks[band] ?? 0) : undefined,
+    })),
+    ctx,
+    { multNoun: (count) => (count === 1 ? t('parkWorkedOne') : t('parkWorkedMany', { formatted: fmtInteger(count) })) },
+  )
+  if (bands) parts.push(bands)
 
   return parts.join('\n\n')
 }

@@ -112,7 +112,7 @@ test("saving stamps the guesses and projects both exchanges", async () => {
     contest.runHook("activity", "processQsoBeforeSave", { operation: configured, qso: { their, refs: [{ type: 'pwt', ...ref }] } }, { ctx: history })
 
   // Logged from a call list: last week's exchange is stamped.
-  assert.deepEqual(await save({}), { our: { exchange: 'SEB NY' }, refs: [{ type: 'pwt', name: 'BOB', location: 'NH' }], their: { exchange: 'BOB NH' } })
+  assert.deepEqual(await save({}), { our: { exchange: 'SEB NY' }, refs: [{ type: 'pwt', name: 'BOB', location: 'NH' }], their: { exchange: 'BOB NH', state: 'NH' } })
   // What was typed wins, normalized; an emptied location stays empty.
   assert.deepEqual(await save({ name: 'rob', location: '' }), { our: { exchange: 'SEB NY' }, refs: [{ type: 'pwt', name: 'ROB' }], their: { exchange: 'ROB' } })
   // Nothing known and nothing typed: their side is left alone.

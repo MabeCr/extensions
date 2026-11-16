@@ -192,12 +192,35 @@ test("operating outside Wisconsin's parks earns QSOs and no activation", () => {
   assert.deepEqual(totals(), { qsos: 12, worked: 0, activated: 0, mults: 0 })
 })
 
-test("the summary states the form's three counts under the form's own names", () => {
+// The arithmetic carries the form's three counts; restating them beneath it
+// is one more place for the two to disagree. The parks behind them stay.
+test("the detail lists the parks without restating the arithmetic's counts", () => {
   const { summary } = run([qso({ hunting: [HAVENWOODS] }), ...filler(10)], operationFor(HORICON))
   const text = String(summary().longSummary)
-  assert.match(text, /\*\*QSOs:\*\* 11/)
-  assert.match(text, /\*\*WI Only Parks worked:\*\* 1/)
-  assert.match(text, /\*\*WI Parks Activated:\*\* 1/)
+  assert.equal(text.split('\n')[0], '11 QSOs, 11 pts × 2 mults (1 park worked, 1 park activated)')
+  assert.doesNotMatch(text, /QSOs:|Parks worked:|Parks Activated:/)
+  assert.match(text, /^### Operated from\nUS-0600 \(11\)$/m)
+  assert.match(text, /^### Parks worked\nUS-5579$/m)
+})
+
+// Every QSO is a point, and a WI park belongs to the band it was first worked
+// on, once — so the bands' parks add up to the parks-worked count instead of
+// counting a park again on each band it was heard.
+test("each band line carries its points and the parks first worked there", () => {
+  const { summary } = run([
+    qso({ band: '40m', hunting: [HAVENWOODS] }),
+    qso({ band: '20m', hunting: [HAVENWOODS] }),
+    qso({ call: 'W9AV', band: '20m', hunting: [FOX_RIVER] }),
+    qso({ call: 'W9BB', band: '20m' }),
+  ])
+  assert.match(String(summary().longSummary), /^\*\*40m\*\*: 1 QSO, 1 pt, 1 park worked\n\*\*20m\*\*: 3 QSOs, 3 pts, 1 park worked$/m)
+})
+
+// Checkpoints cached by an older version have no per-band parks.
+test("a scoresheet without per-band parks still summarizes its bands", () => {
+  const stale = { worked: {}, activated: {}, hunted: {}, bands: { '20m': 2 }, qsos: 2, dupes: 0 }
+  const tally = WipotaScorer.summarizeScore({ scoresheet: stale, operation: operationFor(), ref: { type: 'wispota' }, scope: 'operation' }, ctx).wispota
+  assert.match(String(tally.longSummary), /^\*\*20m\*\*: 2 QSOs, 2 pts$/m)
 })
 
 test("the arithmetic names the form's two park counts, which add up to the multiplier", () => {

@@ -122,15 +122,19 @@ describe('the rules Field Day shares with Winter Field Day', () => {
     assert.equal(scores.d.dupe, true)
   })
 
-  test('ARRL, RAC and non-section locations all count toward the sections line', async () => {
-    // Three tallies because the rules count them three ways; a summary that
-    // read only the ARRL one would under-report a log that worked Canada or DX.
+  test('ARRL, RAC and non-section locations are all on the sections checklist', async () => {
+    // Three tallies because the rules count them three ways; a checklist that
+    // read only the ARRL one would hide a log's Canada and DX contacts.
     const result = await score({}, [
       contestQso('K1AAA', { band: '20m', mode: 'SSB', section: 'ENY', uuid: 'a' }),
       contestQso('VE3BBB', { band: '20m', mode: 'SSB', section: 'ONS', uuid: 'b' }),
       contestQso('G0CCC', { band: '20m', mode: 'SSB', section: 'DX', uuid: 'c' }),
     ])
-    assert.match(tally(result).longSummary ?? '', /3 sections/)
+    const detail = tally(result).longSummary ?? ''
+    assert.match(detail, /### Sections: 2 of 85/)
+    assert.match(detail, /\*\*~~ENY~~\*\*/)
+    assert.match(detail, /\*\*~~ONS~~\*\*/)
+    assert.match(detail, /^Other \*\*~~DX~~\*\*$/m)
   })
 
   test('the WARC bands score nothing, and say so', async () => {
@@ -292,8 +296,21 @@ describe('what the log carries', () => {
     const patch = (await fd.runHook('activity', 'processQsoBeforeSave', {
       qso: contestQso('K1AAA', { band: '20m', mode: 'SSB', theirClass: '2A', section: 'ENY' }),
       operation: { refs: [{ type: 'fd', ourClass: '1D' }] },
-    })) as { their?: { exchange?: string } } | null
+    })) as { their?: { exchange?: string; arrlSection?: string } } | null
     assert.equal(patch?.their?.exchange, '2A ENY')
+    // The section also reaches the field ARRL_SECT is read from, in a POTA or
+    // SOTA file of the same operation.
+    assert.equal(patch?.their?.arrlSection, 'ENY')
+  })
+
+  test('MX and DX are not ARRL sections, and fill no ARRL_SECT', async () => {
+    for (const section of ['MX', 'DX']) {
+      const patch = (await fd.runHook('activity', 'processQsoBeforeSave', {
+        qso: contestQso('XE1ABC', { band: '20m', mode: 'SSB', theirClass: '1A', section }),
+        operation: { refs: [{ type: 'fd', ourClass: '1D' }] },
+      })) as { their?: Record<string, unknown> } | null
+      assert.equal('arrlSection' in (patch?.their ?? {}), false, section)
+    }
   })
 })
 
@@ -447,5 +464,39 @@ describe('how a configured entry names itself', () => {
     // The setup-form path never touches `suggest`, so this hook is the only
     // place those refs get one.
     assert.equal((await decorate(configured)).program, 'Contest')
+  })
+})
+
+describe("their State, from the section they sent", () => {
+  const stateFor = async (call: string, section: string, state?: string) => {
+    const qso = contestQso(call, { band: '20m', mode: 'SSB', section })
+    qso.refs = [{ ...(qso.refs as Record<string, JSONValue>[])[0], class: '2A' }]
+    if (state) (qso.their as Record<string, JSONValue>).state = state
+    const patch = (await fd.runHook('activity', 'processQsoBeforeSave', {
+      qso,
+      operation: { refs: [{ type: 'fd', ourClass: '1D' }] },
+    })) as { their: Record<string, string> }
+    return patch.their.state
+  }
+
+  test("a section that is its state, one of a split state's, and a Canadian one", async () => {
+    assert.equal(await stateFor('W1AW', 'CT'), 'CT')
+    assert.equal(await stateFor('K6ABC', 'SDG'), 'CA')
+    assert.equal(await stateFor('W2ABC', 'NLI'), 'NY')
+    assert.equal(await stateFor('VE3ABC', 'GH'), 'ON')
+  })
+
+  test("the section replaces a lookup's state, and MDC keeps a DC station's DC", async () => {
+    assert.equal(await stateFor('K6ABC', 'SDG', 'NY'), 'CA')
+    assert.equal(await stateFor('W3ABC', 'MDC'), 'MD')
+    assert.equal(await stateFor('W3ABC', 'MDC', 'DC'), 'DC')
+  })
+
+  test("PAC is Hawaii except for a Pacific possession, and no single state fills nothing", async () => {
+    assert.equal(await stateFor('KH6ABC', 'PAC'), 'HI')
+    assert.equal(await stateFor('KH2ABC', 'PAC'), undefined)
+    for (const [call, section] of [['KP4ABC', 'PR'], ['KP2ABC', 'VI'], ['VY1ABC', 'TER'], ['XE1ABC', 'MX'], ['G4ABC', 'DX']]) {
+      assert.equal(await stateFor(call, section), undefined, section)
+    }
   })
 })

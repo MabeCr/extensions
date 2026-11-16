@@ -8,10 +8,21 @@ import assert from "node:assert/strict"
 
 import { fixtureOperation, loadExtension } from "./sdkGapTesting.ts"
 
-const contest = await loadExtension(() => import("./index.ts"), { hostCalls: { getSettings: () => ({ operatorName: 'Sebastian Delmont' }) } })
+/// What reached the FYI line, and where the radio's dial is.
+const fyi: Record<string, unknown>[] = []
+let dialHz = 14250000
+
+const contest = await loadExtension(() => import("./index.ts"), {
+  hostCalls: {
+    getSettings: () => ({ operatorName: 'Sebastian Delmont' }),
+    readRadio: () => ({ status: 'connected', frequencyHz: dialHz }),
+    fyiPost: (params) => fyi.push(params),
+    fyiClear: (params) => fyi.push({ cleared: params.key }),
+  },
+})
 
 type Suggestion = { name: string; label: string; shortLabel: string; relevance: number }
-type Control = { key: string; skipFocus?: boolean; input: Record<string, unknown> & { form?: { elements: { key?: string; value?: unknown }[] } } }
+type Control = { key: string; label?: string; skipFocus?: boolean; input: Record<string, unknown> & { form?: { elements: { key?: string; value?: unknown }[] } } }
 
 const configured = fixtureOperation({
   stationCall: 'KI2D',
@@ -68,6 +79,7 @@ test("logging asks for our serial, then their serial, name and location, guessin
     qso: { their: { call: 'W1AW', state: 'CT', name: 'Hiram Maxim' } },
   })) as Control[]
   assert.deepEqual(controls.map((c) => c.key), ['ssb-sprint/ourSerial', 'ssb-sprint/theirSerial', 'ssb-sprint/name', 'ssb-sprint/location'])
+  assert.deepEqual(controls.map((c) => c.label), ['Our #', 'Their #', 'Name', 'Loc'])
   assert.equal(controls[0].input.kind, 'serial')
   assert.equal(controls[0].skipFocus, true)
   assert.equal(controls[2].input.suggestedValue, 'HIRAM')
@@ -103,10 +115,88 @@ test("saving stamps the guesses and projects both exchanges", async () => {
     operation: configured,
     qso: { their: { call: 'W1AW' }, refs: [{ type: 'ssb-sprint', theirSerial: '7', name: 'HAL', location: 'CT' }] },
   })
+  // The location they sent also fills their State, which the lookup left empty.
   assert.deepEqual(later, {
     refs: [{ type: 'ssb-sprint', name: 'HAL', location: 'CT' }],
-    their: { exchange: '7 HAL CT' },
+    their: { exchange: '7 HAL CT', state: 'CT' },
   })
+})
+
+test("a contact just saved puts the QSY rule on the FYI line, as HaLo saves it; an edit doesn't", async () => {
+  const now = Date.now()
+  const settled = () => new Promise((resolve) => setImmediate(resolve))
+  // As HaLo calls the hook: the operation's QSON without its uuid, which the
+  // app keeps as the row's identity, and a new contact without one either —
+  // only an edit carries its record's.
+  const save = (qso: Record<string, unknown>, ctx: Record<string, unknown> = {}) =>
+    contest.runHook("activity", "processQsoBeforeSave", { operation: configured, qso }, { ctx })
+  const contact = (freq: number, extra: Record<string, unknown> = {}) =>
+    ({ startAtMillis: now, freq, their: { call: 'W1AW' }, refs: [{ type: 'ssb-sprint', theirSerial: '7', name: 'HAL', location: 'CT' }], ...extra })
+
+  // An edit, and a contact logged an hour ago — an import or a late entry —
+  // start nothing.
+  await save(contact(14250.2, { uuid: 'q1' }))
+  await save(contact(14250.2, { startAtMillis: now - 3_600_000 }))
+  await settled()
+  assert.equal(fyi.length, 0)
+
+  // The first contact on 14.250: the move is owed unless it answered a CQ.
+  await save(contact(14250.2))
+  await settled()
+  assert.equal(fyi.length, 1)
+  assert.equal(fyi[0].key, 'qsy')
+  assert.equal(fyi[0].category, 'info')
+  assert.equal(fyi[0].text, '**QSY, unless you answered a CQ:** 0.8 kHz more to call, 4.8 kHz more to CQ')
+
+  // The second on 14.250, judged against the first without any log to read:
+  // the move is owed.
+  const patch = await save(contact(14250))
+  await settled()
+  assert.equal(fyi.length, 2)
+  assert.equal(fyi[1].category, 'warning')
+  assert.equal(fyi[1].text, '**QSY:** 1.0 kHz more to call, 5.0 kHz more to CQ')
+  assert.deepEqual(patch, { refs: [{ type: 'ssb-sprint', name: 'HAL', location: 'CT' }], their: { exchange: '7 HAL CT', state: 'CT' } })
+
+  // An operation that names itself is judged by its log, which outranks the
+  // last contact watched: there, the one before was on 14.262.
+  const log = [{ uuid: 'q9', startAtMillis: now - 30_000, freq: 14262 }]
+  await contest.runHook("activity", "processQsoBeforeSave", { operation: { ...configured, uuid: 'op' }, qso: contact(14250) }, { ctx: { getQsos: async () => log as never } })
+  await settled()
+  assert.equal(fyi.at(-1)!.category, 'info')
+
+  // A log that can't be read never costs the contact its exchange.
+  const unread = await contest.runHook("activity", "processQsoBeforeSave", {
+    operation: { ...configured, uuid: 'op' },
+    qso: contact(14262),
+  }, { ctx: { getQsos: async () => { throw new Error('no log') } } })
+  assert.deepEqual(unread, patch)
+})
+
+test("under SO2R each radio keeps its own QSY duty and message", async () => {
+  const now = Date.now()
+  const settled = () => new Promise((resolve) => setImmediate(resolve))
+  const save = async (freq: number, radio: 'A' | 'B') => {
+    await contest.runHook("activity", "processQsoBeforeSave", {
+      operation: configured,
+      qso: { startAtMillis: now, freq, our: { radio }, their: { call: 'W1AW' }, refs: [{ type: 'ssb-sprint', theirSerial: '7', name: 'HAL', location: 'CT' }] },
+    })
+    await settled()
+  }
+  dialHz = 21300000
+  const before = fyi.length
+
+  await save(21300, 'A')
+  // Radio B's dial can't be read yet: a single contact there says nothing.
+  await save(7200, 'B')
+  // A's second on 21.300, with B's between them: the move is owed on A.
+  await save(21300, 'A')
+  const posted = fyi.slice(before)
+  assert.deepEqual(posted.map((m) => [m.key, m.radio, m.category]), [['qsy', 'A', 'info'], ['qsy', 'A', 'warning']])
+
+  // B's second on 7.200: the rule, in B's set alone.
+  await save(7200, 'B')
+  const b = fyi.at(-1)!
+  assert.deepEqual([b.key, b.radio, b.category, b.text], ['qsy-b', 'B', 'warning', '**QSY:** move 1 kHz to call, 5 kHz to CQ'])
 })
 
 test("the ref states the rules for its entry: no spotting assistance but for a check log", async () => {

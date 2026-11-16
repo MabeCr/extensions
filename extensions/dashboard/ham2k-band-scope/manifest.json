@@ -1,0 +1,34 @@
+{
+  "key": "ham2k-band-scope",
+  "name": "Band Scope",
+  "version": "0.1.1",
+  "api": 23,
+  "description": "A radio's band scope, its spectrum and waterfall with the band plan, what is marked on the band and the spots on it: click or turn the wheel to tune, drag the scale to zoom, drag the picture to pan",
+  "category": "dashboard",
+  "icon": "waveform",
+  "accentColor": "#4C6EF5",
+  "keywords": [
+    "radio",
+    "panadapter",
+    "waterfall",
+    "spectrum",
+    "panel",
+    "band scope",
+    "panafall",
+    "scope"
+  ],
+  "hooks": [
+    "panel"
+  ],
+  "requiresRadioWrite": true,
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  }
+}

@@ -32,7 +32,8 @@
 // `radio` is fed, as `{"radio.transmitting": 1, "radio.swr": 1.4}`), `radio` (fields over the demo
 // radio's, as `{"frequencyHz": 7030000, "mode": "CW"}`), `spots` (what `ctx.getSpots` answers: a list
 // of `{"call", "freq" (kHz), "mode", "age" (minutes), "worked", "isSelf", "notices"}`, or
-// `{"generate": 40, "band": "20m", "seed": 1}` for a made-up crowd), `app`
+// `{"generate": 40, "band": "20m", "seed": 1}` for a made-up crowd), `annotations` (what
+// `ctx.getBandAnnotations` answers, as band annotations with `fromHz`, `toHz`, `type`, `label`…), `app`
 // (the app's brightness), `locale`, `width`, `height` and `label`. SIZES (`360x520,220x150`) and LOCALES (`en,es`) in the
 // environment replace the default grid.
 
@@ -224,7 +225,7 @@ function generatedSpots({ generate = 30, band = "20m", seed = 1, noMode = 0 }) {
     const [mode, freq] = kind < 0.4 ? ["CW", base + 2 + random() * 60] : kind < 0.6 ? ["FT8", base + 74 + random() * 3] : kind < 0.65 ? ["FT4", base + 80 + random() * 3] : ["SSB", base + 150 + random() * 190]
     const park = random() < 0.6, emoji = random() < 0.12 ? "⭐" : undefined
     return {
-      call, freq: Math.round(freq * 10) / 10, mode: noMode && random() < noMode ? undefined : mode, age: Math.floor(random() * 30), worked: random() < 0.2, notices: random() < 0.15 ? ["newDXCC"] : [],
+      call, freq: Math.round(freq * 10) / 10, mode: noMode && random() < noMode ? undefined : mode, age: Math.floor(random() * 30), worked: random() < 0.2, notices: [[], [], [], [], [], ["newDXCC"], ["newBand"], ["newMult"]][Math.floor(random() * 8)],
       // The rest heard on the cluster, which names no park; the board stands its tower in for an icon.
       source: park ? "pota" : "cluster", ...(park ? { refs: [{ type: "potaActivation", ref: `US-${1000 + i}` }] } : {}),
       display: { icon: park ? "pine-tree" : "radio-tower", ...(park ? { iconColor: "#2e7d32" } : {}), ...(emoji ? { emoji } : {}) },
@@ -255,15 +256,16 @@ function argsFor(c, index, panelKey) {
   }
   const qsos = c.contacts ? contactRun(c.contacts, now) : c.qsos ?? []
   const args = { environment, clock: { nowMillis: now, realNowMillis: now }, instanceId: `case-${index}`, panelKey, operation: c.operation ?? {}, qso: c.qso, qsoCount: qsos.length, config: c.config ?? {}, reason: "preview" }
-  const ctx = { online: true, locale: c.locale, distanceUnits: "kilometers", getQsos: async () => qsos, getSpots: async options => boardFor(c, now, options) }
+  const ctx = { online: true, locale: c.locale, distanceUnits: "kilometers", getQsos: async () => qsos, getSpots: async options => boardFor(c, now, options),
+    getBandAnnotations: async ({ band }) => (c.annotations ?? []).map(a => ({ source: "user", importance: "primary", band: bandForFrequency(a.fromHz / 1000), ...a })).filter(a => a.band === band) }
   const radio = loaded.useRadio({ ...c, index })
-  return { args, ctx }
+  return { args, ctx, radio }
 }
 
 async function renderCase(c, index) {
   const entries = []
   for (const { key, hook } of loaded.panels) {
-    const { args, ctx } = argsFor(c, index, "")
+    const { args, ctx, radio } = argsFor(c, index, "")
     let descriptors
     try { descriptors = await hook.getPanels({}, ctx) } catch (error) { entries.push({ ...c, index, panel: key, error: String(error?.stack ?? error) }); continue }
     for (const descriptor of descriptors.filter(d => !c.panel || d.key === c.panel)) {

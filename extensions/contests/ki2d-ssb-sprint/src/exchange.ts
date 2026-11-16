@@ -8,13 +8,19 @@
 // `defineExtension` at import time, so nothing in it is reachable from
 // `node --test`.
 
-import type { JSONValue } from "@ham2k/extension-sdk"
+import type { HookContext, JSONValue } from "@ham2k/extension-sdk"
 import { annotateCallAgainstCountryFile } from "@ham2k/extension-sdk"
+import { priorSent } from "@ham2k/lib-contest-exchange"
 
 import { firstName, historyFor } from "./history.ts"
-import { CANADIAN_PROVINCES, US_STATES, countryLocationFor, normalizeLocation } from "./locations.ts"
+import { CANADIAN_PROVINCES, US_STATES, countryLocationFor, isValidLocation, normalizeLocation } from "./locations.ts"
 
 export const TYPE = 'ssb-sprint'
+
+/// The ref types whose contacts carry the same name and location exchange,
+/// the Sprint's first: NAQP and the Phone Weekly Test are sent by the same
+/// people, the same way.
+const SAME_EXCHANGE_TYPES = [TYPE, 'naqp', 'pwt']
 
 /// The entities whose stations send a STATE or PROVINCE rather than a
 /// country, and the one they send where the entity alone settles it.
@@ -40,25 +46,65 @@ export function serialOf(value: JSONValue | undefined): string {
   return /^\d+$/.test(digits) ? String(parseInt(digits, 10)) : ''
 }
 
-/// The name to offer for this station: what it sent in an earlier Sprint,
-/// else whatever the callsign lookup resolved.
-export function guessedName(their: Record<string, JSONValue>): string {
-  const guess = (their.guess as Record<string, JSONValue>) ?? {}
-  return historyFor(str(their.call))?.name || firstName(their.name) || firstName(guess.name)
+export interface Exchange {
+  name: string
+  location: string
 }
 
-/// The location to offer for this station: what it sent in an earlier Sprint,
-/// else a state or province from the lookup, else its country if that is one
-/// the Sprint lists, else `DX` for a station outside North America.
+/// The name and location to offer [qso]'s station in [operation], from the
+/// first source that has one:
+///
+///   * what it sent earlier in THIS operation — copied minutes ago;
+///   * N1MM's Sprint call history;
+///   * for the name, what it sent in an earlier Sprint, NAQP or PWT, then the
+///     lookup's; for the location, the lookup's and the country file's, then
+///     the one it sent before. A name doesn't move, but a station can, and
+///     the lookup is the fresher word on where it is.
+///
+/// A host that cannot answer costs the log's history, never the file's or the
+/// lookup's guess.
+export async function suggestedExchange(
+  ctx: HookContext,
+  operation: Record<string, JSONValue>,
+  qso: Record<string, JSONValue> | undefined,
+): Promise<Exchange> {
+  const their = (qso?.their as Record<string, JSONValue>) ?? {}
+  const call = str(their.call)
+  const { here, before } = await priorSent(ctx, {
+    call,
+    operation,
+    qso,
+    refTypes: SAME_EXCHANGE_TYPES,
+    read: {
+      name: (ref) => firstName(ref.name),
+      location: (ref) => {
+        const location = normalizeLocation(ref.location)
+        return isValidLocation(location) ? location : ''
+      },
+    },
+  })
+  const file = historyFor(call)
+  return {
+    name: here.name || file?.name || before.name || guessedName(their),
+    location: here.location || file?.location || guessedLocation(their) || before.location,
+  }
+}
+
+/// The name the callsign lookup resolved for this station.
+export function guessedName(their: Record<string, JSONValue>): string {
+  const guess = (their.guess as Record<string, JSONValue>) ?? {}
+  return firstName(their.name) || firstName(guess.name)
+}
+
+/// The location the lookup and the country file give for this station: a
+/// state or province from the lookup, else its country if that is one the
+/// Sprint lists, else `DX` for a station outside North America.
 ///
 /// Anything not in the Sprint's set comes back EMPTY rather than as itself: a
 /// guess is stamped onto the ref as data of record and exported as though the
 /// station had sent it.
 export function guessedLocation(their: Record<string, JSONValue>): string {
   const call = str(their.call)
-  const fromHistory = historyFor(call)?.location
-  if (fromHistory) return fromHistory
-
   const guess = (their.guess as Record<string, JSONValue>) ?? {}
   const info = (call ? annotateCallAgainstCountryFile(call) : {}) as Record<string, JSONValue>
   const entity = str(their.entityPrefix) || str(guess.entityPrefix) || str(info.entityPrefix)

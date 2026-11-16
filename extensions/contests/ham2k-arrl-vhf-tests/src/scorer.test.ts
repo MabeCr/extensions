@@ -83,7 +83,7 @@ test('a QSO with no recorded exchange grid scores zero, not a guess', () => {
   const ref = { type: 'arrl-vhf-tests', ref: 'ARRL-VHF-JAN' }
   const { scores } = run([qso('K1ABC', '6m')], operation, ref)
   assert.equal(scores[0].value, 0)
-  assert.deepEqual(scores[0].alerts, ['missingExchange'])
+  assert.deepEqual(scores[0].incomplete, ['arrl-vhf-tests/grid'])
 })
 
 test('no operation grid at all scores zero with an ourGrid alert', () => {
@@ -126,7 +126,7 @@ test('a rover working the same call from a NEW grid is not a dupe — the trap t
 test('a station worked before on another band is a new band', () => {
   const ref = { type: 'arrl-vhf-tests', ref: 'ARRL-VHF-JAN' }
   const { scores } = run([qso('K1ABC', '6m', 'FM18'), qso('K1ABC', '2m', 'FM18'), qso('K1XYZ', '2m', 'FM18')], { grid: 'FN31' }, ref)
-  assert.deepEqual(scores[1].notices, ['newBand'])
+  assert.ok(scores[1].notices?.includes('newBand'))
   assert.equal(scores[2].notices, undefined, 'a station never worked is not a new band')
 })
 
@@ -217,10 +217,74 @@ test('a points-only event is titled by the event and names no distance', () => {
   const ref = { type: 'arrl-vhf-tests', ref: 'ARRL-VHF-JAN' }
   const { sheet } = run([qso('K1ABC', '6m', 'FM18'), qso('K2DEF', '1.25m', 'FM18')], { grid: 'FN31' }, ref)
   const tally = ARRLVHFScorer.summarizeScore({ scoresheet: sheet, operation: {}, ref, scope: 'operation' }, ctx)['arrl-vhf-tests']
-  assert.equal(tally.label, 'VHF Jan: 3 points')
-  assert.equal(tally.longSummary!.split('\n')[0], '2 QSOs, 3 pts')
+  assert.equal(tally.label, 'VHF Jan: 6 points')
+  assert.equal(tally.longSummary!.split('\n')[0], '2 QSOs, 3 pts × 2 mults')
   assert.doesNotMatch(tally.longSummary!, /km/)
-  assert.match(tally.longSummary!, /^\*\*6m\*\*: 1 QSOs$/m)
+  assert.match(tally.longSummary!, /^\*\*6m\*\*: 1 QSO, 1 pt, 1 grid$/m)
+})
+
+// A band line that counted only contacts would hide that 1.25m is worth twice
+// 6m per QSO here, which is the reason an operator moves up a band.
+test('a points-only event gives each band its points, in band order', () => {
+  const ref = { type: 'arrl-vhf-tests', ref: 'ARRL-VHF-JAN' }
+  const { sheet } = run([qso('K2DEF', '1.25m', 'FM18'), qso('K1ABC', '6m', 'FM18'), qso('K3GHI', '1.25m', 'FM18')], { grid: 'FN31' }, ref)
+  const tally = ARRLVHFScorer.summarizeScore({ scoresheet: sheet, operation: {}, ref, scope: 'operation' }, ctx)['arrl-vhf-tests']
+  assert.equal(tally.longSummary, '3 QSOs, 5 pts × 2 mults\n\n**6m**: 1 QSO, 1 pt, 1 grid\n**1.25m**: 2 QSOs, 4 pts, 1 grid')
+})
+
+// The distance points are the band's score; the longest contact is a note
+// beside it, and both come from the band's own contacts, not the log's.
+test('a distance event gives each band its points and its longest contact', () => {
+  const ref = { type: 'arrl-vhf-tests', ref: 'ARRL-222' }
+  const { sheet, scores } = run([qso('K1ABC', '1.25m', 'FN20aa')], { grid: 'FN31' }, ref)
+  const tally = ARRLVHFScorer.summarizeScore({ scoresheet: sheet, operation: {}, ref, scope: 'operation' }, ctx)['arrl-vhf-tests']
+  const km = scores[0].distance as number
+  assert.match(tally.longSummary!, new RegExp(`^\\*\\*1\\.25m\\*\\*: 1 QSO, ${scores[0].value} pts • Longest: ${km} km$`, 'm'))
+})
+
+// Checkpoints cached by an older version have no per-band points.
+test('a scoresheet without per-band points still summarizes its bands', () => {
+  const ref = { type: 'arrl-vhf-tests', ref: 'ARRL-VHF-JAN' }
+  const stale = { worked: {}, bands: { '6m': 2 }, qsos: 2, points: 2, distanceTotal: 0, maxDistance: 0, maxDistancePerBand: {} } as never
+  const tally = ARRLVHFScorer.summarizeScore({ scoresheet: stale, operation: {}, ref, scope: 'operation' }, ctx)['arrl-vhf-tests']
+  assert.match(tally.longSummary!, /^\*\*6m\*\*: 2 QSOs$/m)
+})
+
+// Rule 5.3.1: a grid square is a multiplier once on each band. Counting it
+// once for the whole log would undercount every station that works a grid
+// on more than one band, which is most of them.
+test('a points event multiplies by the grid squares worked on each band', () => {
+  const ref = { type: 'arrl-vhf-tests', ref: 'ARRL-VHF-JUN' }
+  const { sheet, scores } = run(
+    [qso('K1ABC', '6m', 'FN20'), qso('K2DEF', '6m', 'FN20'), qso('K3GHI', '6m', 'FN21'), qso('K1ABC', '2m', 'FN20')],
+    { grid: 'FN31' },
+    ref,
+  )
+  assert.deepEqual(scores.map((s) => s.notices), [['newMult'], undefined, ['newMult'], ['newMult', 'newBand']])
+  const tally = ARRLVHFScorer.summarizeScore({ scoresheet: sheet, operation: {}, ref, scope: 'operation' }, ctx)['arrl-vhf-tests']
+  assert.equal(tally.label, 'VHF Jun: 12 points')
+  assert.match(tally.longSummary!, /^\*\*6m\*\*: 3 QSOs, 3 pts, 2 grids$/m)
+})
+
+// Rule 5.4.2: a rover's every grid square operated from is one more
+// multiplier. A fixed station may not move (6.3), so a log from two grids is
+// a rover's even when the call carries no /R — and a /R call is a rover's
+// even when it has not moved yet.
+test('a rover adds a multiplier for each grid square it operated from', () => {
+  const ref = { type: 'arrl-vhf-tests', ref: 'ARRL-VHF-SEP' }
+  let sheet = ARRLVHFScorer.startScoresheet({ operation: {}, ref }, ctx)
+  for (const [ourGrid, call] of [['FN31', 'K1ABC'], ['FN32', 'K2DEF']]) {
+    sheet = ARRLVHFScorer.scoreQso({ scoresheet: sheet, qso: qso(call, '2m', 'FN20'), operation: { grid: ourGrid }, ref, isNewDay: false }, ctx).scoresheet
+  }
+  const moved = ARRLVHFScorer.summarizeScore({ scoresheet: sheet, operation: {}, ref, scope: 'operation' }, ctx)['arrl-vhf-tests']
+  assert.equal(moved.longSummary!.split('\n')[0], '2 QSOs, 2 pts × 3 mults (1 grid worked, 2 grids operated from)')
+  assert.equal(moved.label, 'ARRL VHF Sep: 6 points')
+
+  const { sheet: still } = run([qso('K1ABC', '2m', 'FN20')], { grid: 'FN31' }, ref)
+  const fixed = ARRLVHFScorer.summarizeScore({ scoresheet: still, operation: { stationCall: 'N0DEV' }, ref, scope: 'operation' }, ctx)['arrl-vhf-tests']
+  assert.equal(fixed.label, 'ARRL VHF Sep: 1 point')
+  const rover = ARRLVHFScorer.summarizeScore({ scoresheet: still, operation: { stationCall: 'N0DEV/R' }, ref, scope: 'operation' }, ctx)['arrl-vhf-tests']
+  assert.equal(rover.label, 'ARRL VHF Sep: 2 points')
 })
 
 // A distance total and the QSO-points bonus belong to the whole entry, so a

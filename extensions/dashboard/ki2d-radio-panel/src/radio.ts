@@ -1,6 +1,9 @@
 // Copyright ©️ 2026 Sebastian Delmont <sd@ham2k.com>
 // SPDX-License-Identifier: MPL-2.0
-import type { JSONValue, PanelHook, PanelRadioState, PanelRadioSet, PanelRadioResult, PanelRadioSpectrumSet, PanelEnvironment, SvgScene, SvgSceneLayer } from '@ham2k/extension-sdk'
+import type { JSONValue, PanelHook, PanelRadioState, PanelRadioSet, PanelRadioResult, PanelRadioSpectrumSet, PanelEnvironment, PanelSceneSpectrumLayer, SvgScene, SvgSceneLayer } from '@ham2k/extension-sdk'
+import { entityForCall, regionAndCountryForDxccCode } from '@ham2k/extension-sdk'
+import { bandForFrequency } from '@ham2k/lib-operation-data'
+import { bandEdges, bandPlan, planLayers, type Where } from './band-plan.ts'
 type RadioHost = {
   setRadioConnection?(args: { id: string; selection?: string; connected: boolean }): Promise<PanelRadioResult>; listRadios?(): Promise<PanelRadioState[]>
   readRadio(id?: string): Promise<PanelRadioState | null>; setRadio(args: PanelRadioSet): Promise<PanelRadioResult>; setRadioSpectrum?(args: PanelRadioSpectrumSet): Promise<PanelRadioResult>
@@ -9,7 +12,6 @@ type RadioHost = {
 const en = {
   connect: 'Connect', disconnect: 'Disconnect', mode: 'Mode', radio: 'Radio', automatic: 'Automatic (logging radio)', theme: 'Theme', light: 'Light', meterScale: 'Switch signal scale between dBm and S-units', powerAdjust: 'Adjust power', antenna: 'Antenna', rxAntenna: 'Receive antenna', txAntenna: 'Transmit antenna', filter: 'Receive filter: shift and width', filterLow: 'Receive filter low edge', filterHigh: 'Receive filter high edge',
   display: 'Display', both: 'Panadapter and waterfall', panOnly: 'Panadapter only', waterfallOnly: 'Waterfall only', off: 'Off',
-  panWidth: 'Panadapter width', speed: 'Waterfall speed',
   colors: 'Waterfall colors', teal: 'Teal', classic: 'Classic', gray: 'Gray', heat: 'Heat', tune: 'Tune frequency', panadapter: 'Panadapter', tuner: 'Antenna tuner', atu: 'ATU', bypass: 'BYPASS', bypassShort: 'BYP', tuning: 'TUNING', tuneFailed: 'ATU FAIL', tuneFailedShort: 'FAIL', startTune: 'Start a tune', tuneButton: 'TUNE', tuneShort: 'T',
   title: 'KI2D’s Radio Panel', description: 'Live CAT readout, meters and panadapter',
   none: 'Select a local radio in Station Configuration', disconnected: 'Disconnected', connecting: 'Connecting',
@@ -21,7 +23,6 @@ const en = {
 const es: typeof en = {
   connect: 'Conectar', disconnect: 'Desconectar', mode: 'Modo', radio: 'Radio', automatic: 'Automática (radio del registro)', theme: 'Tema', light: 'Claro', meterScale: 'Cambiar la escala de señal entre dBm y unidades S', powerAdjust: 'Ajustar potencia', antenna: 'Antena', rxAntenna: 'Antena de recepción', txAntenna: 'Antena de transmisión', filter: 'Filtro de recepción: desplazamiento y ancho', filterLow: 'Borde inferior del filtro', filterHigh: 'Borde superior del filtro',
   display: 'Pantalla', both: 'Panorámico y cascada', panOnly: 'Solo panorámico', waterfallOnly: 'Solo cascada', off: 'Apagada',
-  panWidth: 'Ancho del panorámico', speed: 'Velocidad de la cascada',
   colors: 'Colores de la cascada', teal: 'Verde azulado', classic: 'Clásicos', gray: 'Grises', heat: 'Calor', tune: 'Sintonizar frecuencia', panadapter: 'Panorámico', tuner: 'Acoplador de antena', atu: 'ATU', bypass: 'BYPASS', bypassShort: 'BYP', tuning: 'AFINANDO', tuneFailed: 'ATU FALLO', tuneFailedShort: 'FALLO', startTune: 'Iniciar el afinado', tuneButton: 'AFINAR', tuneShort: 'T',
   title: 'Panel de radio de KI2D', description: 'Lecturas CAT, medidores y panorámico',
   none: 'Selecciona una radio local en Configuración de estación', disconnected: 'Desconectada', connecting: 'Conectando',
@@ -41,9 +42,8 @@ type Theme = keyof typeof themes
 type MeterScale = 'dbm' | 's'
 /** The panafall's settings, as the panel's form stores them. */
 type Spectrum = { display: 'both' | 'pan' | 'waterfall' | 'off'; colors: 'teal' | 'classic' | 'gray' | 'heat' }
-/** The waterfall's rates a click on its label steps through, in rows a second; the middle one first. */
-const waterfallRates = [1, 4, 16]
-const defaultWaterfallRate = 1
+/** The waterfall's rows a second until the operator drags its level strip. */
+const defaultWaterfallRows = 4
 function spectrumConfig(config: Record<string, unknown>): Spectrum {
   const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T) => allowed.includes(value as T) ? value as T : fallback
   return {
@@ -51,16 +51,15 @@ function spectrumConfig(config: Record<string, unknown>): Spectrum {
     colors: pick(config.colors, ['teal', 'classic', 'gray', 'heat'] as const, 'teal'),
   }
 }
-/** Hz between the panafall's frequency labels for [span] Hz shown: whole kHz, as the labels show. */
-const labelInterval = (span: number) => span <= 10000 ? 1000 : span <= 30000 ? 5000 : span <= 80000 ? 10000 : 25000
-
-/** Which presets the panadapter's width cycles through. */
+/** Each kind of mode keeps its own panadapter width, zoomed to by dragging the scale. */
 type PanCategory = 'cw' | 'phone' | 'digital'
 const panCategory = (mode?: string | null): PanCategory =>
   mode === 'CW' || mode === 'CW-R' ? 'cw' : ['USB', 'LSB', 'AM', 'FM'].includes(mode ?? '') ? 'phone' : 'digital'
-const panWidths: Record<PanCategory, number[]> = { cw: [10000, 50000, 150000], phone: [20000, 75000, 150000], digital: [6000, 30000, 100000] }
+const defaultPanWidths: Record<PanCategory, number> = { cw: 50000, phone: 75000, digital: 30000 }
+/** What the operator dragged on the panafall: the split between panadapter and waterfall, and the level strip's floor, range and rows a second. */
+type ScopeView = { split?: number; floor?: number; range?: number; rows?: number }
 /** How the operator has the face arranged, as opposed to what the radio reports. */
-type View = { longSwrHold?: boolean; waterfallRate?: number; radio?: string; spectrum?: Spectrum; panWidthHz?: number; theme?: Theme; meterScale?: MeterScale }
+type View = ScopeView & { longSwrHold?: boolean; radio?: string; spectrum?: Spectrum; panWidthHz?: number; theme?: Theme; meterScale?: MeterScale; where?: Where }
 /** Above this an SWR reads as a warning. */
 const swrWarning = 1.8
 const swrHoldMillis = 3000
@@ -133,36 +132,43 @@ function mix(a: string, b: string, t: number) {
 }
 export function createRadioPanel(host: RadioHost): PanelHook {
   const placements = new Map<string, {
-    id: string | null; selection?: string; requested?: number; dial?: boolean; mode?: string; sent?: number
-    /** Where the radio was as last rendered, and so when a request was sent. */
-    seen?: number | null; from?: number | null
+    id: string | null; selection?: string; requested?: number; mode?: string; sent?: number
     /** The scope span last asked of the radio for the panadapter's width: asked once per change. */
     spanAsked?: number
+    /**
+     * A zoom ended, and the app fitted the scope to where it left the window, off the dial and for the
+     * radio's other displays too: whatever span the new width calls for is taken as asked, not narrowed
+     * back over the app's.
+     */
+    zoomed?: boolean
     panCategory?: PanCategory
     /** The filter the box's knobs move from: as last rendered, then as last asked for while scrolling. */
     passband?: [number, number]
     passbandSent?: number
   }>()
   // Outside `placements`, which is reset whenever the radio changes: these are the operator's choices, not the radio's.
-  const views = new Map<string, { meterScale?: MeterScale; panWidth?: Partial<Record<PanCategory, number>>; waterfallRate?: number }>()
+  const views = new Map<string, ScopeView & { meterScale?: MeterScale; panWidths?: Partial<Record<PanCategory, number>> }>()
   const view = (key: string) => views.get(key) ?? views.set(key, {}).get(key)!
-  // The scale, the span presets and the waterfall's rate are kept per placement across restarts. Read
-  // once, the first time a placement renders.
+  // The scale, the zoom and what was dragged on the panafall are kept per placement across restarts.
+  // Read once, the first time a placement renders.
   const stored = (key: string) => `view:${key}`
   async function restore(key: string) {
     if (views.has(key)) return
     const saved = await host.kvGet?.(stored(key)).catch(() => null)
     const v = view(key)
     if (saved && typeof saved === 'object') {
-      const { meterScale, panWidth, waterfallRate } = saved as Record<string, unknown>
+      const { meterScale, panWidths, split, floor, range, rows } = saved as Record<string, unknown>
       if (meterScale === 'dbm' || meterScale === 's') v.meterScale = meterScale
-      if (panWidth && typeof panWidth === 'object') v.panWidth = panWidth as Partial<Record<PanCategory, number>>
-      if (typeof waterfallRate === 'number' && waterfallRate >= 0 && waterfallRate < waterfallRates.length) v.waterfallRate = waterfallRate
+      if (panWidths && typeof panWidths === 'object') {
+        v.panWidths = Object.fromEntries(Object.entries(panWidths).filter(([category, hz]) => category in defaultPanWidths && typeof hz === 'number' && hz > 0))
+      }
+      const number = (n: unknown) => typeof n === 'number' && Number.isFinite(n) ? n : undefined
+      Object.assign(v, JSON.parse(JSON.stringify({ split: number(split), floor: number(floor), range: number(range), rows: number(rows) })))
     }
   }
   function persist(key: string) {
-    const { meterScale, panWidth, waterfallRate } = view(key)
-    host.kvSet?.(stored(key), JSON.parse(JSON.stringify({ meterScale, panWidth, waterfallRate })) as JSONValue).catch(() => {})
+    const { meterScale, panWidths, split, floor, range, rows } = view(key)
+    host.kvSet?.(stored(key), JSON.parse(JSON.stringify({ meterScale, panWidths, split, floor, range, rows })) as JSONValue).catch(() => {})
   }
   return {
     async getPanels(_args, ctx) {
@@ -198,21 +204,18 @@ export function createRadioPanel(host: RadioHost): PanelHook {
       if (p.requested !== undefined && r?.frequencyHz === p.requested) delete p.requested
       // A dial's last step is not where the radio stays when Smart VFO Snap rounds it: once the dial
       // has been still a moment, the readout follows the radio again.
-      if (p.requested !== undefined && p.dial && args.clock.realNowMillis - (p.sent ?? 0) > 1500) delete p.requested
-      // A click the radio moved for but rounded, or that the operator's own knob took on from: it has
-      // answered, and holding the request would keep the digits off the dial.
-      if (p.requested !== undefined && !p.dial && r?.frequencyHz != null && p.from != null && r.frequencyHz !== p.from) delete p.requested
-      p.seen = r?.frequencyHz
+      if (p.requested !== undefined && args.clock.realNowMillis - (p.sent ?? 0) > 1500) delete p.requested
       if (p.mode !== undefined && r?.mode === p.mode) delete p.mode
       // Mid-scroll the radio's report lags what was asked: the knobs keep moving from the request.
       if (args.clock.realNowMillis - (p.passbandSent ?? 0) > 1500) p.passband = r?.passband ? [r.passband.lowHz, r.passband.highHz] : undefined
       // The panadapter's width: the scope set to the narrowest span covering it, the display cropped to it.
       // Where the app sizes the scope itself to every display's width (`autoSpan`, extension API 12),
       // the crop alone says it: asking too would fight the other displays.
-      const category = panCategory(r?.mode), panWidthHz = panWidths[category][view(key).panWidth?.[category] ?? 1]
+      const category = panCategory(r?.mode), panWidthHz = view(key).panWidths?.[category] ?? defaultPanWidths[category]
       p.panCategory = category
       const spans = r?.spectrum?.spansHz ?? [], autoSpan = r?.spectrum?.autoSpan === true
       const span = spans.find(s => s * 2 >= panWidthHz) ?? spans[spans.length - 1]
+      if (p.zoomed) { p.spanAsked = span; delete p.zoomed }
       if (span !== undefined && span !== p.spanAsked && !autoSpan && r?.id && r.spectrum && host.setRadioSpectrum) {
         const result = await host.setRadioSpectrum({ id: r.id, ...(selection ? { selection } : {}), spanHz: span })
         if (result.accepted) p.spanAsked = span
@@ -222,23 +225,37 @@ export function createRadioPanel(host: RadioHost): PanelHook {
       const longSwrHold = last?.swrAverage != null && last.swrAverage > swrHigh && args.clock.realNowMillis - last.endedAtMillis < swrHighHoldMillis
       const waiting = p.requested !== undefined || p.mode !== undefined
       const pending = waiting ? ((args.clock.realNowMillis - (p.sent ?? 0)) > 5000 ? t.unconfirmed : t.awaiting) : ''
+      // The band plan where the operation's station is. With no station, or a call that names no country,
+      // the library's plan mixes every region's, and an edge of one lands inside another's band: the
+      // widest edges alone then.
+      const station = typeof args.operation?.stationCall === 'string' ? args.operation.stationCall.trim().toUpperCase() : ''
+      const found = station ? regionAndCountryForDxccCode(entityForCall(station).dxccCode) : {}
+      const where = found.ituRegion != null || found.countryCode ? found : undefined
       return { kind: 'svgScene', title: r?.name?.trim() || t.title, scene: radioDocument(args.environment, r, p.requested, pending, {
-        ...view(key), radio: selection, spectrum: spectrumConfig(args.config), panWidthHz, longSwrHold,
+        ...view(key), radio: selection, spectrum: spectrumConfig(args.config), panWidthHz, longSwrHold, where,
         theme: typeof args.config.theme === 'string' && args.config.theme in themes ? args.config.theme as Theme : 'light',
       }) }
     },
     async onEvent(args, ctx) {
       const t = words(args.environment?.locale ?? ctx.locale), key = args.instanceId ?? 'default', p = placements.get(key)
       const event = args.event
-      if (event.controlId === 'waterfall-rate' && event.phase === 'activate') {
-        view(key).waterfallRate = ((view(key).waterfallRate ?? defaultWaterfallRate) + 1) % waterfallRates.length
-        persist(key)
-        return { values: {} as Record<string, number> }
-      }
-      if (event.controlId === 'pan-width' && event.phase === 'activate') {
-        const category = p?.panCategory ?? 'phone', widths = view(key).panWidth ??= {}
-        widths[category] = ((widths[category] ?? 1) + 1) % panWidths[category].length
-        persist(key)
+      // The app tunes, pans and zooms the panafall itself, and tells where a zoom, a split or a level
+      // drag ended, to be kept. A pan is not: the radio will have moved by the time it is drawn again.
+      // 0 is a double click, on the scale or the level strip: the default width, or levels, back.
+      if (event.controlId === 'panadapter' && event.gesture) {
+        const v = view(key), value = event.value
+        if (typeof value !== 'number' || !Number.isFinite(value)) return { values: {} as Record<string, number> }
+        const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n))
+        if (event.gesture === 'zoom') {
+          const widths = v.panWidths ??= {}, category = p?.panCategory ?? 'phone'
+          if (value > 0) widths[category] = Math.round(value)
+          else delete widths[category]
+          if (p && event.phase === 'commit') p.zoomed = true
+        } else if (event.gesture === 'split') v.split = clamp(value, .1, .9)
+        else if (event.gesture === 'floor') { if (value !== 0) v.floor = clamp(value, -200, 200); else delete v.floor }
+        else if (event.gesture === 'range') { if (value > 0) v.range = clamp(value, 1, 200); else delete v.range }
+        else if (event.gesture === 'speed') { if (value > 0) v.rows = clamp(value, .1, 60); else delete v.rows }
+        if (event.phase === 'commit') persist(key)
         return { values: {} as Record<string, number> }
       }
       if ((event.controlId === 'meter-scale' || event.controlId === 'meter-scale-axis') && event.phase === 'activate') {
@@ -274,13 +291,14 @@ export function createRadioPanel(host: RadioHost): PanelHook {
         p.passband = next
         p.passbandSent = args.clock?.realNowMillis ?? 0
         command = { id: p.id, passband: { lowHz: next[0], highHz: next[1] } }
+      } else if (event.controlId === 'panadapter' && event.phase === 'commit' && Number.isFinite(event.value)) {
+        // A click the app could not tune itself, without the radio to command: asked of the host, whose refusal says why.
+        command = { id: p.id, frequencyHz: Math.round(event.value!) }
       } else if (event.controlId === 'frequency-knob' && event.action === 'tune' && ['change', 'commit'].includes(event.phase) && Number.isFinite(event.value)) {
         command = { id: p.id, frequencyHz: Math.round(event.value! * 1000), dial: true }
       } else if (event.controlId.startsWith('antenna') && event.phase === 'activate' && /^ant-(rx|tx):/.test(event.action)) {
         const port = event.action.slice(7)
         command = { id: p.id, antenna: event.action.startsWith('ant-rx:') ? { rx: port } : { tx: port } }
-      } else if (event.controlId === 'panadapter' && event.action === 'tune' && Number.isFinite(event.value)) {
-        command = { id: p.id, frequencyHz: Math.round(event.value!) }
       } else if (event.controlId === 'atu-pill' && event.phase === 'activate' && ['tuner-inline', 'tuner-bypass'].includes(event.action)) {
         command = { id: p.id, tunerInline: event.action === 'tuner-inline' }
       } else if (event.controlId === 'tune-pill' && event.phase === 'activate' && event.action === 'start-tune') {
@@ -296,7 +314,6 @@ export function createRadioPanel(host: RadioHost): PanelHook {
       // The pill follows the radio's report, not the request; the box shows what was asked until the radio answers.
       if (command.tunerInline !== undefined || command.startTune || command.antenna || command.powerWatts !== undefined) return { values: {} as Record<string, number> }
       if (command.passband) return { values: passbandValues([command.passband.lowHz, command.passband.highHz]) }
-      if (command.frequencyHz !== undefined) { p.dial = command.dial === true; p.from = p.seen }
       p.requested = command.frequencyHz ?? p.requested
       p.mode = command.mode ?? p.mode
       p.sent = args.clock?.realNowMillis ?? 0
@@ -636,41 +653,49 @@ export function radioDocument(e: PanelEnvironment, r: PanelRadioState | null, re
   const panadapter = sp.display !== 'off' && r?.id !== undefined && r?.id !== null && panBottom - y >= (sp.display === 'both' ? 100 : 60)
   const notice = lasting || (panadapter ? '' : pending)
   if (notice) text('confirmation', notice, left + 12, bottom, w - 24, 'label', c.onSurfaceVariant)
-  // The rest of the panel, drawn by the host from the radio's own scope; a click tunes there.
+  // The rest of the panel, drawn by the host from the radio's own scope. The app tunes on a click, the
+  // wheel or a drag of the dial's line, pans on a drag of the picture, zooms on a drag of the scale, and
+  // sets the levels on a drag of the strip at the right; the event hears where each but a pan ended.
   if (panadapter) {
-    // Painted just after the face, so the width label below it draws on top.
-    scene.controls!.push({ id: 'panadapter', label: t.panadapter, kind: 'spectrum', x: left + 12, y, width: w - 24, height: panBottom - y, after: 'face',
+    const pw = w - 24, ph = panBottom - y
+    const plan = r ? planFor(r, view.panWidthHz, pw, ph, sp.display === 'waterfall' ? 'waterfall' : 'spectrum', view.where) : []
+    scene.controls!.push({ id: 'panadapter', label: t.panadapter, kind: 'bandScope', x: left + 12, y, width: pw, height: ph, after: 'face',
       ...(view.panWidthHz ? { span: view.panWidthHz } : {}),
-      ...(view.radio ? { radio: view.radio } : {}), display: sp.display as 'both' | 'pan' | 'waterfall', split: .5, follow: .15, event: 'tune',
-      // A click lands on the nearest step: 50 Hz in CW, 500 Hz in phone; data and RTTY land where clicked.
-      ...({ CW: { tuneStep: 50 }, USB: { tuneStep: 500 }, LSB: { tuneStep: 500 }, AM: { tuneStep: 500 }, FM: { tuneStep: 500 } } as Record<string, { tuneStep: number }>)[r?.mode ?? ''],
+      ...(view.radio ? { radio: view.radio } : {}), display: sp.display === 'pan' ? 'spectrum' : sp.display as 'both' | 'waterfall',
+      split: view.split ?? .5, follow: .15, event: 'scope',
+      ...(view.floor !== undefined ? { floor: view.floor } : {}), ...(view.range !== undefined ? { range: view.range } : {}),
       // Each waterfall row is the loudest since the last; teal is quiet in the panadapter's own colour.
-      waterfallSpeed: waterfallRates[view.waterfallRate ?? defaultWaterfallRate],
+      waterfallSpeed: view.rows ?? defaultWaterfallRows,
       // A tighter window than the panadapter's 80 dB, just above the noise: a weak signal lights up
       // where the trace would barely lift.
       waterfallFloor: 3, waterfallRange: 50,
       ...(sp.colors === 'teal' ? { waterfallColors: ['#1f3a42', '#2c5c68', '#3f8a9b', '#7cc4d3', '#d6eef4', '#ffffff'] } : { palette: sp.colors }),
-      center: { pan: { color: '#a3e6f2', width: 3 }, waterfall: { color: '#a3e6f2', width: 3 } },
-      overlays: passband ? [{ from: passband[0], to: passband[1], pan: { fill: '#40d6eef4' }, waterfall: { fill: '#26ffffff' } }] : [],
+      center: { spectrum: { color: '#a3e6f2', width: 3 }, waterfall: { color: '#a3e6f2', width: 3 } },
+      overlays: passband ? [{ from: passband[0], to: passband[1], spectrum: { fill: '#40d6eef4' }, waterfall: { fill: '#26ffffff' } }] : [],
       backgroundColor: '#1f3a42', traceColor: '#d6eef4', fillColor: '#66d6eef4', fillColorBottom: '#00d6eef4', gridColor: '#36565f', gridDashed: true,
-      // Labels always in MHz to the kHz, so they come at whole-kHz steps that suit the span.
-      scale: { gap: 18, background: '#1f3a42', ticks: { color: '#a9c4cb', width: 1, offset: 0, length: 4 },
-        labels: { color: '#a9c4cb', size: 10, offset: 4, decimals: 3, interval: labelInterval(view.panWidthHz ?? 100000) } } })
-    // The width shown, top right: what the scope can give, at most the preset. A click steps the presets.
-    if (view.panWidthHz) {
-      const scopeHz = r?.spectrum?.spansHz?.length ? Math.max(...r.spectrum.spansHz) * 2 : Infinity
-      const shownKHz = Math.round(Math.min(view.panWidthHz, scopeHz) / 1000), lw = 54, lx = left + w - 12 - lw - 4, ly = y + 4
-      layers.push(svg('pan-width-backing', lx, ly, lw, 16, `<rect width="${lw}" height="16" rx="3" fill="#1f3a42" fill-opacity=".75"/>`))
-      layers.push({ id: 'pan-width', x: lx, y: ly + 1, width: lw, height: 15, text: { literal: `${shownKHz} kHz`, size: 10, color: '#d6eef4', align: 'center' } })
-      scene.controls!.push({ id: 'pan-width', label: t.panWidth, kind: 'button', x: lx, y: ly, width: lw, height: 16, event: 'pan-width-next' })
-    }
-    // The waterfall's rate, bottom right. A click steps the rates.
-    if (sp.display !== 'pan') {
-      const rate = waterfallRates[view.waterfallRate ?? defaultWaterfallRate], lw = 64, lx = left + w - 12 - lw - 4, ly = panBottom - 4 - 16
-      layers.push(svg('waterfall-rate-backing', lx, ly, lw, 16, `<rect width="${lw}" height="16" rx="3" fill="#1f3a42" fill-opacity=".75"/>`))
-      layers.push({ id: 'waterfall-rate', x: lx, y: ly + 1, width: lw, height: 15, text: { literal: `${rate} ${rate === 1 ? 'row' : 'rows'}/s`, size: 10, color: '#d6eef4', align: 'center' } })
-      scene.controls!.push({ id: 'waterfall-rate', label: t.speed, kind: 'button', x: lx, y: ly, width: lw, height: 16, event: 'waterfall-rate-next' })
-    }
+      // The level strip takes the scale's colours.
+      scale: { gap: 18, background: '#1f3a42', ticks: { color: '#a9c4cb', width: 1, offset: 0, length: 4 }, labels: { color: '#a9c4cb', size: 10, offset: 4 } },
+      ...(plan.length ? { layers: plan } : {}) })
   }
   return scene
+}
+
+/**
+ * The band plan over a panafall [width] by [height] pixels showing [shownHz] about [r]'s dial, its labels
+ * hanging from [top]: the whole band, and whatever else the sweep takes in. The operator pans and zooms
+ * natively and the panel hears where only once a gesture ends, so drawn about the dial alone, an edge
+ * the picture was panned to would be missing.
+ */
+function planFor(r: PanelRadioState, shownHz: number | undefined, width: number, height: number, top: string, where: Where | undefined): PanelSceneSpectrumLayer[] {
+  const sp = r.spectrum, sweep = sp?.lowHz != null && sp.highHz != null && sp.highHz > sp.lowHz ? [sp.lowHz / 1000, sp.highHz / 1000] : undefined
+  const sweepHz = sweep ? (sweep[1] - sweep[0]) * 1000 : (sp?.spanHz ?? 0) * 2
+  const shown = shownHz ?? sweepHz
+  if (r.frequencyHz == null || !shown || width <= 0) return []
+  const band = bandForFrequency(r.frequencyHz / 1000), edges = bandEdges[band]
+  if (!edges) return []
+  const dial = r.frequencyHz / 1000, reach = Math.max(shown, sweepHz) / 1000
+  return planLayers(where ? bandPlan(band, where) : [{ from: edges[0], to: edges[1], mode: null }], {
+    hzPerPx: shown / width, top, height, edgesOnly: !where,
+    window: [Math.min(edges[0], dial - reach, sweep?.[0] ?? dial), Math.max(edges[1], dial + reach, sweep?.[1] ?? dial)],
+  })
 }

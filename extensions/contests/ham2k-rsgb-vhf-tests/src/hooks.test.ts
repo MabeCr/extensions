@@ -52,6 +52,29 @@ test('the serial alone is what we sent — our grid is not repeated on every row
   assert.equal(patch?.their?.exchange, '117 JO01AB')
 })
 
+test('the received grid reaches their.grid, where the ADIF and SOTA exports read it', async () => {
+  const save = async (their: Record<string, JSONValue>) =>
+    (await rsgb.runHook('activity', 'processQsoBeforeSave', {
+      operation,
+      qso: { band: '2m', mode: 'CW', their: { call: 'G4ABC/P', ...their }, refs: [{ type: TYPE, theirSerial: '7', grid: 'io83qk' }] },
+    })) as { their?: Record<string, JSONValue> } | null
+
+  // No lookup grid at all, and a lookup's home square elsewhere: both replaced.
+  for (const their of [{}, { guess: { grid: 'IO91WO', lat: 51.6, lon: -0.1 } }] as Record<string, JSONValue>[]) {
+    const patch = await save(their)
+    assert.equal(patch?.their?.grid, 'IO83QK')
+    assert.equal(patch?.their?.lat, 53.4375)
+    assert.equal(patch?.their?.lon, -2.625)
+  }
+
+  // Already said, by the lookup or more finely by the operator: left alone.
+  for (const their of [{ guess: { grid: 'IO83QK' } }, { grid: 'IO83QK12' }] as Record<string, JSONValue>[]) {
+    const patch = await save(their)
+    assert.equal(patch?.their?.exchange, '7 IO83QK')
+    assert.equal('grid' in (patch?.their ?? {}), false)
+  }
+})
+
 test('nothing of theirs to write still clears a stale sent serial', async () => {
   const patch = await decorate({})
   assert.equal(patch?.our?.exchange, '')

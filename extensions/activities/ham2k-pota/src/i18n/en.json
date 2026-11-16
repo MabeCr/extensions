@@ -15,5 +15,12 @@
   "manyParksHunted": "{{formatted}} Parks Hunted",
   "httpError": "POTA API returned HTTP {{status}}",
   "postRefused": "POTA refused the spot for {{calls}}",
-  "alreadyPosted": "{{count}} other spot(s) did go out."
+  "alreadyPosted": "{{count}} other spot(s) did go out.",
+  "adifForParks": "ADIF for POTA {{parks}}",
+  "uploadInstructionsOne": "Upload it at [pota.app](https://pota.app/#/user/logs).",
+  "uploadInstructionsMany": "📣 **POTA now accepts a single file for multiple parks.** Upload this one at [pota.app](https://pota.app/#/user/logs).",
+  "sigFieldsLabel": "Park fields",
+  "sigFieldsDescription": "Which ADIF fields name the parks in this file.",
+  "sigFieldsPotaRef": "POTA_REF only",
+  "sigFieldsBoth": "POTA_REF and SIG_INFO"
 }

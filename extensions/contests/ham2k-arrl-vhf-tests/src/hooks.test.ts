@@ -60,6 +60,24 @@ async function generate(args: Record<string, unknown>) {
   return (await vhf.runHook('export', 'generateExport', args)) as { filename: string; content: string }
 }
 
+test('the received grid reaches their.grid, where the ADIF and SOTA exports read it', async () => {
+  const save = async (their: Record<string, JSONValue>) =>
+    (await vhf.runHook('activity', 'processQsoBeforeSave', {
+      operation: operationFor(),
+      qso: { band: '2m', mode: 'CW', their: { call: 'W1AW/P', ...their }, refs: [{ type: TYPE, grid: 'fn42' }] },
+    })) as { their?: Record<string, JSONValue> } | null
+
+  for (const their of [{}, { guess: { grid: 'FN31PR', lat: 41.7, lon: -72.7 } }] as Record<string, JSONValue>[]) {
+    const patch = await save(their)
+    assert.equal(patch?.their?.exchange, 'FN42')
+    assert.deepEqual([patch?.their?.grid, patch?.their?.lat, patch?.their?.lon], ['FN42', 42.5, -71])
+  }
+
+  // A lookup's finer square inside the one received already says it.
+  const patch = await save({ guess: { grid: 'FN42AB' } })
+  assert.equal('grid' in (patch?.their ?? {}), false)
+})
+
 test('each event links to its own rules, and no event links nowhere', async () => {
   // The family's events do not share one rules document, so with no event
   // picked there is no one document to send the operator to.
@@ -182,4 +200,13 @@ test("each suggestion names the weekend its next running starts", async (t) => {
   assert.equal(await january(), "ARRL VHF January • 2026-01-17")
   t.mock.timers.setTime(Date.UTC(2026, 0, 24))
   assert.equal(await january(), "ARRL VHF January • 2027-01-16")
+})
+
+test("OPERATORS names whoever logged, then the operation's station owner", async () => {
+  // The log is the authority on who operated: without the derivation a
+  // multi-op log names only this device's operator.
+  const operation = operationFor({ ownerCall: 'n1own', refs: [{ type: TYPE, ref: 'ARRL-VHF-JUN' }] })
+  const qsos = (qsosFor(3) as Record<string, unknown>[]).map((qso, i) => ({ ...qso, our: { call: 'N0DEV', operatorCall: i === 0 ? 'K1ABC' : 'W2DEF' } }))
+  const { content } = (await vhf.runHook('export', 'generateExport', { operation, qsos, exportType: 'arrl-vhf-tests-cabrillo' })) as { content: string }
+  assert.ok(content.includes('\nOPERATORS: K1ABC W2DEF @N1OWN\n'), content)
 })

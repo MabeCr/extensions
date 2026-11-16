@@ -9,5 +9,6 @@
   "unconfigured": "RSGB VHF (not set up)",
   "adifExport": "ADIF for {{contest}}",
   "reg1testExport": "REG1TEST/EDI for {{contest}}",
-  "ourExchangeSubtitle": "Sending {{grid}}"
+  "ourExchangeSubtitle": "Sending {{grid}}",
+  "longest": "Longest: {{formatted}} km"
 }

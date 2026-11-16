@@ -49,7 +49,8 @@
 
 import { fmtInteger } from "@ham2k/lib-format-tools"
 import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
-import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
+import type { ContestScorer, HookContext, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
+import { bandBreakdown } from "@ham2k/lib-contest-summary"
 
 import { EXCLUDED_BANDS, POINTS_PER_DISTINCT_PARK, TWO_DAY_BONUS, slotMode } from "./event.ts"
 import { isListed, isOurRef, ourParks, theirParks } from "./parks.ts"
@@ -72,7 +73,15 @@ export type GaspotaScoresheet = {
   hunted: Record<string, number>
   /// UTC day → 1, for each day with a contact with a listed park.
   huntDays: Record<string, number>
-  bands: Record<string, number>
+  /// band → the activator's contacts on it. These three are optional: a
+  /// checkpoint cached before they existed has none, and shows no band lines
+  /// until the log is rescored.
+  activatorBands?: Record<string, number>
+  /// band → the hunter's contacts with listed parks on it.
+  hunterBands?: Record<string, number>
+  /// band → the listed parks first hunted on it, so the bands' parks add up to
+  /// the hunter's multiplier.
+  bandParks?: Record<string, number>
   /// Contacts made from a listed park — the activator's `B`.
   contacts: number
   /// Contacts with listed parks — the hunter's total.
@@ -126,7 +135,8 @@ function creditFresh(bySlot: Record<string, string[]>, slot: string, claims: str
 export const GaspotaScorer: ContestScorer<GaspotaScoresheet> = {
   startScoresheet(): GaspotaScoresheet {
     return {
-      worked: {}, huntedSlots: {}, activated: {}, hunted: {}, huntDays: {}, bands: {},
+      worked: {}, huntedSlots: {}, activated: {}, hunted: {}, huntDays: {},
+      activatorBands: {}, hunterBands: {}, bandParks: {},
       contacts: 0, parkContacts: 0, dupes: 0,
     }
   },
@@ -170,7 +180,13 @@ export const GaspotaScorer: ContestScorer<GaspotaScoresheet> = {
     // The hunter's table, which our own park is no part of.
     const freshListed = creditFresh(byHuntedSlot, `${band}|${mode}`, listed)
     const newToLog = freshListed.some((park) => sheet.hunted[park] === undefined)
-    for (const park of freshListed) sheet.hunted[park] = (sheet.hunted[park] ?? 0) + 1
+    for (const park of freshListed) {
+      if (sheet.hunted[park] === undefined) {
+        sheet.bandParks ??= {}
+        sheet.bandParks[band] = (sheet.bandParks[band] ?? 0) + 1
+      }
+      sheet.hunted[park] = (sheet.hunted[park] ?? 0) + 1
+    }
     if (freshListed.length > 0) {
       theirNewPark = true
       const at = typeof qso.startAtMillis === 'number' ? qso.startAtMillis : undefined
@@ -198,7 +214,14 @@ export const GaspotaScorer: ContestScorer<GaspotaScoresheet> = {
     // `newPark`; ours, with nothing new on their side, is `newRef`.
     if (hadBandAndMode && !notices.includes('newPark')) notices.push(theirNewPark ? 'newPark' : 'newRef')
 
-    sheet.bands[band] = (sheet.bands[band] ?? 0) + value
+    if (contacts > 0) {
+      sheet.activatorBands ??= {}
+      sheet.activatorBands[band] = (sheet.activatorBands[band] ?? 0) + contacts
+    }
+    if (freshListed.length > 0) {
+      sheet.hunterBands ??= {}
+      sheet.hunterBands[band] = (sheet.hunterBands[band] ?? 0) + freshListed.length
+    }
     sheet.contacts += contacts
     sheet.parkContacts += freshListed.length
 
@@ -226,13 +249,13 @@ export const GaspotaScorer: ContestScorer<GaspotaScoresheet> = {
       arithmetic: activating
         ? contestArithmetic({ qsos: contacts, points: contacts, bonus: POINTS_PER_DISTINCT_PARK * activator.distinctParks, bonusFirst: true, mults }, ctx)
         : contestArithmetic({ qsos: contacts, points: contacts, mults, bonus: contacts > 0 ? hunter.bonus : 0 }, ctx),
-      detail: longSummaryFor(sheet, { activator, hunter }),
+      detail: longSummaryFor(sheet, { activator, hunter }, ctx),
       extra: { points: contacts, mults, qsos: contacts },
     }, ctx)
   },
 }
 
-function longSummaryFor(sheet: GaspotaScoresheet, { activator, hunter }: GaspotaTotals): string {
+function longSummaryFor(sheet: GaspotaScoresheet, { activator, hunter }: GaspotaTotals, ctx: HookContext): string {
   const parts: string[] = []
 
   if (activator.parksActivated > 0) {
@@ -251,10 +274,17 @@ function longSummaryFor(sheet: GaspotaScoresheet, { activator, hunter }: Gaspota
     parts.push(`### Parks worked\n${Object.keys(sheet.hunted).sort().join(' • ')}`)
   }
 
-  const bands = Object.keys(sheet.bands).sort()
-  if (bands.length > 0) {
-    parts.push(bands.map((band) => `**${band}**: ${fmtInteger(sheet.bands[band])} QSOs`).join('\n'))
-  }
+  // The band lines break down the entry the arithmetic states. Every contact is
+  // a point in both. The hunter's multiplier is the parks hunted, each counted
+  // on the band it was first worked; the activator's is OUR parks, which no
+  // band holds, so its lines carry none.
+  const bands = activator.parksActivated > 0
+    ? bandBreakdown(Object.entries(sheet.activatorBands ?? {}).map(([band, qsos]) => ({ band, qsos, points: qsos })), ctx)
+    : bandBreakdown(
+      Object.entries(sheet.hunterBands ?? {}).map(([band, qsos]) => ({ band, qsos, points: qsos, mults: sheet.bandParks?.[band] ?? 0 })),
+      ctx,
+    )
+  if (bands) parts.push(bands)
 
   return parts.join('\n\n')
 }

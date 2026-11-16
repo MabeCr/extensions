@@ -1,0 +1,21 @@
+{
+  "invalidReference": "Invalid tile: six characters of a grid square, like FN42HN",
+  "activationControl": "Tiles activation",
+  "huntingControl": "Tiles",
+  "tileName": "Grid square {{grid}}",
+  "tile": "tile",
+  "tilesPlural": "tiles",
+  "accountDescription": "Self-spotting your Tiles activations",
+  "callsignLabel": "Callsign",
+  "callsignPostface": "The callsign your Tiles account is registered under.",
+  "pinLabel": "Offline Spot Gateway PIN",
+  "pinPostface": "On tilesontheair.com, under Profile. The same PIN the email gateway uses; not your password.",
+  "missingCredentials": "Enter your Tiles callsign and Offline Spot Gateway PIN",
+  "credentialsUnchecked": "Saved for **{{callsign}}**. Tiles can only check a PIN by posting a spot, so your first self-spot will tell.",
+  "noActivation": "No Tiles activation on this operation",
+  "noFrequency": "This operation has no frequency to spot",
+  "pinRejected": "Tiles did not accept this callsign and PIN. Check the PIN under Profile on tilesontheair.com",
+  "rateLimited": "Tiles takes up to six spots a minute; try again in a moment",
+  "callMismatch": "Your Tiles account is for {{account}}, but this operation is on {{station}}",
+  "unconfirmed": "Tiles answered HTTP {{status}} without confirming the spot"
+}

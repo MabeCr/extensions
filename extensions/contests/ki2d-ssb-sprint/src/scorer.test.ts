@@ -36,7 +36,7 @@ function run(qsos: Record<string, JSONValue>[], operation: Record<string, JSONVa
     sheet = r.scoresheet
     return r.score
   })
-  const summary = SprintScorer.summarizeScore({ scoresheet: sheet, operation, ref, scope: 'operation' } as never, ctx) as Record<string, { total?: number; summary?: string; longSummary?: string }>
+  const summary = SprintScorer.summarizeScore({ scoresheet: sheet, operation, ref, scope: 'operation' } as never, ctx) as Record<string, { total?: number; summary?: string; longSummary?: string; grid?: boolean }>
   return { sheet, scores, summary: Object.values(summary)[0] }
 }
 
@@ -96,16 +96,45 @@ test('an incomplete or unknown exchange still counts, and says so', () => {
   const missing = qso('W1AW', 'CT')
   ;(missing.refs as Record<string, JSONValue>[])[0].theirSerial = ''
   const { scores, sheet } = run([missing, qso('K1ABC', 'ZZ'), qso('K2ABC', 'kl7')])
-  assert.deepEqual(scores.map((s) => s.alerts?.[0]), ['missingExchange', 'invalidExchange', undefined])
+  assert.deepEqual(scores.map((s) => s.incomplete), [['ssb-sprint/theirSerial'], undefined, undefined])
+  assert.deepEqual(scores.map((s) => s.alerts?.[0]), [undefined, 'invalidExchange', undefined])
   assert.deepEqual(scores.map((s) => s.value), [1, 1, 1])
   // "AK/KL7": the alias is the state.
   assert.ok(sheet.mults.AK)
 })
 
-test('the summary multiplies contacts by multipliers and says what is left to chase', () => {
+test('the summary multiplies contacts by multipliers and checks off the states and provinces', () => {
   const { summary } = run([qso('W1AW', 'CT'), qso('VE3ABC', 'ON', '40m'), qso('XE1ABC', 'XE', '80m'), qso('W2ABC', 'NY')])
   assert.equal(summary.total, 4 * 4)
-  assert.match(summary.longSummary ?? '', /\*\*Provinces:\*\* 1 of 13 — missing AB BC MB NB NL NS NT NU PE QC SK YT/)
-  assert.match(summary.longSummary ?? '', /\*\*States:\*\* 2 of 51\n/)
-  assert.match(summary.longSummary ?? '', /\*\*20m\*\*: 2 QSOs/)
+  assert.equal(summary.grid, true)
+  const detail = summary.longSummary ?? ''
+  // Every state and province, the worked ones struck.
+  assert.match(detail, /### 2 of 51 US States\n\nAK AL AR AZ CA CO \*\*~~CT~~\*\* DC .* NV \*\*~~NY~~\*\* OH .* WY\n\n/)
+  assert.match(detail, /### 1 of 13 Canadian Provinces\n\nAB BC MB NB NL NS NT NU \*\*~~ON~~\*\* PE QC SK YT\n\n/)
+  // The countries worked, alone.
+  assert.match(detail, /### 1 NA Country\n\n\*\*~~XE~~\*\*\n\n/)
+  assert.match(detail, /### 4 QSOs\n\n\*\*80m\*\*: 1 QSO, 1 pt, 1 mult\n\*\*40m\*\*: 1 QSO, 1 pt, 1 mult\n\*\*20m\*\*: 2 QSOs, 2 pts, 2 mults$/)
+  assert.doesNotMatch(detail, /missing/)
+})
+
+test('each multiplier counts on the band it was first worked on, so the band lines add up', () => {
+  // A multiplier counts once for the whole contest. Crediting CT again on 40m
+  // would show three multipliers across the bands when the score multiplies by
+  // two; and 80m reads first however late it was worked.
+  const { summary } = run([qso('W1AW', 'CT'), qso('W1AW', 'CT', '40m'), qso('VE3ABC', 'ON', '40m'), qso('W2ABC', 'NY', '80m')])
+  const lines = (summary.longSummary ?? '').split('\n').filter((line) => /^\*\*\d+m\*\*/.test(line))
+  assert.deepEqual(lines, ['**80m**: 1 QSO, 1 pt, 1 mult', '**40m**: 2 QSOs, 2 pts, 1 mult', '**20m**: 1 QSO, 1 pt, 1 mult'])
+  assert.equal(summary.total, 4 * 3)
+})
+
+test('the day carries the score too, as a badge for the date header', () => {
+  const { sheet } = run([qso('W1AW', 'CT'), qso('VE3ABC', 'ON', '40m')])
+  const day = SprintScorer.summarizeScore({ scoresheet: sheet, operation: usOperation, ref: usRef, scope: 'day' } as never, ctx) as Record<string, Record<string, unknown>>
+  assert.deepEqual(Object.keys(day), ['ssb-sprint'])
+  assert.equal(day['ssb-sprint'].for, 'day')
+  assert.equal(day['ssb-sprint'].icon, 'run-fast')
+  assert.equal(day['ssb-sprint'].summary, '4')
+  assert.equal(day['ssb-sprint'].label, 'SSB Sprint: 4 points')
+  assert.equal(day['ssb-sprint'].longSummary, undefined)
+  assert.equal(day['ssb-sprint'].grid, undefined)
 })

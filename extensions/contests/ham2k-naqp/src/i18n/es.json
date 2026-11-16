@@ -16,8 +16,6 @@
   "operator_CHECKLOG": "Checklog",
   "power_LOW": "Baja (100 W)",
   "power_QRP": "QRP (5 W)",
-  "operatorsLabel": "Operadores",
-  "operatorsPlaceholder": "ej. K1ABC W2DEF (multi-operador)",
   "rulesLink": "[Reglas oficiales](https://ncjweb.com/naqp/)",
   "nameLabel": "Nombre",
   "locationLabel": "Ubic",

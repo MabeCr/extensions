@@ -2,7 +2,7 @@
   "key": "ham2k-dxcc",
   "name": "DXCC",
   "shortName": "DXCC",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Chase ARRL's DXCC: the entities you have worked, confirmed and had credited, in each mode and on each band, and your DXCC Challenge total",
   "category": "award",
   "icon": "earth",

@@ -123,18 +123,26 @@ test("the Cabrillo file comes out of the export hook", async () => {
   assert.equal(delegated.length, 0, 'a Cabrillo file is written here, not delegated')
 })
 
-test("the Cabrillo header carries the declared entry and its operators", async () => {
-  const exported = async (ref: Record<string, unknown>, local: Record<string, unknown> = {}) =>
+test("the Cabrillo header carries the declared entry and whoever logged", async () => {
+  const exported = async (ref: Record<string, unknown>, local: Record<string, unknown> = {}, qsos: Record<string, unknown>[] = QSOS, ownerCall?: string) =>
     ((await contest.runHook('export', 'generateExport', {
-      operation: { uuid: 'op-2', stationCall: 'N0DEV', local, refs: [{ type: 'arrl-dx', mode: 'Phone', exchange: 'MA', ...ref }] },
-      qsos: QSOS,
+      operation: { uuid: 'op-2', stationCall: 'N0DEV', local, ownerCall, refs: [{ type: 'arrl-dx', mode: 'Phone', exchange: 'MA', ...ref }] },
+      qsos,
       exportType: 'arrl-dx-cabrillo',
     })) as { content: string }).content
   const header = (content: string) => content.split('\n').filter((line) => /^(OPERATORS|CATEGORY-|CLUB)/.test(line))
 
-  const multi = await exported({ operator: 'MULTI-TWO', operators: 'n0dev, k1abc w2def', club: 'Yankee Clipper Contest Club' }, { operatorCall: 'N0DEV' })
+  // The operators are whoever logged, the station owner closes the line, and
+  // a typed list from an older setup is ignored.
+  const byThree = QSOS.map((qso, i) => ({ ...qso, our: { call: 'N0DEV', ...(i > 0 ? { operatorCall: ['K1ABC', 'W2DEF'][i - 1] } : {}) } }))
+  const multi = await exported(
+    { operator: 'MULTI-TWO', operators: 'N0OLD', club: 'Yankee Clipper Contest Club' },
+    { operatorCall: 'N0DEV' },
+    byThree,
+    'n1own',
+  )
   assert.deepEqual(header(multi), [
-    'OPERATORS: N0DEV K1ABC W2DEF',
+    'OPERATORS: N0DEV K1ABC W2DEF @N1OWN',
     'CATEGORY-OPERATOR: MULTI-OP',
     'CATEGORY-ASSISTED: ASSISTED',
     'CATEGORY-BAND: ALL',
@@ -144,7 +152,8 @@ test("the Cabrillo header carries the declared entry and its operators", async (
     'CLUB: Yankee Clipper Contest Club',
   ])
 
-  // Nothing declared claims nothing, and the app's operator call stands in.
+  // Nothing declared claims nothing, and a log the station's own holder made
+  // names that call.
   assert.deepEqual(header(await exported({}, { operatorCall: 'N0DEV' })), ['OPERATORS: N0DEV', 'CATEGORY-MODE: SSB'])
 })
 
@@ -154,10 +163,25 @@ test("the setup form asks the entry, each axis undeclared to begin with", async 
   }[]
   const elements = controls[0].input.form.elements
   // The rules line, one note per verdict, sits between the exchange and the entry.
-  assert.deepEqual(elements.map((e) => e.key ?? e.type), ['mode', 'stationType', 'exchange', 'markdown', 'markdown', 'operator', 'band', 'power', 'section', 'operators', 'club'])
+  assert.deepEqual(elements.map((e) => e.key ?? e.type), ['mode', 'stationType', 'exchange', 'markdown', 'markdown', 'operator', 'band', 'power', 'section', 'club'])
   for (const key of ['operator', 'band', 'power']) {
     const select = elements.find((e) => e.key === key)
     assert.equal(select?.value, '')
     assert.equal(select?.options?.[0].value, '')
   }
 })
+
+test("each QSO line of a MULTI-TWO log ends in the transmitter its position is numbered as, and no other entry's does", async () => {
+  const qsos = QSOS.map((qso, i) => ({ ...qso, our: { ...qso.our, multiIdentifier: ['2', '1', '2'][i] } }))
+  const lines = async (operator: string) =>
+    ((await contest.runHook('export', 'generateExport', {
+      operation: { ...OPERATION, refs: [{ ...OPERATION.refs[0], operator }] },
+      qsos,
+      exportType: 'arrl-dx-cabrillo',
+    })) as { content: string }).content.split('\n').filter((line) => line.startsWith('QSO:')).map((line) => line.trim().split(/\s+/))
+  const multi = await lines('MULTI-TWO')
+  const single = await lines('SINGLE-OP')
+  assert.deepEqual(multi.map((line) => line.at(-1)), ['1', '0', '1'])
+  assert.deepEqual(multi.map((line) => line.slice(0, -1)), single)
+})
+

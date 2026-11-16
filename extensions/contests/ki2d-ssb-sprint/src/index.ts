@@ -8,12 +8,14 @@
 // Four hours, three bands, and an exchange of both calls, a serial, a name
 // and a location: "KA9FOX 122 BILL FL K4XS". Ours comes from the setup — the
 // serial counts itself — and theirs is three fields per QSO, the name and
-// location guessed from N1MM's Sprint call history and the callsign lookup.
+// location guessed from the log, N1MM's Sprint call history and the callsign
+// lookup, in the order `suggestedExchange` gives.
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 import { rulesNotes, withRules } from "@ham2k/lib-contest-rules"
-import { stampedExchange } from "@ham2k/lib-contest-exchange"
+import { cabrilloOperators } from "@ham2k/lib-contest-station"
+import { needsGuess, stampedExchange, theirStateFields, withTheirFields } from "@ham2k/lib-contest-exchange"
 import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -32,9 +34,10 @@ import type {
 
 import { tFor } from "./i18n.ts"
 import { OPERATOR_CLASSES, POWER_CLASSES, cabrilloCategories, contestRules } from "./entry.ts"
-import { TYPE, guessedLocation, guessedName, ourExchange, refOfType, serial, serialOf, str, theirExchange } from "./exchange.ts"
+import { type Exchange, TYPE, ourExchange, refOfType, serial, serialOf, str, suggestedExchange, theirExchange } from "./exchange.ts"
 import { HISTORY_STEM, firstName, loadHistory, parseHistory, removeHistory } from "./history.ts"
 import { LOCATION_PATTERN, VALID_LOCATIONS, normalizeLocation } from "./locations.ts"
+import { type QsyHost, type QsySet, QsyWatcher, RECENT_MILLIS, previousContact, setOf } from "./qsy.ts"
 import { nextContestDate, relevanceFor } from "./schedule.ts"
 import { CONTEST_TITLE, SprintScorer } from "./scorer.ts"
 
@@ -86,6 +89,74 @@ async function profileDetails(): Promise<{ name: string; email: string }> {
     console.warn(`[${TYPE}] profile settings unavailable, exporting without profile name and email:`, e)
     return { name: '', email: '' }
   }
+}
+
+/// One watcher per radio. Radio A is what `host.readRadio()` reads; the
+/// extension API has no way yet to ask for Radio B, so B's dial is unknown
+/// and its watcher says what it can without one.
+const qsyWatchers: Record<QsySet, QsyWatcher> = {
+  A: qsyWatcherFor('A', () => host.readRadio()),
+  B: qsyWatcherFor('B', async () => null),
+}
+
+function qsyWatcherFor(set: QsySet, readRadio: QsyHost['readRadio']): QsyWatcher {
+  return new QsyWatcher({
+    readRadio,
+    post: (params) => host.fyi.post(params),
+    clear: (key) => host.fyi.clear(key),
+    setInterval: (fn, ms) => host.setInterval(fn, ms),
+    clearInterval: (id) => host.clearInterval(id),
+  }, Date.now, set === 'A' ? 'qsy' : 'qsy-b')
+}
+
+/// How long a save waits for the log before the QSY watch gives up on it.
+const LOG_READ_MILLIS = 500
+
+/// Starts watching the QSY rule for a contact being saved — a new one, made
+/// just now, never an edit or an import.
+///
+/// HaLo hands a NEW contact over before the log has given it a uuid, while an
+/// edit carries its record's own, so a uuid is what marks an edit; and an
+/// import is long past. The contact before — on the same radio, under SO2R —
+/// is read from the log when the operation names itself (`operation.uuid`,
+/// which the save hook's operation does not always carry), and otherwise is
+/// the last contact that radio's watcher saw.
+///
+/// Nothing here can fail the save: the QSY message is a convenience, the
+/// exchange it would cost is the log.
+async function watchQsy(qso: Record<string, JSONValue>, operation: Record<string, JSONValue>, ctx: HookContext): Promise<void> {
+  try {
+    if (qso.uuid) return
+    const at = typeof qso.startAtMillis === 'number' ? qso.startAtMillis : undefined
+    if (at === undefined || Math.abs(Date.now() - at) > RECENT_MILLIS) return
+    const watcher = qsyWatchers[setOf(qso)]
+    const logged = await loggedBefore(qso, operation, ctx)
+    const previous = logged ? logged.previous : watcher.lastContact
+    watcher.contact(qso, previous, tFor(ctx)).catch((e) => console.warn(`[${TYPE}] QSY watch failed:`, e))
+  } catch (e) {
+    console.warn(`[${TYPE}] QSY watch not started:`, e)
+  }
+}
+
+/// The contact logged before [qso], read from the operation's log — or
+/// undefined when the log can't say: no uuid to name the operation by, no
+/// log access, or no answer within [LOG_READ_MILLIS], which is as long as
+/// the save waits for it.
+async function loggedBefore(
+  qso: Record<string, JSONValue>,
+  operation: Record<string, JSONValue>,
+  ctx: HookContext,
+): Promise<{ previous: Record<string, JSONValue> | undefined } | undefined> {
+  if (!operation.uuid || !ctx.getQsos) return undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const qsos = await Promise.race([
+    ctx.getQsos(str(operation.uuid)).catch((e) => {
+      console.warn(`[${TYPE}] log unreadable, QSY duty judged from the last contact watched:`, e)
+      return null
+    }),
+    new Promise<'late'>((resolve) => { timer = setTimeout(() => resolve('late'), LOG_READ_MILLIS) }),
+  ]).finally(() => clearTimeout(timer))
+  return Array.isArray(qsos) ? { previous: previousContact(qsos, qso) } : undefined
 }
 
 /// One select per axis of the entry, "Not declared" first.
@@ -195,9 +266,7 @@ const ActivityHook = {
     if (!refOfType(args.operation, TYPE)) return []
 
     const t = tFor(ctx)
-    const their = (args.qso?.their as Record<string, JSONValue>) ?? {}
-    const name = guessedName(their)
-    const location = guessedLocation(their)
+    const { name, location } = await suggestedExchange(ctx, args.operation, args.qso)
     const control = (key: string, label: string, order: number) => ({
       key: `${TYPE}/${key}`,
       label: t(label),
@@ -253,18 +322,26 @@ const ActivityHook = {
   /// on the ref as '' — stays empty rather than being guessed over.
   async processQsoBeforeSave(
     args: { qso: Record<string, JSONValue>; operation: Record<string, JSONValue> },
-    _ctx: HookContext,
+    ctx: HookContext,
   ): Promise<Record<string, JSONValue> | null> {
     if (!refOfType(args.operation, TYPE)) return null
 
-    const their = (args.qso.their as Record<string, JSONValue>) ?? {}
     const qsoRef = refOfType(args.qso, TYPE)
-    const received = stampedExchange(TYPE, qsoRef, {
+    const guess: Exchange = needsGuess(qsoRef, ['name', 'location'])
+      ? await suggestedExchange(ctx, args.operation, args.qso)
+      : { name: '', location: '' }
+    let theirLocation = ''
+    const stamped = stampedExchange(TYPE, qsoRef, {
       // Read into the exchange as typed, and left on the ref as typed.
       theirSerial: { read: serialOf, stamp: false },
-      name: { read: firstName, guess: () => guessedName(their) },
-      location: { read: normalizeLocation, guess: () => guessedLocation(their) },
-    }, ({ theirSerial, name, location }) => [theirSerial, name, location].filter((part) => part).join(' '))
+      name: { read: firstName, guess: () => guess.name },
+      location: { read: normalizeLocation, guess: () => guess.location },
+    }, ({ theirSerial, name, location }) => ((theirLocation = location), [theirSerial, name, location].filter((part) => part).join(' ')))
+    // The location also reaches `their.state`, where ADIF's STATE, the SOTA
+    // and POTA files and Worked All States read it.
+    const received = withTheirFields(stamped, theirStateFields(args.qso.their as Record<string, JSONValue> | undefined, theirLocation))
+
+    await watchQsy(args.qso, args.operation, ctx)
 
     // Ours only once the core has allocated it: the second and later calls of
     // a call list get theirs after this hook runs, and '' would blank the cell.
@@ -407,8 +484,9 @@ const ExportHook = {
           ['LOCATION', ours.location],
           ['NAME', profile.name || ours.name],
           ['EMAIL', profile.email],
-          // Single operator only: the one at the microphone.
-          ['OPERATORS', str((operation.local as Record<string, JSONValue>)?.operatorCall) || ourCall],
+          // Whoever the log says operated: the rules allow one, and a guest at
+          // someone else's station names its owner after them.
+          ['OPERATORS', cabrilloOperators(operation, args.qsos)],
         ],
         // After freq, mode, date and time: call, nr, name and location sent,
         // then received — `QSO: 14240 PH 2020-11-01 0001 KA9FOX 5 SCOTT WI N3QE 2 TIM MD`.

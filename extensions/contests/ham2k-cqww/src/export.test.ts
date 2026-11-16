@@ -157,13 +157,20 @@ test("the Cabrillo header carries the declared entry and our LOCATION", async ()
     'CATEGORY-OVERLAY: CLASSIC',
   ])
 
-  // The operators listed at setup, and the club, reach the header too.
-  const multi = { uuid: 'op-4', stationCall: 'N0DEV', local: { operatorCall: 'N0DEV' }, refs: [{ type: 'cqww', mode: 'CW', operators: 'k1abc, w2def', club: 'Yankee Clipper Contest Club' }] }
-  const content = ((await contest.runHook('export', 'generateExport', { operation: multi, qsos: QSOS, exportType: 'cqww-cabrillo' })) as { content: string }).content
-  assert.ok(content.includes('\nOPERATORS: K1ABC W2DEF\n'))
+  // The operators are whoever logged, then the operation's own operator, the
+  // station owner closes the line, and a typed list from an older setup is
+  // ignored.
+  const multi = {
+    uuid: 'op-4', stationCall: 'N0DEV', local: { operatorCall: 'N0DEV' },
+    ownerCall: 'n1own',
+    refs: [{ type: 'cqww', mode: 'CW', operators: 'N0OLD', club: 'Yankee Clipper Contest Club' }],
+  }
+  const byTwo = QSOS.map((qso, i) => ({ ...qso, our: { call: 'N0DEV', operatorCall: i === 1 ? 'W2DEF' : 'K1ABC' } }))
+  const content = ((await contest.runHook('export', 'generateExport', { operation: multi, qsos: byTwo, exportType: 'cqww-cabrillo' })) as { content: string }).content
+  assert.ok(content.includes('\nOPERATORS: K1ABC W2DEF N0DEV @N1OWN\n'))
   assert.ok(content.includes('\nCLUB: Yankee Clipper Contest Club\n'))
-  // With none listed, the app's operator call stands in.
-  const solo = { ...multi, refs: [{ type: 'cqww', mode: 'CW' }] }
+  // A log the station's own holder made names that call.
+  const solo = { ...multi, ownerCall: undefined, refs: [{ type: 'cqww', mode: 'CW' }] }
   assert.ok(((await contest.runHook('export', 'generateExport', { operation: solo, qsos: QSOS, exportType: 'cqww-cabrillo' })) as { content: string }).content.includes('\nOPERATORS: N0DEV\n'))
 
   // A DX station's location is DX; a US one with none set is left out
@@ -180,3 +187,18 @@ test("the Cabrillo header carries the declared entry and our LOCATION", async ()
   assert.deepEqual(await header({ uuid: 'op-9', stationCall: 'VO1ABC', refs: [{ type: 'cqww', mode: 'CW', qth: 'NF' }] }), ['LOCATION: NL', 'CATEGORY-MODE: CW'])
   assert.deepEqual(await header({ uuid: 'op-10', stationCall: 'VO2ABC', refs: [{ type: 'cqww', mode: 'CW' }] }), ['LOCATION: NL', 'CATEGORY-MODE: CW'])
 })
+
+test("each QSO line of a MULTI-TWO log ends in the transmitter its position is numbered as, and no other entry's does", async () => {
+  const qsos = QSOS.map((qso, i) => ({ ...qso, our: { ...qso.our, multiIdentifier: ['2', '1', '2'][i] } }))
+  const lines = async (operator: string) =>
+    ((await contest.runHook('export', 'generateExport', {
+      operation: { ...OPERATION, refs: [{ ...OPERATION.refs[0], operator }] },
+      qsos,
+      exportType: 'cqww-cabrillo',
+    })) as { content: string }).content.split('\n').filter((line) => line.startsWith('QSO:')).map((line) => line.trim().split(/\s+/))
+  const multi = await lines('MULTI-TWO')
+  const single = await lines('SINGLE-OP')
+  assert.deepEqual(multi.map((line) => line.at(-1)), ['1', '0', '1'])
+  assert.deepEqual(multi.map((line) => line.slice(0, -1)), single)
+})
+

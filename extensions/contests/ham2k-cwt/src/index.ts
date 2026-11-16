@@ -20,7 +20,8 @@
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 import { NO_RESTRICTIONS, rulesNote } from "@ham2k/lib-contest-rules"
-import { stampedExchange } from "@ham2k/lib-contest-exchange"
+import { cabrilloOperators } from "@ham2k/lib-contest-station"
+import { needsGuess, stampedExchange, theirStateFields, withTheirFields } from "@ham2k/lib-contest-exchange"
 import { adifForExport, contestScorer, defineExtension, exportFilename, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -42,7 +43,7 @@ import { tFor } from "./i18n.ts"
 import {
   NUMBER_PATTERN,
   firstName,
-  guessedName,
+  suggestedName,
   guessedQth,
   normalizeNumber,
   ourExchange,
@@ -224,7 +225,7 @@ const ActivityHook = {
 
     const t = tFor(ctx)
     const their = ((qso?.their as Record<string, JSONValue>) ?? {})
-    const name = guessedName(their)
+    const name = await suggestedName(ctx, operation, qso)
     const qth = guessedQth(their)
 
     return [
@@ -270,15 +271,21 @@ const ActivityHook = {
   /// see it (docs/design/contests.md §8).
   async processQsoBeforeSave(
     { qso, operation }: { qso: Record<string, JSONValue>; operation: Record<string, JSONValue> },
-    _ctx: HookContext,
+    ctx: HookContext,
   ): Promise<Record<string, JSONValue> | null> {
     if (!refOfType(operation, TYPE)) return null
-    const their = ((qso.their as Record<string, JSONValue>) ?? {})
+    const qsoRef = refOfType(qso, TYPE)
+    const name = needsGuess(qsoRef, ['name']) ? await suggestedName(ctx, operation, qso) : ''
     // The number is never guessed — only what the operator typed is recorded.
-    return stampedExchange(TYPE, refOfType(qso, TYPE), {
-      name: { read: firstName, guess: () => guessedName(their) },
+    let theirNumber = ''
+    const received = stampedExchange(TYPE, qsoRef, {
+      name: { read: firstName, guess: () => name },
       number: { read: normalizeNumber },
-    }, ({ name, number }) => [name, number].filter((x) => x).join(' '))
+    }, ({ name, number }) => ((theirNumber = number), [name, number].filter((x) => x).join(' ')))
+    // A non-member sends a state, province or country for the number; a state
+    // or province also reaches `their.state`, where ADIF's STATE, the SOTA and
+    // POTA files and Worked All States read it.
+    return withTheirFields(received, theirStateFields(qso.their as Record<string, JSONValue> | undefined, theirNumber))
   },
 }
 
@@ -425,7 +432,7 @@ const ExportHook = {
           ['CALLSIGN', ourCall],
           ['CATEGORY-POWER', power?.cabrillo ?? ''],
           ['NAME', ours.name],
-          ['OPERATORS', str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          ['OPERATORS', cabrilloOperators(operation, args.qsos)],
           ['GRID-LOCATOR', str(operation.grid)],
         ],
         qsoParts: (qso) => {

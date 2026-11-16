@@ -17,14 +17,14 @@
   "powerLow": "Baja (100W)",
   "powerHigh": "Alta (>100W)",
   "assistedLabel": "Asistida (clúster, RBN, chat)",
-  "operatorsLabel": "Operadores",
-  "operatorsPlaceholder": "ej. DF9LJ DK2OY (indicativo de club o especial)",
-  "clubLabel": "Club",
-  "clubPlaceholder": "Nombre completo del club — en blanco usa el de tu perfil",
   "rulesLink": "[Reglas del concurso]({{url}})",
   "ourSerialLabel": "N.º nuestro",
   "theirSerialLabel": "N.º suyo",
   "serialSubtitle": "Números de serie",
   "adifExport": "ADIF para {{contest}}",
-  "cabrilloExport": "Cabrillo para {{contest}}"
+  "cabrilloExport": "Cabrillo para {{contest}}",
+  "clubLabel": "Club o grupo",
+  "clubPlaceholder": "Nombre completo, como en tu inscripción",
+  "countryOne": "1 país",
+  "countryMany": "{{count}} países"
 }

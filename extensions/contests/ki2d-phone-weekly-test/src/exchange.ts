@@ -25,7 +25,7 @@ export const TYPE = 'pwt'
 
 /// The ref types whose contacts carry the same name and location exchange,
 /// this contest's first.
-const SAME_EXCHANGE_TYPES = [TYPE, 'naqp']
+const SAME_EXCHANGE_TYPES = [TYPE, 'naqp', 'ssb-sprint']
 
 export function str(value: JSONValue | undefined): string {
   return typeof value === 'string' ? value : ''
@@ -71,20 +71,24 @@ async function history(ctx: HookContext, call: string, options: Record<string, J
 ///
 ///   * What they sent earlier in THIS session, on another band, stands as it
 ///     is: the operator copied it minutes ago.
-///   * Otherwise the name they sent in an earlier week or an NAQP, else the
-///     lookup's; and the location the lookup and country file give, else the
-///     one they sent before. A station's name doesn't move, but the station
+///   * Otherwise the name they sent in an earlier week, an NAQP or an SSB
+///     Sprint, else the lookup's; and the location the lookup and country
+///     file give, else the one they sent before. A station's name doesn't move, but the station
 ///     can, and the lookup is the fresher word on where it is.
 ///
 /// "This session" is told by each contact's TIME, not by the host's
 /// `operation` filter: a host older than that filter answers unfiltered, and
 /// last month's exchange would pass for one copied minutes ago.
 ///
+/// [editing] is the contact being entered or edited; it is never its own
+/// history.
+///
 /// A host that cannot answer costs the history, never the lookup's guess.
 export async function suggestedExchange(
   ctx: HookContext,
   operation: Record<string, JSONValue>,
   their: Record<string, JSONValue>,
+  editing?: Record<string, JSONValue>,
 ): Promise<Exchange> {
   const call = str(their.call).trim().toUpperCase()
   const looked = { name: guessedName(their), location: guessedLocation(their) }
@@ -93,7 +97,8 @@ export async function suggestedExchange(
   const session = sessionFor(str(refOfType(operation, TYPE)?.ref))
   const thisSession = (qso: Record<string, JSONValue>) =>
     session !== undefined && refOfType(qso, TYPE) !== undefined && typeof qso.startAtMillis === 'number' && isAround(session, qso.startAtMillis)
-  const qsos = await history(ctx, call, { refType: SAME_EXCHANGE_TYPES })
+  const skip = typeof editing?.uuid === 'string' ? editing.uuid : undefined
+  const qsos = (await history(ctx, call, { refType: SAME_EXCHANGE_TYPES })).filter((qso) => skip === undefined || qso.uuid !== skip)
   const here = sentIn(qsos.filter(thisSession))
   const before = sentIn(qsos.filter((qso) => !thisSession(qso)))
   return {

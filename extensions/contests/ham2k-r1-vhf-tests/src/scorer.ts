@@ -24,17 +24,23 @@
 
 import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
 import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
+import { bandBreakdown } from "@ham2k/lib-contest-summary"
 import { fmtInteger } from "@ham2k/lib-format-tools"
 import { distanceForRegion1VHFContests } from "@ham2k/lib-geo-tools"
 import { BAND_MULTIPLIERS, trimmedGrid } from "@ham2k/lib-vhf-contests"
 
 import { eventFor } from "./events.ts"
+import { tFor } from "./i18n.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
 
 export type R1VHFScoresheet = {
   worked: Record<string, string[]>
   bands: Record<string, number>
+  /// band → the points its contacts scored. Optional: a checkpoint cached
+  /// before it existed has none, and its band lines show no points until the
+  /// log is rescored.
+  bandPoints?: Record<string, number>
   qsos: number
   points: number
   distanceTotal: number
@@ -55,7 +61,7 @@ export function contestTitle(ref: { ref?: JSONValue } | undefined): string {
 export const R1VHFScorer: ContestScorer<R1VHFScoresheet> = {
   startScoresheet(): R1VHFScoresheet {
     return {
-      worked: {}, bands: {}, qsos: 0, points: 0, distanceTotal: 0,
+      worked: {}, bands: {}, bandPoints: {}, qsos: 0, points: 0, distanceTotal: 0,
       maxDistance: 0, maxDistancePerBand: {},
     }
   },
@@ -85,7 +91,7 @@ export const R1VHFScorer: ContestScorer<R1VHFScoresheet> = {
       return { scoresheet: base, score: { value: 0, alerts: ['ourGrid'] } }
     }
     if (!theirGrid) {
-      return { scoresheet: base, score: { value: 0, alerts: ['missingExchange'] } }
+      return { scoresheet: base, score: { value: 0, incomplete: ['r1-vhf-tests/grid'] } }
     }
 
     const key = `${call}|${band}|${ourGrid}`
@@ -105,6 +111,8 @@ export const R1VHFScorer: ContestScorer<R1VHFScoresheet> = {
 
     base.worked[key] = [...priorGrids, theirGrid]
     base.bands[band] = (base.bands[band] ?? 0) + 1
+    base.bandPoints ??= {}
+    base.bandPoints[band] = (base.bandPoints[band] ?? 0) + value
     base.qsos += 1
     base.points += value
     base.distanceTotal += distance
@@ -120,11 +128,18 @@ export const R1VHFScorer: ContestScorer<R1VHFScoresheet> = {
   },
 
   summarizeScore({ scoresheet, ref, scope }, ctx) {
-    const bandLines = Object.keys(scoresheet.bands).sort().map((band) => {
-      const count = scoresheet.bands[band] ?? 0
-      if (!count) return null
-      return `**${band}**: ${fmtInteger(count)} QSOs • Longest: ${fmtInteger(scoresheet.maxDistancePerBand[band] ?? 0)} km`
-    }).filter((line): line is string => line !== null)
+    const t = tFor(ctx)
+    // No multipliers: the band factor scales a contact's distance, it is not a
+    // count that multiplies the total.
+    const bandLines = bandBreakdown(
+      Object.entries(scoresheet.bands).map(([band, qsos]) => ({
+        band,
+        qsos,
+        points: scoresheet.bandPoints?.[band],
+        more: [t('longest', { formatted: fmtInteger(scoresheet.maxDistancePerBand[band] ?? 0) })],
+      })),
+      ctx,
+    )
 
     return contestSummary(
       {
@@ -137,7 +152,7 @@ export const R1VHFScorer: ContestScorer<R1VHFScoresheet> = {
           { qsos: scoresheet.qsos, points: scoresheet.points, more: [`${fmtInteger(scoresheet.distanceTotal)} km`] },
           ctx,
         ),
-        detail: bandLines.join('\n'),
+        detail: bandLines,
         extra: { qsos: scoresheet.qsos },
       },
       ctx,

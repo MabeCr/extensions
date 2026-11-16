@@ -69,5 +69,5 @@ test("setup asks for each part of the entry, undeclared until answered", async (
   }
   const overlay = elements.find((element) => element.key === 'overlay')
   assert.deepEqual(overlay?.options?.map((option) => option.value), ['', 'TB-WIRES', 'ROOKIE', 'CLASSIC', 'YOUTH'])
-  for (const key of ['location', 'operators', 'club']) assert.ok(elements.some((element) => element.key === key), key)
+  for (const key of ['location', 'club']) assert.ok(elements.some((element) => element.key === key), key)
 })

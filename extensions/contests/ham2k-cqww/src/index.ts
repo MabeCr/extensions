@@ -10,7 +10,8 @@
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 import { rulesNotes, withRules } from "@ham2k/lib-contest-rules"
-import { stampedExchange } from "@ham2k/lib-contest-exchange"
+import { cabrilloClub, cabrilloOperators, clubField } from "@ham2k/lib-contest-station"
+import { needsGuess, stampedExchange } from "@ham2k/lib-contest-exchange"
 import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -26,18 +27,14 @@ import type {
   SuggestArgs,
 } from "@ham2k/extension-sdk"
 
+import { TYPE, suggestedExchange } from "./exchange.ts"
 import { tFor } from "./i18n.ts"
 import { MODES, nearestMode, nextContestDate, relevanceFor } from "./schedule.ts"
 import { CQWWScorer, ZONE_PATTERN, contestTitle, cqwwCallInfo, normalizeZone } from "./scorer.ts"
 import { QTH_PATTERN, cabrilloLocation, guessedQth, normalizeQth, sendsQth } from "./qth.ts"
-import { BAND_CLASSES, OPERATOR_CLASSES, OVERLAY_CLASSES, POWER_CLASSES, cabrilloCategories, contestRules, declaredClub, declaredOperators } from "./entry.ts"
+import { BAND_CLASSES, OPERATOR_CLASSES, OVERLAY_CLASSES, POWER_CLASSES, cabrilloCategories, contestRules, transmitterColumns } from "./entry.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
-
-/// The ref type an operation stores. It is data in the operator's log, so it
-/// stays what the app's own built-in wrote there whatever this package is
-/// called: the manifest key names the package, `TYPE` names the activation.
-const TYPE = 'cqww'
 
 /// What a search has to contain to offer these contests. Matched as "does the
 /// alias contain what was typed", so "cq" finds them and the date ranking
@@ -71,17 +68,17 @@ function ourQth(operation: Record<string, JSONValue>): string {
   return normalizeQth(ref?.qth) || guessedQth({ call })
 }
 
-/// The operator's name, email and club from their profile, for the Cabrillo
-/// header. All optional and free-form in the profile, so each may be ''. A
-/// host that cannot answer costs these lines, never the log itself.
-async function profileDetails(): Promise<{ name: string; email: string; club: string }> {
+/// The operator's name and email from their profile, for the Cabrillo header.
+/// Both optional and free-form in the profile, so each may be ''. A host that
+/// cannot answer costs these lines, never the log itself.
+async function profileDetails(): Promise<{ name: string; email: string }> {
   try {
     const settings = (await host.getSettings()) as Record<string, JSONValue> | undefined
     const line = (value: JSONValue | undefined) => str(value).replace(/\s+/g, ' ').trim()
-    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail), club: line(settings?.operatorClub) }
+    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail) }
   } catch (e) {
-    console.warn(`[cqww] profile settings unavailable, exporting without name, email and profile club:`, e)
-    return { name: '', email: '', club: '' }
+    console.warn(`[cqww] profile settings unavailable, exporting without name and email:`, e)
+    return { name: '', email: '' }
   }
 }
 
@@ -195,21 +192,7 @@ const ActivityHook = {
               // The entry we are making, for the Cabrillo header. Each starts
               // undeclared: see entry.ts.
               ...entrySelects(t),
-              {
-                type: 'field',
-                fieldType: 'text',
-                key: 'operators',
-                label: t('operatorsLabel'),
-                placeholder: t('operatorsPlaceholder'),
-                uppercase: true,
-              },
-              {
-                type: 'field',
-                fieldType: 'text',
-                key: 'club',
-                label: t('clubLabel'),
-                placeholder: t('clubPlaceholder'),
-              },
+              await clubField(ctx, 'cqww'),
             ],
           },
         },
@@ -232,13 +215,8 @@ const ActivityHook = {
     // multiplied by every contest extension the user happens to have enabled.
     if (!refOfType(args.operation, TYPE)) return []
 
-    const their = ((args.qso?.their as Record<string, JSONValue>) ?? {})
-    const guess = (their.guess as Record<string, JSONValue>) ?? {}
-    const call = str(their.call)
-    const suggested =
-      normalizeZone(guess.cqZone) || (call ? normalizeZone(cqwwCallInfo(call).cqZone) : '')
     const rtty = str(refOfType(args.operation, TYPE)?.mode) === 'RTTY'
-    const suggestedQth = rtty ? guessedQth(their) : ''
+    const { zone: suggested, qth: suggestedQth } = await suggestedExchange(ctx, args.operation, args.qso, rtty)
 
     return [
       {
@@ -288,7 +266,7 @@ const ActivityHook = {
   /// Records the zone they sent, and mirrors it where the rest of the app can
   /// see it.
   ///
-  /// When the operator typed nothing, the country file's zone for that call is
+  /// When the operator typed nothing, the guessed zone (`suggestedExchange`) is
   /// written onto the ref as DATA OF RECORD (docs/design/contests.md §8). The
   /// scorer already falls back to the same value, so without this a QSO could
   /// earn a zone multiplier and then export a dash — the log disagreeing with
@@ -300,23 +278,23 @@ const ActivityHook = {
   /// column and a plain (non-contest) ADIF export both come up empty.
   async processQsoBeforeSave(
     args: { qso: Record<string, JSONValue>; operation: Record<string, JSONValue> },
-    _ctx: HookContext,
+    ctx: HookContext,
   ): Promise<Record<string, JSONValue> | null> {
     if (!refOfType(args.operation, TYPE)) return null
 
-    const their = ((args.qso.their as Record<string, JSONValue>) ?? {})
-    const guess = (their.guess as Record<string, JSONValue>) ?? {}
-    const call = str(their.call)
+    const call = str(((args.qso.their as Record<string, JSONValue>) ?? {}).call)
     // RTTY's QTH, and only from a W/VE station. Anywhere else the part reads as
     // nothing, typed or not.
-    const sendsAQth = str(refOfType(args.operation, TYPE)?.mode) === 'RTTY' && call !== '' && sendsQth(call)
+    const rtty = str(refOfType(args.operation, TYPE)?.mode) === 'RTTY'
+    const sendsAQth = rtty && call !== '' && sendsQth(call)
+    const qsoRef = refOfType(args.qso, TYPE)
+    const guess = needsGuess(qsoRef, sendsAQth ? ['theirZone', 'theirQth'] : ['theirZone'])
+      ? await suggestedExchange(ctx, args.operation, args.qso, rtty)
+      : { zone: '', qth: '' }
 
-    return stampedExchange(TYPE, refOfType(args.qso, TYPE), {
-      theirZone: {
-        read: normalizeZone,
-        guess: () => normalizeZone(guess.cqZone) || (call ? normalizeZone(cqwwCallInfo(call).cqZone) : ''),
-      },
-      theirQth: sendsAQth ? { read: normalizeQth, guess: () => guessedQth(their) } : { read: () => '' },
+    return stampedExchange(TYPE, qsoRef, {
+      theirZone: { read: normalizeZone, guess: () => guess.zone },
+      theirQth: sendsAQth ? { read: normalizeQth, guess: () => guess.qth } : { read: () => '' },
     }, ({ theirZone, theirQth }) => exchangeOf(theirZone, theirQth))
   },
 }
@@ -466,18 +444,16 @@ const ExportHook = {
 
     if (args.exportType === `${TYPE}-cabrillo`) {
       const profile = await profileDetails()
+      const transmitter = transmitterColumns(refOfType(operation, TYPE), args.qsos)
       const content = qsonToCabrillo(args.qsos, {
         headers: [
           ['CONTEST', mode ? `CQ-WW-${mode}` : 'CQ-WW'],
           ['CALLSIGN', ourCall],
-          // The calls listed at setup — required for a multi-operator entry —
-          // else the app's own operator call.
-          ['OPERATORS', declaredOperators(refOfType(operation, TYPE)) || str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          ['OPERATORS', cabrilloOperators(operation, args.qsos)],
           ['LOCATION', cabrilloLocation(ourCall, refOfType(operation, TYPE)?.qth)],
           ...cabrilloCategories(refOfType(operation, TYPE)),
           ['GRID-LOCATOR', str(operation.grid)],
-          // The club typed at setup, else the profile's.
-          ['CLUB', declaredClub(refOfType(operation, TYPE)) || profile.club],
+          ['CLUB', await cabrilloClub(refOfType(operation, TYPE), 'cqww')],
           ['NAME', profile.name],
           ['EMAIL', profile.email],
         ],
@@ -492,6 +468,7 @@ const ExportHook = {
           ...(rtty
             ? [qthColumn(str(((qso.their as Record<string, JSONValue>) ?? {}).call), normalizeQth(refOfType(qso, TYPE)?.theirQth))]
             : []),
+          ...transmitter(qso),
         ],
       })
       return {

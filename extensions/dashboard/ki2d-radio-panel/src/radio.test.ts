@@ -73,7 +73,7 @@ test('the digits and the mode follow the radio between renders, and a pending tu
   assert.equal(idle.layers.find(l => l.id === 'mode')?.text?.value, 'radio.mode')
 
   // The event's answer flips to the request at once, without waiting for a render to say so.
-  const answer = await panel.onEvent!(event('panadapter', 'tune', 'activate', 14076000), ctx)
+  const answer = await panel.onEvent!(event('frequency-knob', 'tune', 'change', 14076), ctx)
   assert.deepEqual(answer.values, { requested: 14076, pending: 1 })
   assert.equal(sceneOf(await panel.render(args, ctx)).values.pending, 1)
 
@@ -81,18 +81,6 @@ test('the digits and the mode follow the radio between renders, and a pending tu
   const silent = radioDocument(environment, { ...live, frequencyHz: null, mode: null } as unknown as PanelRadioState)
   assert.ok(!silent.layers.some(l => l.id.endsWith('-radio')))
   assert.equal(silent.layers.find(l => l.id === 'mode')?.text?.literal, '—')
-})
-
-test('a click the radio rounds, or moves on from, gives the digits back to the dial', async () => {
-  // Cleared only on an exact echo, the request would hold the digits on the click for good: a radio
-  // reporting in 10 Hz steps never echoes it, nor does one the operator has since tuned by hand.
-  let state = { ...live }
-  const panel = createRadioPanel(radioHost(() => state).host)
-  await panel.render(args, ctx)
-  await panel.onEvent!(event('panadapter', 'tune', 'activate', 14076003), ctx)
-  assert.equal(sceneOf(await panel.render(args, ctx)).values.pending, 1, 'the radio has not moved yet')
-  state = { ...state, frequencyHz: 14076000 }
-  assert.equal(sceneOf(await panel.render(args, ctx)).values.pending, 0)
 })
 
 test('the panel asks to be rendered when the dial moves, to lay the digits out for a new band', async () => {
@@ -124,7 +112,9 @@ test('a placement pinned to a radio reads, commands and draws that radio, whatev
   const other = { ...live, id: 'rig-b', name: 'Second radio' }, reads: (string | undefined)[] = []
   const { host, commands } = radioHost(() => other, { listRadios: async () => [live, other], readRadio: async id => { reads.push(id); return id === 'rig-b' ? other : live } })
   const panel = createRadioPanel(host)
-  const options = (await panel.getPanels({}, ctx))[0].form![0].options
+  // A form may hold section headers too (SDK 1.20); the first is the radio's field.
+  const first = (await panel.getPanels({}, ctx))[0].form![0]
+  const options = first.type === 'field' ? first.options : undefined
   assert.ok(Array.isArray(options))
   assert.deepEqual(options.map(o => o.value), ['auto', 'rig-a', 'rig-b'])
   const pinned = { ...args, instanceId: 'pinned', config: { radio: 'rig-b' } }
@@ -133,8 +123,8 @@ test('a placement pinned to a radio reads, commands and draws that radio, whatev
   // The live meters and the panadapter come from the host: they must name the same radio.
   assert.deepEqual(scene.radio, { node: 'rig-b' })
   assert.equal(scene.controls!.find(c => c.id === 'panadapter')?.radio, 'rig-b')
-  await panel.onEvent!({ ...pinned, event: { controlId: 'panadapter', action: 'tune', phase: 'commit', sequence: 1, value: 14030000 } }, ctx)
-  assert.deepEqual(commands, [{ id: 'rig-b', selection: 'rig-b', frequencyHz: 14030000 }])
+  await panel.onEvent!({ ...pinned, event: { controlId: 'mode', action: 'mode-CW', phase: 'activate', sequence: 1 } }, ctx)
+  assert.deepEqual(commands, [{ id: 'rig-b', selection: 'rig-b', mode: 'CW' }])
 })
 
 test('the power button connects and disconnects the radio the placement shows', async () => {
@@ -206,7 +196,10 @@ test('a preset width keeps a sideband\'s edge by the carrier, and the centre kno
   assert.equal(commands.length, sent)
 })
 
-test('the panadapter keeps a width per kind of mode, and asks the scope for its span only when that changes', async () => {
+const gesture = (gesture: 'zoom' | 'pan' | 'split' | 'floor' | 'range' | 'speed', value: number, instanceId?: string) =>
+  ({ ...args, ...(instanceId ? { instanceId } : {}), event: { controlId: 'panadapter', action: 'scope', phase: 'commit' as const, sequence: 1, gesture, value } })
+
+test('the panadapter keeps the width zoomed to per kind of mode, and asks the scope for its span only when that changes', async () => {
   let state: PanelRadioState = { ...live, spectrum: { problem: null, mode: 'center', spanHz: 50000, lowHz: null, highHz: null, refLevelDb: null, speed: null,
     spansHz: [2500, 5000, 12500, 25000, 50000, 100000], refMinDb: -30, refMaxDb: 10, refStepDb: 1, modes: ['center'], speeds: [] } }
   const asked: PanelRadioSpectrumSet[] = []
@@ -216,12 +209,78 @@ test('the panadapter keeps a width per kind of mode, and asks the scope for its 
   assert.equal(await span(), 75000)
   // The narrowest span that covers it: a span is half the width shown.
   assert.deepEqual(asked, [{ id: 'rig-a', spanHz: 50000 }])
-  await panel.onEvent!(event('pan-width', 'pan-width-next', 'activate'), ctx)
+  // Not kept, the next render would snap the picture back from where the operator zoomed it.
+  await panel.onEvent!(gesture('zoom', 150000), ctx)
   assert.equal(await span(), 150000)
+  // The app fitted the scope where the zoom ended, to a window panned off the dial and to the radio's
+  // other displays: asked again here, the span would be narrowed back under them.
+  assert.equal(asked.length, 1)
   state = { ...state, mode: 'CW' }
-  assert.equal(await span(), 50000, 'CW keeps its own preset')
+  assert.equal(await span(), 50000, 'CW keeps its own width')
   state = { ...state, mode: 'LSB' }
-  assert.equal(await span(), 150000, 'back on phone, the phone choice')
+  assert.equal(await span(), 150000, 'back on phone, the phone width')
+  assert.deepEqual(asked.slice(1), [{ id: 'rig-a', spanHz: 25000 }, { id: 'rig-a', spanHz: 100000 }], 'a change of mode is the panel\'s to fit')
+  // A double click on the scale is 0: the default width back.
+  await panel.onEvent!(gesture('zoom', 0), ctx)
+  assert.equal(await span(), 75000)
+})
+
+test('the app tunes, pans and zooms the panafall itself, and what the operator dragged survives a restart', async () => {
+  const stored = new Map<string, JSONValue>()
+  const storage = { kvGet: async (k: string) => stored.get(k) ?? null, kvSet: async (k: string, v: JSONValue) => { stored.set(k, v) } }
+  const { host, commands } = radioHost(() => live, storage)
+  const panel = createRadioPanel(host)
+  const scope = async (p = panel) => sceneOf(await p.render({ ...args, instanceId: 'left' }, ctx)).controls!.find(c => c.id === 'panadapter')!
+  const first = await scope()
+  // A bandScope at extension API 17 gets the native gestures; a tuneStep would fix every click to it
+  // where the app's own step follows the zoom.
+  assert.equal(first.kind, 'bandScope')
+  assert.equal(first.tuneStep, undefined)
+  for (const [kind, value] of [['zoom', 20000], ['split', .7], ['floor', -10], ['range', 60], ['speed', 16], ['pan', 14100000]] as const) {
+    await panel.onEvent!(gesture(kind, value, 'left'), ctx)
+  }
+  // The radio is moved by the app, never by the panel answering a gesture.
+  assert.deepEqual(commands, [])
+  // Only a click the app could not tune itself comes as a commit with no gesture: the host is asked,
+  // so a refusal names its reason rather than reading as a command the panel does not know.
+  await panel.onEvent!({ ...args, instanceId: 'left', event: { controlId: 'panadapter', action: 'scope', phase: 'commit', sequence: 2, value: 14074000 } }, ctx)
+  assert.deepEqual(commands, [{ id: 'rig-a', frequencyHz: 14074000 }])
+  const restarted = await scope(createRadioPanel(radioHost(() => live, storage).host))
+  assert.deepEqual([restarted.span, restarted.split, restarted.floor, restarted.range, restarted.waterfallSpeed], [20000, .7, -10, 60, 16])
+})
+
+test('the panafall marks the band\'s edges and where each kind of mode starts, and nothing else', async () => {
+  const state: PanelRadioState = { ...live, spectrum: { problem: null, mode: 'center', spanHz: 50000, lowHz: 14024000, highHz: 14124000, refLevelDb: null, speed: null,
+    spansHz: [50000], refMinDb: -30, refMaxDb: 10, refStepDb: 1, modes: ['center'], speeds: [] } }
+  const panel = createRadioPanel(radioHost(() => state).host)
+  const marks = async (config: Record<string, JSONValue> = {}) =>
+    sceneOf(await panel.render({ ...args, config, operation: { stationCall: 'KI2D' } }, ctx)).controls!.find(c => c.id === 'panadapter')!.layers ?? []
+  const layers = await marks()
+  // The whole band, not only the sweep about the dial: a pan to an edge must find it drawn.
+  assert.deepEqual(layers.filter(l => l.id.startsWith('plan:edge:')).map(l => l.x), ['freq:14000000-1.5px', 'freq:14350000-1.5px'])
+  // The plan's own stretches come from the library the app hands the bundle, which differs from this
+  // repo's: only the kinds are fixed here. band-plan.test.ts holds the shape.
+  const labels = layers.filter(l => l.kind === 'text').map(l => l.text)
+  assert.equal(labels[0], 'CW')
+  assert.ok(labels.includes('Phone') && labels.every(text => ['CW', 'Data', 'Phone', 'All modes'].includes(text!)), labels.join())
+  assert.ok(!layers.some(l => /FT[48]/.test(l.id)))
+  assert.ok(layers.every(l => l.y === undefined || String(l.y).startsWith('spectrum+')))
+  // With no panadapter, the labels hang from the waterfall's top.
+  assert.ok((await marks({ display: 'waterfall' })).filter(l => l.kind === 'text').every(l => String(l.y).startsWith('waterfall+')))
+  // Off the bands, nothing.
+  assert.deepEqual(sceneOf(await createRadioPanel(radioHost(() => ({ ...state, frequencyHz: 9000000 })).host).render(args, ctx)).controls!.find(c => c.id === 'panadapter')!.layers, undefined)
+})
+
+test('with no station to place it, the panafall marks only the band\'s widest edges', async () => {
+  const state: PanelRadioState = { ...live, frequencyHz: 1840000, mode: 'CW', spectrum: { problem: null, mode: 'center', spanHz: 50000, lowHz: 1790000, highHz: 1890000, refLevelDb: null, speed: null,
+    spansHz: [50000], refMinDb: -30, refMaxDb: 10, refStepDb: 1, modes: ['center'], speeds: [] } }
+  const panel = createRadioPanel(radioHost(() => state).host)
+  for (const operation of [{}, { stationCall: '' }, { stationCall: 'XX0XXX' }] as Record<string, JSONValue>[]) {
+    const layers = sceneOf(await panel.render({ ...args, operation }, ctx)).controls!.find(c => c.id === 'panadapter')!.layers ?? []
+    // Every region's plan at once dims 160 m below 1810 kHz, as Region 1's, inside a US station's band.
+    assert.deepEqual(layers.filter(l => l.id.startsWith('plan:edge:')).map(l => l.x), ['freq:1800000-1.5px', 'freq:2000000-1.5px'], JSON.stringify(operation))
+    assert.ok(!layers.some(l => l.id.startsWith('plan:mode')), JSON.stringify(operation))
+  }
 })
 
 // A FlexRadio's scope, which the app widens for the widest display on screen: a band map beside the

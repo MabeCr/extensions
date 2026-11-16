@@ -51,7 +51,7 @@ interface Spot {
   band?: string
   mode?: string
   refs: { ref: string; type: string }[]
-  spot: { timeInMillis: number; sourceInfo: { spotter?: string } }
+  spot: { timeInMillis: number; label?: string; sourceInfo: { spotter?: string } }
 }
 
 const fetchSpots = async (body: string) => {
@@ -77,7 +77,7 @@ function spotJson({
     actMode: mode,
     actFreq: freq,
     actClass: cls,
-    actLocation: location,
+    altLocation: location,
     actComments: comments,
     actSpoter: spotter,
   })
@@ -101,6 +101,9 @@ test("reads MHz strings as kHz and the unmarked timestamp as UTC", async () => {
   assert.equal(spots[0].spot.timeInMillis, Date.UTC(2026, 7, 5, 0, 7, 27))
   // Reading a correctly spelled `actSpotter` finds nothing.
   assert.equal(spots[0].spot.sourceInfo.spotter, "VK2VW")
+  // The name comes from `altLocation`, the field that carries it for every
+  // award; SOTA rows put only the reference in `actLocation`.
+  assert.equal(spots[0].spot.label, "VKFF-1997: Stony Creek Nature Reserve")
 })
 
 test("keeps only WWFF and SiOTA, dropping the awards that arrive from their own sources", async () => {

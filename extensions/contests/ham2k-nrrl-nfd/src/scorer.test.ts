@@ -172,6 +172,21 @@ describe('NFDScorer multipliers', () => {
     assert.equal(summary.contest.label, 'NFD: 18 points')
     assert.equal((summary.contest.longSummary as string).split('\n')[0], '3 QSOs, 6 pts × 3 mults')
   })
+
+  it('breaks the score down by band and by mode', () => {
+    // Mults count per band AND mode, so a band's line carries its own; the
+    // lines add up to the total only if no band borrows another's.
+    const { sheet } = run([
+      { call: 'DL1AAA' },
+      { call: 'K1AAA/P' },
+      { call: 'F4AAA', band: '40m', mode: 'CW' },
+    ])
+    const detail = NFDScorer.summarizeScore({ scoresheet: sheet, operation: {}, scope: 'operation' }, {} as never).contest.longSummary as string
+    assert.match(detail, /^\*\*40m\*\*: 1 QSO, 1 pt, 1 mult$/m)
+    assert.match(detail, /^\*\*20m\*\*: 2 QSOs, 5 pts, 2 mults$/m)
+    assert.match(detail, /^\*\*60m\*\*: —$/m)
+    assert.match(detail, /^CW 1 · SSB 2$/m)
+  })
 })
 
 describe('bonusPoints', () => {

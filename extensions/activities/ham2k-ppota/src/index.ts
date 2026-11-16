@@ -367,7 +367,8 @@ const ppotaDataFile: DataFileDefinition = {
   maxAgeInDays: 7,
   fetchType: 'csv',
   category: 'ppota',
-  csvOptions: { hasHeaders: true, delimiter: ',' },
+  // Every field quoted and separated by semicolons, lines ending CRLF.
+  csvOptions: { hasHeaders: true, delimiter: ';' },
   csvToLookupEntry: (row: Record<string, string> | string[]) => {
     const r = row as Record<string, string>
     // The file starts with a byte-order mark, which a parser that keeps it

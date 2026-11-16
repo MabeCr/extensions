@@ -95,7 +95,10 @@ test("an exchange with a part missing or not one Sweepstakes sends is flagged wh
     withExchange('K3ABC', 3, { theirCheck: '7' }),
     withExchange('K4ABC', 4, { theirSerial: '1A' }),
   ])
-  assert.deepEqual(scores.map((s) => s.alerts), [['missingExchange'], ['missingExchange'], ['invalidExchange'], ['invalidExchange'], ['invalidExchange']])
+  // A part not copied is held back by its field, where Enter sends the
+  // operator; one copied wrong is logged, with the pill.
+  assert.deepEqual(scores.map((s) => s.incomplete), [['arrl-ss/theirCheck'], ['arrl-ss/theirSection'], undefined, undefined, undefined])
+  assert.deepEqual(scores.map((s) => s.alerts), [undefined, undefined, ['invalidExchange'], ['invalidExchange'], ['invalidExchange']])
   // Still scored: the log checker, not the logger, decides what a bad copy costs.
   assert.deepEqual(scores.map((s) => s.value), [2, 2, 2, 2, 2])
 })
@@ -146,17 +149,48 @@ test("the operating time leads the summary, ahead of sections and bands", () => 
   // The arithmetic line, then the clock.
   assert.match(detail[0], /1 QSO/)
   assert.match(detail[1], /^\*\*Operating time/)
-  assert.match(detail[2], /^\*\*Sections:\*\* 1 of 85/)
+  assert.match(detail[2], /^### Sections: 1 of 85/)
 })
 
-test("the missing sections are listed once few enough are left, and a Clean Sweep says so", async () => {
+test("the sections are a checklist, a row per call area, those worked struck through", async () => {
   const { ALL_SECTIONS } = await import("./sections.ts")
   const all = Object.keys(ALL_SECTIONS)
-  const most = run(all.slice(0, 70).map((section, i) => qso(`K${i}AA`, i, section)))
-  assert.match(String(most.summary.longSummary), new RegExp(`Missing:\\*\\* ${all.slice(70).sort().join(' ')}`))
+  const { summary } = run([qso('W1AW', 0, 'CT'), qso('VE3ABC', 1, 'ONS'), qso('K6ABC', 2, 'SDG')])
+  assert.equal(summary.grid, true)
+  const detail = String(summary.longSummary)
+  assert.match(detail, /### Sections: 3 of 85\n/)
+  assert.match(detail, /^W1 \*\*~~CT~~\*\* EMA ME NH RI VT WMA$/m)
+  assert.match(detail, /^W6 EB LAX ORG PAC SB SCV \*\*~~SDG~~\*\* SF SJV SV$/m)
+  assert.match(detail, /^VE AB BC GH MB NB NL NS ONE ONN \*\*~~ONS~~\*\* PE QC SK TER$/m)
+  // Every section in exactly one row: the rows hold all 85 and nothing else.
+  const rows = detail.split('\n').filter((line) => /^(W\d|VE) /.test(line))
+  assert.equal(rows.length, 11)
+  assert.deepEqual(rows.flatMap((row) => row.split(' ').slice(1).map((code) => code.replace(/[*~]/g, ''))).sort(), [...all].sort())
+
   const sweep = run(all.map((section, i) => qso(`K${i}AA`, i, section)))
-  assert.match(String(sweep.summary.longSummary), /Clean Sweep!\*\* All 85 sections/)
+  assert.match(String(sweep.summary.longSummary), /### Clean Sweep! All 85 sections/)
+  const sweptCodes = String(sweep.summary.longSummary).split('\n').filter((line) => /^(W\d|VE) /.test(line)).flatMap((row) => row.split(' ').slice(1))
+  assert.equal(sweptCodes.length, 85)
+  assert.ok(sweptCodes.every((code) => /^\*\*~~[A-Z]+~~\*\*$/.test(code)))
   assert.equal(sweep.summary.total, 85 * 2 * 85)
+})
+
+test("a band line carries its points and the sections first worked there, adding up to the total", () => {
+  // CT is worked on 20m and again on 40m. Counted on both bands, the band
+  // lines would claim three sections where the score multiplies by two.
+  const { summary } = run([qso('W1AW', 0, 'CT', '20m'), qso('K1ABC', 1, 'CT', '40m'), qso('W9JJ', 2, 'IL', '40m')])
+  const detail = String(summary.longSummary)
+  assert.match(detail, /^\*\*40m\*\*: 2 QSOs, 4 pts, 1 section$/m)
+  assert.match(detail, /^\*\*20m\*\*: 1 QSO, 2 pts, 1 section$/m)
+  assert.match(detail, /^\*\*160m\*\*: —$/m)
+})
+
+test("the short summary is the sections and the score, and a day has none", () => {
+  const { summary } = run([qso('W1AW', 0, 'CT'), qso('K1ABC', 1, 'CT'), qso('W9JJ', 2, 'IL')])
+  assert.equal(summary.summary, '×2: 12')
+  let sheet = SSScorer.startScoresheet({ operation, ref: cwRef }, ctx)
+  sheet = SSScorer.scoreQso({ scoresheet: sheet, qso: qso('W1AW', 0), operation, ref: cwRef, isNewDay: false }, ctx).scoresheet
+  assert.deepEqual(SSScorer.summarizeScore({ scoresheet: sheet, operation, ref: cwRef, scope: 'day' }, ctx), {})
 })
 
 test("durations read as hours and minutes", () => {

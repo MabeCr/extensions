@@ -7,8 +7,10 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 
+import type { HookContext, JSONValue } from "@ham2k/extension-sdk"
+
 import { fixtureOperation, loadExtension } from "./sdkGapTesting.ts"
-import { historyFor, loadHistory, parseHistory, removeHistory } from "./history.ts"
+import { historyFor, loadHistory, parseHistory, removeHistory, suggestedExchange } from "./history.ts"
 
 /// The head of SSSSB_2025-009.txt as published, CRLF and all, plus rows for
 /// the cases the full file has a handful of.
@@ -100,4 +102,43 @@ test("logging offers the check and section the station sent before, as a guess",
   assert.equal(unknown.find((c) => c.key === 'arrl-ss/theirCheck')!.input.suggestedValue, undefined)
   assert.equal(unknown.find((c) => c.key === 'arrl-ss/theirSection')!.input.suggestedValue, undefined)
   assert.deepEqual(unknown.find((c) => c.key === 'arrl-ss/theirSection')!.input.preferredCodes, ['CT'])
+})
+
+/// A host whose log holds [log] for every call, newest first, split by
+/// operation the way the app's filters split it.
+function hostWith(log: { op: string; ref: Record<string, JSONValue> }[]): HookContext {
+  return {
+    getHistoryForCall: async (_call: string, options: Record<string, unknown>) => log
+      .filter((q) => options.operation === undefined || q.op === options.operation)
+      .filter((q) => options.excludeOperation === undefined || q.op !== options.excludeOperation)
+      .map((q) => ({ refs: [{ type: 'arrl-ss', ...q.ref }] }) as Record<string, JSONValue>),
+  } as unknown as HookContext
+}
+
+const thisWeekend = { uuid: 'this-weekend', refs: [{ type: 'arrl-ss', mode: 'CW' }] }
+
+test("what the station sent earlier this weekend beats the file, which beats an earlier Sweepstakes", async () => {
+  loadHistory('CW', parseHistory(FILE))
+  try {
+    const ctx = hostWith([
+      { op: 'this-weekend', ref: { theirCheck: '61', theirSection: 'KS' } },
+      { op: 'last-year', ref: { theirCheck: '59', theirSection: 'IA' } },
+    ])
+    // The file says 60 MO; the operator copied 61 KS from them last night.
+    assert.deepEqual(await suggestedExchange(ctx, thisWeekend, { their: { call: 'AA0A' } }, 'CW'), { check: '61', section: 'KS' })
+    const earlier = hostWith([{ op: 'last-year', ref: { theirCheck: '59', theirSection: 'IA' } }])
+    assert.deepEqual(await suggestedExchange(earlier, thisWeekend, { their: { call: 'AA0A' } }, 'CW'), { check: '60', section: 'MO' })
+    assert.deepEqual(await suggestedExchange(earlier, thisWeekend, { their: { call: 'W1AW' } }, 'CW'), { check: '59', section: 'IA' })
+  } finally {
+    removeHistory('CW')
+  }
+})
+
+test("an earlier Sweepstakes' section gives way to a lookup that places the station elsewhere", async () => {
+  const ctx = hostWith([{ op: 'last-year', ref: { theirCheck: '59', theirSection: 'IA' } }])
+  // Moved to Missouri since: the check still holds, the section does not.
+  assert.deepEqual(await suggestedExchange(ctx, thisWeekend, { their: { call: 'W1AW', state: 'MO' } }, 'CW'), { check: '59', section: '' })
+  assert.equal((await suggestedExchange(ctx, thisWeekend, { their: { call: 'W1AW', state: 'IA' } }, 'CW')).section, 'IA')
+  // A split state names no one section, so it contradicts nothing.
+  assert.equal((await suggestedExchange(ctx, thisWeekend, { their: { call: 'W1AW', state: 'NY' } }, 'CW')).section, 'IA')
 })

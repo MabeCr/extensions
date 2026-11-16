@@ -29,7 +29,7 @@ import {
   resolvedExchanges,
   theirLocationForFile,
 } from "./exchange.ts"
-import { allInParty, entityPrefixOf, parseOurLocations, theirLocations } from "./location.ts"
+import { allInParty, entityPrefixOf, normalizeLocation, parseOurLocations, splitLocations, theirLocations } from "./location.ts"
 import { US_STATES } from "./locations.ts"
 import type { QsoPartyExtensionParams, QsoPartyLocation, QsoPartyParams } from "./params.ts"
 import { type Party, resolveLabel, resolveParty, stateForCounty } from "./party.ts"
@@ -89,6 +89,26 @@ export function adifCountyOf(party: Party, code: string): { state: string; count
   // "St Johns" beside "Saint Clair" and "Saint Mary's"; "Lewis & Clark".
   county = county.replace(/\bSt\.?\s+/g, 'Saint ').replace(/\s*&\s*/g, ' and ')
   return { state, county }
+}
+
+/// The other station's county as the contact's own `their.county` holds it
+/// (`NY,Sullivan`, the form ADIF's `CNTY` takes), from the [location] it sent:
+/// `''` for a county line, which no one county can say and where the lookup's
+/// home county would be wrong; undefined where the location is not a US county
+/// at all (a state, a province, a Canadian district, DX), which says nothing
+/// about a county.
+///
+/// Projected so that every reader outside this party (the SOTA and POTA files,
+/// a plain ADIF export, county awards) has the county the station sent rather
+/// than the one a callsign lookup filed for its home address.
+export function theirCountyFor(party: Party, location: string): string | undefined {
+  const codes = splitLocations(location).map((code) => normalizeLocation(party, code, { received: true }))
+  if (codes.length === 0) return undefined
+  const counties = codes.map((code) => adifCountyOf(party, code))
+  if (counties.some((found) => !found)) return undefined
+  if (counties.length > 1) return ''
+  const [found] = counties
+  return `${found!.state},${found!.county}`
 }
 
 /// The state and county fields one end of a pairing adds, with the state

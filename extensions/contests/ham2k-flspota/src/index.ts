@@ -227,11 +227,11 @@ const ExportHook = {
       filename: parkFilename(args.operation, args.qsos ?? [], park),
       selectedByDefault: true,
       // The PARK's segments, not the event's: this file claims one park, so it
-      // covers the stretch that park was being activated — the same slice
-      // POTA's own export takes.
+      // covers the stretch that park was being activated, where POTA's own
+      // export covers every park the operation activated.
       refType: POTA_ACTIVATION,
-      // Above POTA's own per-park export, which under compact file names
-      // produces this very filename. The panel generates in list order and the
+      // Above POTA's own export, which for a single park under compact file
+      // names produces this very filename. The panel generates in list order and the
       // core renames the SECOND file of a colliding pair, so being first is what
       // keeps the name the sponsor demands on the file that has to have it.
       priority: 1,
@@ -277,8 +277,8 @@ const ExportHook = {
       mainHandler: manifest.key,
       // POTA under both keys it is installed by — the catalog's copy and the one
       // the app bundles. Only one is ever present and an unmatched key
-      // contributes nothing. Its one-record-per-hunted-park is what §7.4's "POTA
-      // log format" asks for, and what the scorer counts (scorer.ts).
+      // contributes nothing. In a file that includes it, POTA writes a record
+      // per hunted park, which is what the scorer counts (scorer.ts).
       includeFieldsFrom: ['ham2k-pota', 'pota'],
     })
     return { filename: parkFilename(args.operation, args.qsos, wanted), mimeType: 'text/plain', content }

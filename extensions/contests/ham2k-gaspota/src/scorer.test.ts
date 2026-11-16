@@ -196,3 +196,24 @@ test("offers no per-day summary", () => {
   const { sheet } = run(contacts(3, 1), operation)
   assert.deepEqual(GaspotaScorer.summarizeScore({ scoresheet: sheet, operation, ref: OWN_REF, scope: 'day' }, ctx), {})
 })
+
+// The hunter's multiplier is the Georgia parks hunted: each must sit on the band
+// it was first worked, once, so the bands' parks add up to the "× 2 mults"
+// above them instead of counting a park again on every band it was heard.
+test("a hunter's band lines carry points and the parks first hunted there", () => {
+  const { summary } = run([
+    qso({ call: 'K4ABC', band: '40m', hunting: [park(1)] }),
+    qso({ call: 'K4ABC', band: '20m', hunting: [park(1)] }),
+    qso({ call: 'K4DEF', band: '20m', hunting: [park(2)] }),
+  ], operationFor())
+  const text = String(summary().gaspota.longSummary)
+  assert.equal(text.split('\n')[0], '3 QSOs, 3 pts × 2 mults')
+  assert.match(text, /^\*\*40m\*\*: 1 QSO, 1 pt, 1 mult\n\*\*20m\*\*: 2 QSOs, 2 pts, 1 mult$/m)
+})
+
+// The activator's multiplier is the parks WE activated, which no band holds:
+// a per-band count would have to invent where they belong.
+test("an activator's band lines carry points and no multipliers", () => {
+  const { summary } = run([qso({ call: 'K4ABC', band: '40m', hunting: [park(1)] }), qso({ call: 'K4DEF', band: '20m' })])
+  assert.match(String(summary().gaspota.longSummary), /^\*\*40m\*\*: 1 QSO, 1 pt\n\*\*20m\*\*: 1 QSO, 1 pt$/m)
+})

@@ -123,7 +123,7 @@ test("the Cabrillo file comes out of the export hook", async () => {
   assert.equal(delegated.length, 0, 'a Cabrillo file is written here, not delegated')
 })
 
-test("the Cabrillo header carries the declared entry, the operators and the club", async () => {
+test("the Cabrillo header carries the declared entry, whoever logged and the club", async () => {
   const exported = async (operation: Record<string, unknown>) =>
     ((await contest.runHook('export', 'generateExport', { operation, qsos: QSOS, exportType: 'iaru-hf-cabrillo' })) as { content: string }).content
   const categories = async (operation: Record<string, unknown>) =>
@@ -154,12 +154,19 @@ test("the Cabrillo header carries the declared entry, the operators and the club
   // Undeclared, the entry claims nothing beyond the contest's one band.
   assert.deepEqual(await categories({ uuid: 'op-3', stationCall: 'N0DEV', refs: [{ type: 'iaru-hf' }] }), ['CATEGORY-BAND: ALL'])
 
-  const multi = { uuid: 'op-4', stationCall: 'N0DEV', local: { operatorCall: 'N0DEV' }, refs: [{ type: 'iaru-hf', operator: 'MULTI-ONE', operators: 'k1abc, w2def', club: 'Yankee Clipper Contest Club' }] }
-  const content = await exported(multi)
-  assert.ok(content.includes('\nOPERATORS: K1ABC W2DEF\n'))
+  // The operators are whoever logged, then the operation's own operator, the
+  // station owner closes the line, and a typed list from an older setup is
+  // ignored.
+  const multi = {
+    uuid: 'op-4', stationCall: 'N0DEV', local: { operatorCall: 'N0DEV' }, ownerCall: 'n1own',
+    refs: [{ type: 'iaru-hf', operator: 'MULTI-ONE', operators: 'N0OLD', club: 'Yankee Clipper Contest Club' }],
+  }
+  const byTwo = QSOS.map((qso, i) => ({ ...qso, our: { call: 'N0DEV', operatorCall: i === 1 ? 'W2DEF' : 'K1ABC' } }))
+  const content = ((await contest.runHook('export', 'generateExport', { operation: multi, qsos: byTwo, exportType: 'iaru-hf-cabrillo' })) as { content: string }).content
+  assert.ok(content.includes('\nOPERATORS: K1ABC W2DEF N0DEV @N1OWN\n'))
   assert.ok(content.includes('\nCLUB: Yankee Clipper Contest Club\n'))
-  // With none listed, the app's operator call stands in.
-  const solo = { ...multi, refs: [{ type: 'iaru-hf', modeRestriction: 'Mixed' }] }
+  // A log the station's own holder made names that call.
+  const solo = { ...multi, ownerCall: undefined, refs: [{ type: 'iaru-hf', modeRestriction: 'Mixed' }] }
   assert.ok((await exported(solo)).includes('\nOPERATORS: N0DEV\n'))
 })
 
@@ -173,5 +180,20 @@ test("the setup form asks each entry question undeclared first", async () => {
     assert.equal(fields[key].options?.[0].value, '', key)
   }
   assert.deepEqual(fields.operator.options?.slice(1).map((o: { value: unknown }) => o.value), ['SINGLE-OP', 'SINGLE-OP-UNLIMITED', 'MULTI-ONE', 'MULTI-TWO', 'MULTI-HQ', 'CHECKLOG'])
-  assert.ok(fields.operators && fields.club)
+  assert.ok(fields.club)
 })
+
+test("each QSO line of a MULTI-TWO log ends in the transmitter its position is numbered as, and no other entry's does", async () => {
+  const qsos = QSOS.map((qso, i) => ({ ...qso, our: { ...qso.our, multiIdentifier: ['2', '1', '2'][i] } }))
+  const lines = async (operator: string) =>
+    ((await contest.runHook('export', 'generateExport', {
+      operation: { ...OPERATION, refs: [{ ...OPERATION.refs[0], operator }] },
+      qsos,
+      exportType: 'iaru-hf-cabrillo',
+    })) as { content: string }).content.split('\n').filter((line) => line.startsWith('QSO:')).map((line) => line.trim().split(/\s+/))
+  const multi = await lines('MULTI-TWO')
+  const single = await lines('SINGLE-OP')
+  assert.deepEqual(multi.map((line) => line.at(-1)), ['1', '0', '1'])
+  assert.deepEqual(multi.map((line) => line.slice(0, -1)), single)
+})
+

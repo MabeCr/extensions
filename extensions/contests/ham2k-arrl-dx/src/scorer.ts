@@ -16,7 +16,7 @@
 // are separate DXCC entities and count as DX — a distinction that decides both
 // who we may work and what multiplies.
 
-import { fmtInteger } from "@ham2k/lib-format-tools"
+import { bandBreakdown } from "@ham2k/lib-contest-summary"
 import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
 import { annotateCallAgainstCountryFile, contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
 
@@ -151,13 +151,17 @@ export const ARRLDXScorer: ContestScorer<ARRLDXScoresheet> = {
         title: contestTitle(ref),
         total: scoresheet.points * mults,
         arithmetic: contestArithmetic({ qsos: scoresheet.qsos, points: scoresheet.points, mults }, ctx),
-        detail: VALID_BANDS.map((band) => {
-          const qsos = scoresheet.bands[band] ?? 0
-          const mults = Object.keys(scoresheet.bandMults[band] ?? {}).length
-          return qsos === 0 && mults === 0
-            ? `**${band}**: —`
-            : `**${band}**: ${fmtInteger(qsos)} QSOs, ${fmtInteger(mults)} mults`
-        }).join('\n'),
+        // Points are a flat 3 a QSO, so a band's points follow from its QSOs.
+        detail: bandBreakdown(
+          Object.entries(scoresheet.bands).map(([band, qsos]) => ({
+            band,
+            qsos,
+            points: qsos * 3,
+            mults: Object.keys(scoresheet.bandMults[band] ?? {}).length,
+          })),
+          ctx,
+          { bands: VALID_BANDS },
+        ),
         extra: { points: scoresheet.points, mults, qsos: scoresheet.qsos },
       },
       ctx,

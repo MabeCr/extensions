@@ -1,0 +1,11 @@
+{
+  "qsoOne": "1 QSO",
+  "qsoMany": "{{formatted}} QSOs",
+  "pointOne": "1 pt",
+  "pointMany": "{{formatted}} pts",
+  "multOne": "1 mult",
+  "multMany": "{{formatted}} mults",
+  "sectionsHeading": "Sections: {{worked}} of {{total}}",
+  "cleanSweep": "Clean Sweep! All {{total}} sections",
+  "sectionsOther": "Other"
+}

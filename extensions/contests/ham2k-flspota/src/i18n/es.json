@@ -3,5 +3,10 @@
   "addPota": "**Agrega también tu activación POTA** — este evento no tiene intercambio propio. Se puntúa con el parque estatal de Florida que activas y los parques que trabajas, como referencias POTA.",
   "period": "**Período:** {{period}}, de 8 am a 8 pm EDT cada día",
   "scoring": "**Puntuación:** 1 punto por QSO en SSB o digital y 2 por QSO en CW, parque por parque, más 100 por cada parque con 10 QSOs. Una estación cuenta una vez por banda y modo desde cada parque que activas; solo 160, 80, 40, 20, 15, 10 y 6 m.",
-  "submit": "**Envía** un ADIF por parque en [fspota.org](https://fspota.org/logging/) dentro de 14 días. Los bonos de primera activación y de operador joven se reclaman en ese formulario."
+  "submit": "**Envía** un ADIF por parque en [fspota.org](https://fspota.org/logging/) dentro de 14 días. Los bonos de primera activación y de operador joven se reclaman en ese formulario.",
+  "activatingHeading": "Activando",
+  "parkContacts": "{{park}} ({{formatted}})",
+  "parkContactsOf": "{{park}} ({{formatted}} de {{needed}})",
+  "parksWorkedOne": "1 parque de Florida trabajado",
+  "parksWorkedMany": "{{formatted}} parques de Florida trabajados"
 }

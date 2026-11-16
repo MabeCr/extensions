@@ -8,5 +8,9 @@
   "cabrilloExport": "Cabrillo para {{contest}}",
   "period": "**Período:** {{period}}",
   "scoring": "**Puntuación:** QSOs × parques estatales de Ohio, incluido el tuyo. Solo SSB y CW, en 80, 40, 20, 15 y 10 m, una vez por banda y modo. Cada parque desde el que operas es una participación propia, y necesita 10 contactos, 4 de ellos con otros parques.",
-  "submit": "**Envía** el Cabrillo, con una hoja de resumen por parque, a LOGS@ospota.org dentro de 14 días."
+  "submit": "**Envía** el Cabrillo, con una hoja de resumen por parque, a LOGS@ospota.org dentro de 14 días.",
+  "entriesSum": "{{formatted}} participaciones: {{sum}}",
+  "notInAPark": "Fuera de un parque",
+  "entryNeeds": "Necesita {{contacts}} contactos, {{parks}} con otros parques: {{haveContacts}} y {{haveParks}} hasta ahora",
+  "parksWorkedOf": "{{worked}} de {{total}} parques trabajados"
 }

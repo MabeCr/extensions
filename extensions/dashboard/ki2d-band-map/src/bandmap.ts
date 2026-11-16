@@ -1,18 +1,20 @@
 // Copyright ©️ 2026 Sebastian Delmont <sd@ham2k.com>
 // SPDX-License-Identifier: MPL-2.0
 //
-// The spots on one band, along a line of its frequencies: vertical in a tall panel (rising top to
-// bottom, as a band plan reads down the page; its scale on the right, the calls to its left),
-// horizontal in a wide one (its scale along the top, the calls under it). Where the radio's scope is
-// on the band shown, the host draws it over the stretch of the line it covers, however the map is
-// zoomed: its waterfall behind the calls, flowing away from the line, and its panadapter under the
-// scale's labels. Inverted, the scale and the scope go to the other side.
+// The spots on one band, along its frequencies, drawn by the app's band scope: its axis, its
+// tuning, zoom and pan, and the radio's spectrum and waterfall where the radio sweeps the band —
+// with no sweep, the band alone over a blank picture. Vertical in a tall panel (frequency rising
+// down the page), horizontal in a wide one. Over it, the spots and what is marked on the band (the
+// operator's band tags, other extensions' notes) as labels out from the axis, stacked or grouped
+// where they crowd, accented as the Spots panel accents them, and the band plan's modes and
+// markers. Inverted, the axis and the spectrum go to the other side.
 import { entityForCall, entityPrefixForCall, regionAndCountryForDxccCode } from '@ham2k/extension-sdk'
-import type { BoardSpot, HookContext, PanelEnvironment, PanelHook, PanelRadioResult, PanelRadioSet, PanelRadioState, PanelScene, PanelSceneControl as Control, PanelSceneLayer as Layer, SuggestedQso } from '@ham2k/extension-sdk'
+import type {
+  BoardSpot, HeldBandAnnotation, HookContext, JSONValue, PanelEnvironment, PanelHook, PanelRadioResult, PanelRadioSet, PanelRadioState, PanelScene,
+  PanelSceneControl as Control, PanelSceneSpectrumAnnotation as Annotation, PanelSceneSpectrumLayer as ScopeLayer, SuggestedQso,
+} from '@ham2k/extension-sdk'
 import { bandEdges, bandForKHz, bandPlan, bands, modeStretch, planAllows, plannedMode, radioModeFor, spotPassband, superModeForRadio } from './bands.ts'
 import type { SuperMode } from '@ham2k/lib-operation-data'
-import { freqParts, hzDigitsNeeded, type FreqParts } from './frequency.ts'
-import { columns, lanes, stack, tickStep } from './layout.ts'
 import { markerLabelsEs, markersFor, type BandMarker } from './markers.ts'
 
 type BandMapHost = {
@@ -20,25 +22,28 @@ type BandMapHost = {
   setRadio(args: PanelRadioSet): Promise<PanelRadioResult>
   /** The spot's station into the panel's operation's logging fields, as a Spots Panel tap. */
   suggestQso(args: { qso: SuggestedQso; operationUuid?: string }): Promise<{ accepted: boolean }>
+  /** The operator's band tags under `keys`, taken down with `source: 'user'` where the operator right-clicks one. */
+  bandAnnotations: { remove(keys: string[], options: { source: 'user' }): Promise<void> }
+  /** The placements' views, kept for the session. */
+  kvGet(key: string): Promise<JSONValue | null>
+  kvSet(key: string, value: JSONValue): Promise<void>
 }
 
 const en = {
   title: 'KI2D’s Band Map', description: 'The spots on a band, along its frequencies',
   band: 'Band', auto: 'Automatic (the radio’s band)', age: 'Spots no older than', minutes: (n: number) => `${n} minutes`,
-  waterfall: 'Radio waterfall', panadapter: 'Radio panadapter', direction: 'Scope direction', normal: 'Normal', inverted: 'Inverted',
+  notes: 'Band annotations', notesHelp: 'What is marked on the band among the spots: your band tags (QRM!, NET!) and what extensions mark.',
+  waterfall: 'Show Waterfall', panadapter: 'Show Spectrum', direction: 'Scope direction', normal: 'Normal', inverted: 'Inverted',
   mapTitle: (band: string) => `${band} Band Map`, unavailable: 'This app cannot show the band map', more: (n: number) => `+${n} more`,
-  tune: (call: string, mhz: string) => `Tune to ${call} on ${mhz} MHz`, tuneHere: 'Tune to this frequency', scope: 'Panadapter',
-  zoomIn: 'Zoom in', zoomOut: 'Zoom out', zoomTo: { band: 'The whole band', segment: 'This mode’s segment', radio: 'Around the radio' },
   marker: (label: string) => label,
   refused: (reason?: string) => `The radio did not take it${reason ? ` (${reason})` : ''}`, unknown: (action: string) => `The band map has no action “${action}”`,
 }
 const es: typeof en = {
   title: 'Mapa de banda de KI2D', description: 'Los spots de una banda, a lo largo de sus frecuencias',
   band: 'Banda', auto: 'Automática (la banda de la radio)', age: 'Spots de hasta', minutes: (n: number) => `${n} minutos`,
-  waterfall: 'Cascada de la radio', panadapter: 'Panorámico de la radio', direction: 'Dirección del panorámico', normal: 'Normal', inverted: 'Invertida',
+  notes: 'Anotaciones de la banda', notesHelp: 'Lo marcado en la banda entre los spots: tus etiquetas de banda (QRM!, NET!) y lo que marcan las extensiones.',
+  waterfall: 'Mostrar cascada', panadapter: 'Mostrar espectro', direction: 'Dirección del panorámico', normal: 'Normal', inverted: 'Invertida',
   mapTitle: (band: string) => `Mapa de ${band}`, unavailable: 'Esta app no puede mostrar el mapa de banda', more: (n: number) => `+${n} más`,
-  tune: (call: string, mhz: string) => `Sintonizar ${call} en ${mhz} MHz`, tuneHere: 'Sintonizar esta frecuencia', scope: 'Panorámico',
-  zoomIn: 'Acercar', zoomOut: 'Alejar', zoomTo: { band: 'La banda entera', segment: 'El segmento de este modo', radio: 'Alrededor de la radio' },
   marker: (label: string) => markerLabelsEs[label] ?? label,
   refused: (reason?: string) => `La radio no lo aceptó${reason ? ` (${reason})` : ''}`, unknown: (action: string) => `El mapa de banda no tiene la acción “${action}”`,
 }
@@ -61,16 +66,32 @@ const passbands: Record<string, [number, number]> = {
   USB: [100, 2800], LSB: [-2800, -100], CW: [-250, 250], AM: [-3000, 3000], FM: [-5000, 5000],
   'DATA-USB': [0, 3000], 'DATA-LSB': [-3000, 0], RTTY: [-250, 250],
 }
-const ages = [10, 30, 60]
 /**
- * Zoomed in to no less than `narrowest` kHz across the pane. A scene is at most `longest` units
- * long, so past that it holds a window of the band rather than all of it.
+ * Something new to work a spot for, and a new multiplier, in the Spots panel's own colours
+ * (`HaLoColors.important` and `spotMultiplier`, each theme's), so the two panels accent alike.
  */
-const narrowest = 2, longest = 8192
+const accents = { fresh: '#1aa01a', freshDark: '#1ac81a', multiplier: '#c2500f', multiplierDark: '#ff8a4c' }
+const ages = [10, 30, 60]
 
 /** A spot as the map shows it: one per station, its newest report. */
 export type MapSpot = {
-  call: string; khz: number; band?: string; mode?: string; refs: { type: string; ref: string }[]; ageMinutes: number; worked: boolean; isSelf: boolean; notices: number
+  call: string; khz: number; band?: string; mode?: string; refs: { type: string; ref: string }[]; ageMinutes: number; worked: boolean; isSelf: boolean
+  /** What tells it from the rest where `call` alone does not: a call not fully copied, or a note. */
+  key?: string
+  /** Something new to work it for — a band, a mode, a day, a reference, a multiplier — as the Spots panel accents. */
+  fresh: boolean
+  /** A new multiplier, which the Spots panel draws in its own colour over the rest. */
+  multiplier?: boolean
+  /** One of the band's `general` annotations rather than a station: its label for a call, nothing to log. */
+  note?: boolean
+  /** A note's source and its own key there: `user` for the operator's band tags, which a right-click takes down. */
+  source?: string; noteKey?: string
+  /** When the station's newest report was made: a spot hidden before it shows again. */
+  heardAt?: number
+  /** The ink it suggests, `#rrggbb`: a note's. */
+  color?: string
+  /** The stretch it covers in Hz either side of it, where its mode does not say: a note's. */
+  heard?: [number, number]
   /** For a spot that names no mode, the band plan's guess: what its passband shows and the radio tunes to, but not what is logged. */
   planned?: string
   /**
@@ -79,7 +100,6 @@ export type MapSpot = {
    */
   icon?: string; iconColor?: string; emoji?: string
 }
-
 
 /**
  * One spot a station, from the board's reports of it, newest first and each source's apart: where
@@ -92,10 +112,14 @@ export function mapSpots(board: BoardSpot[], nowMillis: number, [lo, hi]: [numbe
   for (const s of board) {
     const call = s.their.call.toUpperCase()
     if (s.freq == null) continue
-    reports.set(call, [...(reports.get(call) ?? []), s])
+    // A call not fully copied ("W1A?") names no one station: two of them are two places on the
+    // band, each its own spot.
+    const key = call.includes('?') ? `${call}@${s.freq}` : call
+    reports.set(key, [...(reports.get(key) ?? []), s])
   }
   const spots: MapSpot[] = []
-  for (const [call, [s, ...older]] of reports) {
+  for (const [key, [s, ...older]] of reports) {
+    const call = s.their.call.toUpperCase()
     if (s.freq! < lo || s.freq! > hi) continue
     const refs = new Map<string, NonNullable<BoardSpot['refs']>[number]>()
     for (const r of [s, ...older].flatMap(o => o.refs ?? [])) if (!refs.has(`${r.type}:${r.ref}`)) refs.set(`${r.type}:${r.ref}`, r)
@@ -103,34 +127,109 @@ export function mapSpots(board: BoardSpot[], nowMillis: number, [lo, hi]: [numbe
     // Drawn as the newest report that names a reference: a park's tree, not the cluster's tower.
     const shown = [s, ...older].find(o => o.refs?.length) ?? s
     const icon = shown.spot.source === 'cluster' && !shown.refs?.length ? undefined : shown.display?.icon ?? shown.icon ?? 'radio-tower'
+    const notices = s.annotations?.notices ?? []
     spots.push({
-      call, khz: s.freq!, band: s.band, mode, planned: mode ? undefined : plannedMode(call, s.freq!), refs: [...refs.values()], ageMinutes: Math.max(0, Math.round((nowMillis - s.spot.timeInMillis) / 60000)),
-      worked: s.annotations?.worked ?? false, isSelf: s.annotations?.isSelf ?? false, notices: s.annotations?.notices.length ?? 0,
+      call, ...(key !== call ? { key } : {}), khz: s.freq!, heardAt: s.spot.timeInMillis, band: s.band, mode, planned: mode ? undefined : plannedMode(call, s.freq!), refs: [...refs.values()], ageMinutes: Math.max(0, Math.round((nowMillis - s.spot.timeInMillis) / 60000)),
+      worked: s.annotations?.worked ?? false, isSelf: s.annotations?.isSelf ?? false,
+      fresh: notices.some(n => accented.includes(n) || chaseAlert(n)), ...(notices.includes('newMult') ? { multiplier: true } : {}),
       icon, iconColor: shown.display?.iconColor, emoji: shown.display?.emoji,
     })
   }
   return spots
 }
 
-/** Who keeps a place when there is not room for all: something new first, then the unworked, then the newest. */
-const rank = (s: MapSpot) => (s.notices ? 0 : s.worked ? 2 : 1) * 1e6 + s.ageMinutes
-const byRank = (a: MapSpot, b: MapSpot) => rank(a) - rank(b)
-/** Who sits nearest the line where labels crowd: the newest. */
-const byAge = (a: MapSpot, b: MapSpot) => a.ageMinutes - b.ageMinutes
-
-const mhz = (khz: number, decimals = 3) => (khz / 1000).toFixed(decimals)
-
-
 /**
- * The most spots a map shows: each takes two controls and up to six layers, within the scene's 256
- * and 512 — fewer where the scale has used more of the layers. Ten more go to the radio's line,
- * the count of those left out, the shared frequency readout and the zoom buttons.
+ * The scorers' notices the Spots panel accents, and the map after it. A new DXCC, state or province
+ * it leaves out: those are about the call being typed, and on a whole band they would light up most spots.
  */
-const mostSpots = (layersUsed: number) => Math.min(100, Math.floor((512 - layersUsed - 10) / 6))
+const accented = ['newBand', 'newMode', 'newDay', 'newRef', 'newMult']
+/** A chasing program's verdict the operator asked to be alerted to — `chase:<program>:<verdict>` then flags, `alert` among them. */
+const chaseAlert = (notice: string) => notice.startsWith('chase:') && notice.split(':').slice(3).includes('alert')
+
+/** The most characters of a note's label the map shows. */
+const noteLength = 12
 
 /**
- * The views the reset button steps through, in turn: the whole band, the band
- * plan's stretch for the radio's mode, and the radio with 50 kHz around it on phone, 10 on CW and data.
+ * The band's `general` annotations within [lo, hi] — the operator's band tags, what extensions mark —
+ * as spots: each labelled, where it is or in the middle of what the window holds of the stretch it
+ * covers, never fading.
+ */
+export function noteSpots(annotations: HeldBandAnnotation[], [lo, hi]: [number, number]): MapSpot[] {
+  // Each named by its key, or where it starts: by its place in the list, a note added before it would
+  // move a click on the picture painted before onto another. Two alike are told apart in turn.
+  const seen = new Map<string, number>()
+  return annotations.filter(a => a.type === 'general' && a.label?.trim()).flatMap(a => {
+    const [from, to] = [a.fromHz, a.toHz != null && a.toHz > a.fromHz ? a.toHz : a.fromHz]
+    if (to / 1000 < lo || from / 1000 > hi) return []
+    const at = Math.round((Math.max(from, lo * 1000) + Math.min(to, hi * 1000)) / 2)
+    const base = `note:${a.source}:${a.key ?? a.fromHz}`, n = seen.get(base) ?? 0
+    seen.set(base, n + 1)
+    // Cut to a call's length: a label sizes the map's columns, and a long one would take their room.
+    const label = a.label!.trim(), short = label.length > noteLength ? `${label.slice(0, noteLength - 1).trimEnd()}…` : label
+    return [{
+      call: short, key: n ? `${base}#${n}` : base, source: a.source, ...(a.key ? { noteKey: a.key } : {}), khz: at / 1000, refs: [], ageMinutes: 0, worked: false, isSelf: false, fresh: false, note: true,
+      ...(a.icon ? { icon: a.icon, iconColor: a.color } : {}), ...(a.color ? { color: a.color } : {}),
+      ...(to > from ? { heard: [from - at, to - at] as [number, number] } : {}),
+    }]
+  })
+}
+
+/** What names a spot among the rest: its call, or what tells it apart where the call does not. */
+export const spotKey = (s: MapSpot) => s.key ?? s.call
+
+/** Who keeps a place when there is not room for all: something new first, then the unworked, then the newest. */
+const rank = (s: MapSpot) => (s.fresh ? 0 : s.worked ? 2 : 1) * 1e6 + s.ageMinutes
+const byRank = (a: MapSpot, b: MapSpot) => rank(a) - rank(b)
+
+/** `#rrggbb` (or `#aarrggbb`, its alpha replaced) at an opacity, as a band scope's `#AARRGGBB`. */
+export const alpha = (color: string, opacity: number) =>
+  `#${Math.round(Math.min(1, Math.max(0, opacity)) * 255).toString(16).padStart(2, '0')}${color.slice(-6)}`
+
+/** `±<n>px`, as a band scope's coordinate offset is written. */
+const px = (n: number) => `${n < 0 ? '-' : '+'}${Math.abs(Math.round(n))}px`
+
+/**
+ * The radio the scope names when the radio is on another band than the map's: a node that is no
+ * radio, so the scope sweeps nothing and the map shows its band alone.
+ */
+const noRadio = 'none'
+
+export type MapView = {
+  band: string
+  /** The band's edges in kHz: the window shown with no sweep, and the widest a zoom goes. */
+  edges: [number, number]
+  spots: MapSpot[]
+  /** The band plan's places worth marking, for the operator's station. */
+  markers?: BandMarker[]
+  /** The age at which a spot is shown faintest: the oldest the map asks for. */
+  maxAgeMinutes: number
+  /** The radio on the map's band, which the scope draws, tunes and follows; none, the band alone. */
+  radio?: string
+  /** What the scope shows where the radio sweeps the band, as the form asks: its waterfall, its spectrum. */
+  picture: { waterfall: boolean; pan: boolean }
+  /** The logging controls' frequency where there is no radio to read, which the map marks itself. */
+  draftKHz?: number
+  /** The receive filter's edges in Hz from the tuned frequency. */
+  passband?: [number, number]
+  /** The band plan: where its modes change, and the stretches not meant for the radio's mode. */
+  plan?: { edges: number[]; off: [number, number][] }
+  /** The radio's kind of mode, while it is on this band: spots of another kind are shown fainter. */
+  superMode?: SuperMode
+  /** The axis and the spectrum on the other side: the right of a tall map, the bottom of a wide one. */
+  inverted?: boolean
+  /** The width the operator zoomed to and the middle they left the window at, in Hz, and the spectrum's share, from the scope's gestures. */
+  span?: number
+  center?: number
+  split?: number
+  /** The preset view the map is at, none where the operator zoomed or panned by hand. */
+  preset?: Preset
+  /** The preset view the button goes to next, or false where there is none other than this one. */
+  next?: Preset | false
+}
+
+/**
+ * The views the preset button steps through, in turn: the whole band, the band plan's stretch for
+ * the radio's mode, and the radio with 25 kHz either side on phone, 5 on CW and data.
  */
 export type Preset = 'band' | 'segment' | 'radio'
 const presets: Preset[] = ['band', 'segment', 'radio']
@@ -139,519 +238,349 @@ const nextPreset = (offered: Preset[], current: Preset | undefined): Preset | fa
   const next = offered[(offered.indexOf(current as Preset) + 1) % offered.length]
   return next && next !== current ? next : false
 }
-/** Where the reset button goes: a zoom and the kHz to centre on. */
-type ResetTo = { preset: Preset; factor: number; center: number }
-
-/** What a render placed, so a click on a label knows where to tune. */
-export type Placed = { id: string; spot: MapSpot }
-
-export type MapView = {
-  band: string
-  /** The kHz the line runs between: the band's edges, or the stretch of them a long scene holds. */
-  window: [number, number]
-  spots: MapSpot[]
-  /** The band plan's places worth marking, for the operator's station. */
-  markers?: BandMarker[]
-  /** The age at which a spot is shown faintest: the oldest the map asks for. */
-  maxAgeMinutes: number
-  radioKHz?: number
-  /** `radioKHz` is the radio's own report, not the logging controls': its pointer follows the radio between renders. */
-  follows?: boolean
-  /** The receive filter's edges in Hz from the tuned frequency. */
-  passband?: [number, number]
-  /** The band plan: where its modes change, and the stretches not meant for the radio's mode. */
-  plan?: { edges: number[]; off: [number, number][] }
-  /** The radio's kind of mode, while it is on this band: spots of another kind are shown fainter. */
-  superMode?: SuperMode
-  /** A radio to tune: the scale is clicked to tune it, and with none it is only drawn. */
-  tunable?: boolean
-  /**
-   * Present when the host draws the radio's scope on the map, over `range` (kHz, the sweep's edges):
-   * its waterfall behind the calls, its panadapter under the scale's labels, or both.
-   */
-  scope?: { radio: string; waterfall: boolean; pan: boolean; range: [number, number] }
-  /** The scale and the scope on the other side: the line's left in a tall map, along the bottom of a wide one. */
-  inverted?: boolean
-  /** The operator's own thousands and decimal marks. */
-  marks: { group: string; decimal: string }
-  /** Which ways the map can zoom from here; `reset`, the preset view its button goes to next, if any. */
-  zoom: { in: boolean; out: boolean; reset: Preset | false }
-  /**
-   * The window drawn `factor` times the pane's length, scrolled by the app.
-   * `offset` is where the view was left, in scene units, or none to centre on the radio; with
-   * `follow`, the radio has moved since, and the view moves just enough to keep it in its middle
-   * 20–80%. With `centerOn` (kHz), a zoom has just changed, and the view keeps that frequency in
-   * its middle. `stretch` is how far a drag on the scale may zoom from here.
-   */
-  scroll?: { factor: number; offset?: number; follow: boolean; centerOn?: number; stretch: { min: number; max: number } }
+/** How far past each of the band's edges the map zooms out and pans to, a share of the band's width. */
+const beyond = 0.25
+/** The preset button's glyph, in a 26-pixel circle, upright for a tall map: the view the map is at, or a magnifier for one set by hand. */
+const presetGlyph: Record<Preset | 'hand', string> = {
+  hand: '<circle cx="11.5" cy="11.5" r="4.5" fill="none" stroke-width="2"/><path d="M15 15L19 19" fill="none" stroke-width="2.5" stroke-linecap="round"/>',
+  band: '<path d="M13 9V17M10 11L13 8L16 11M10 15L13 18L16 15M8 5H18M8 21H18" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+  segment: '<path d="M8 13H18M13 5V10M10 8L13 11L16 8M13 21V16M10 18L13 15L16 18" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+  radio: '<circle cx="13" cy="13" r="5.5" fill="none" stroke-width="2"/><circle cx="13" cy="13" r="1.8" stroke="none"/>',
 }
 
-export function bandMapScene(
-  e: PanelEnvironment,
-  view: MapView,
-  t: typeof en,
-): { scene: PanelScene; placed: Placed[]; offset?: number; centerKHz?: number; centerAt?: (offset: number) => number; tuneAt: (along: number) => number } {
-  const c = e.colors
-  const paneWidth = Math.max(1, Math.min(8192, e.width)), paneHeight = Math.max(1, Math.min(8192, e.height))
-  const vertical = paneHeight > paneWidth
-  // Scrolling, the band runs on past the pane along the line; the zoom buttons stay on the pane.
-  const factor = view.scroll?.factor ?? 1
-  const width = vertical ? paneWidth : Math.min(8192, Math.round(paneWidth * factor)), height = vertical ? Math.min(8192, Math.round(paneHeight * factor)) : paneHeight
-  const left = e.safeInsets.left + 8, top = e.safeInsets.top + 8, right = width - e.safeInsets.right - 8, bottom = height - e.safeInsets.bottom - 8
-  const paneRight = paneWidth - e.safeInsets.right - 8
-  // Calls in the app's own call face (the Spots Panel's: its mono role, bold); colour alone accents one.
-  const mono = e.typography.mono.fontFamily ?? undefined
-  const callSize = 13, scaleSize = 11, row = 20
-  // RobotoMono advances 0.6 em a glyph; a hair over sizes the boxes around the host's own layout.
-  const advance = (size: number) => size * 0.61
-  const [lo, hi] = view.window
-  const layers: Layer[] = [], controls: Control[] = [], placed: Placed[] = [], values: Record<string, number> = {}
-  const text = (id: string, x: number, y: number, w: number, h: number, literal: string, size: number, color: string, extra: Record<string, unknown> = {}) =>
-    layers.push({ id, x, y, width: w, height: h, text: { literal, size, color, lineHeight: 1.2, ...extra } })
-  // Each piece of artwork is a layer of its own, sized to what it draws: a zoom drag moves the pieces
-  // apart at their own sizes, and only a `stretch` one — the background, the line — scales.
-  const piece = (id: string, [x0, y0, x1, y1]: number[], body: string, extra: Partial<Layer> = {}) => {
-    const w = Math.max(1, x1 - x0), h = Math.max(1, y1 - y0)
-    layers.push({ id, x: x0, y: y0, width: w, height: h, svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x0} ${y0} ${w} ${h}">${body}</svg>`, ...extra })
-  }
-  piece('background', [0, 0, width, height], `<rect width="${width}" height="${height}" fill="${c.surface}"/>`, { stretch: true })
+/** The annotation's id for a spot; a click names it, and the render's table finds the spot again. */
+export const spotId = (s: MapSpot) => `spot:${spotKey(s)}`
 
-  // The line: along the panel's longer side, frequency rising to the right or down the page — as
-  // the app turns the panadapter behind it, too. With `side` −1 the scale is past the line's right
-  // or lower edge and the calls before it; +1 swaps them. Upright, the scale is on the right; wide,
-  // along the top — so the waterfall flows left or down, out from the panadapter under the labels.
-  // The field, between the line and the calls' edge, is where the spots and the waterfall go.
-  const side: -1 | 1 = (vertical ? -1 : 1) * (view.inverted ? -1 : 1) as -1 | 1
-  const axis = vertical ? (side < 0 ? right - 58 : left + 58) : side < 0 ? bottom - 18 : top + 18
-  const [fieldLeft, fieldRight] = side < 0 ? [left, axis] : [axis, right]
-  const [fieldTop, fieldBottom] = side < 0 ? [top, axis] : [axis, bottom]
-  const [a0, a1] = vertical ? [top, bottom] : [left, right]
-  const at = (khz: number) => a0 + ((khz - lo) / (hi - lo)) * (a1 - a0)
-  const length = Math.abs(a1 - a0)
-  // At most 80 labels on the scale, however long a zoomed band runs: each takes two layers, three with tenths.
-  const step = tickStep(hi - lo, length, Math.max(vertical ? 30 : 64, length / 80))
-  // A reading in the QSO list's three weights: whole MHz bold, the kHz plain, the Hz light and smaller.
-  // Each part is its own text layer, a box sized to its characters, so they sit side by side.
-  const hzSize = (size: number) => size * 0.8
-  // The Hz sit on the others' baseline: in the same line box (the larger text's 1.2 em), a smaller
-  // size's baseline rides high by half its lost (ascent − descent) — RobotoMono's 1.048 and 0.271 em.
-  const hzLift = (size: number) => ((1.048 - 0.271) / 2) * (size - hzSize(size))
-  const hzLine = 1.2 / 0.8
-  const readingWidths = (parts: FreqParts, size: number) =>
-    [parts.mhz.length * advance(size), parts.khz.length * advance(size), (parts.hz?.length ?? 0) * advance(hzSize(size))] as const
-  const reading = (id: string, parts: FreqParts, x: number, y: number, h: number, size: number, color: string) => {
-    const [m, k, z] = readingWidths(parts, size)
-    text(`${id}-mhz`, x, y, m + 1, h, parts.mhz, size, color, { fontFamily: mono, fontWeight: 700 })
-    if (parts.khz) text(`${id}-khz`, x + m, y, k + 1, h, parts.khz, size, color, { fontFamily: mono })
-    if (parts.hz) text(`${id}-hz`, x + m + k, y + hzLift(size), z + 1, h, parts.hz, hzSize(size), color, { fontFamily: mono, fontWeight: 300, lineHeight: hzLine })
-    return m + k + z
-  }
-  // The line.
-  const line = [vertical ? `<path d="M${axis} ${top}V${bottom}" stroke="${c.outline}" stroke-width="2"/>` : `<path d="M${left} ${axis}H${right}" stroke="${c.outline}" stroke-width="2"/>`]
-  piece('line', [0, 0, width, height], line.join(''), { stretch: true })
-  // The band plan across the map: a line where its mode changes, and a veil over what the radio's mode is not meant for.
-  if (view.plan) {
-    const across = (p: number, q: number, body: string) =>
-      vertical ? `<rect x="${fieldLeft}" y="${Math.min(p, q)}" width="${Math.max(0, fieldRight - fieldLeft)}" height="${Math.abs(q - p)}" ${body}/>`
-        : `<rect x="${Math.min(p, q)}" y="${fieldTop}" width="${Math.abs(q - p)}" height="${Math.max(0, fieldBottom - fieldTop)}" ${body}/>`
-    const plan = [
-      ...view.plan.off.filter(([from, to]) => to > lo && from < hi).map(([from, to]) => across(at(Math.max(from, lo)), at(Math.min(to, hi)), `fill="${c.onSurface}" fill-opacity=".08"`)),
-      ...view.plan.edges.filter(khz => khz > lo && khz < hi).map(khz => across(at(khz) - 0.5, at(khz) + 0.5, `fill="${c.outline}" fill-opacity=".7"`)),
-    ]
-    if (plan.length) piece('plan', [0, 0, width, height], plan.join(''), { stretch: true })
-  }
-  // The marks: one at each label, and finer ones between as many as stay 6 px apart — tenths with
-  // the half longer, else fifths or quarters, else halves. All one piece, so they cost no layers.
-  const pitch = (length * step) / (hi - lo), mantissa = Math.round(step / 10 ** Math.floor(Math.log10(step) + 1e-9) * 10) / 10
-  const divisions = (mantissa === 2 ? [4, 2] : [10, 5, 2]).find(n => pitch / n >= 6) ?? 1
-  const marks: string[][] = [[], []]
-  // Counted in whole marks, so a tenth of a kHz adds up to no stray digits.
-  for (let k = Math.ceil((lo / step) * divisions - 1e-6); (k / divisions) * step <= hi + 1e-9; k++) {
-    // Out from the line's own edge, which would hide the shortest.
-    const p = at((k / divisions) * step), long = k % divisions === 0 ? 5 : divisions % 2 === 0 && k % (divisions / 2) === 0 ? 3.5 : 2
-    marks[long === 5 ? 0 : 1].push(vertical ? `M${axis - side * (1 + long)} ${p}H${axis}` : `M${p} ${axis}V${axis - side * (1 + long)}`)
-  }
-  piece('ticks', vertical ? [Math.min(axis, axis - side * 6), 0, Math.max(axis, axis - side * 6), height] : [0, Math.min(axis, axis - side * 6), width, Math.max(axis, axis - side * 6)],
-    `<path d="${marks[0].join('')}" stroke="${c.outline}" stroke-width="1"/><path d="${marks[1].join('')}" stroke="${c.outline}" stroke-width="1" stroke-opacity=".6"/>`, { stretch: true })
-  // The radio's frequency on the scale, under its labels: a pointer at the line, and the line it
-  // draws across the field carried on to the pane's edge.
-  const dark = e.brightness === 'dark', tunedLine = dark ? tuned.line : tuned.lineLight
-  const vfo = view.radioKHz != null && view.radioKHz >= lo && view.radioKHz <= hi ? at(view.radioKHz) : undefined
-  // The radio's pointer and line move with its live frequency, which the host updates as the radio
-  // reports it: a render comes 750 ms after the last at the soonest, and the map is redrawn about the
-  // new place only then. Off the window they hide rather than stop at its end.
-  const following: Partial<Layer> = vfo != null && view.follows ? {
-    [vertical ? 'translateY' : 'translateX']: { value: 'radio.frequencyHz', input: [lo * 1000, hi * 1000], output: [a0 - vfo, a1 - vfo] },
-    when: { value: 'radio.frequencyHz', min: lo * 1000, max: hi * 1000 },
-  } : {}
-  if (vfo != null) {
-    const p = vfo, edge = vertical ? (side < 0 ? width : 0) : side < 0 ? height : 0, stroke = `stroke="${tunedLine}" stroke-width="${tuned.width}"`
-    piece('vfo', vertical ? [Math.min(axis, edge), p - 7, Math.max(axis, edge), p + 7] : [p - 7, Math.min(axis, edge), p + 7, Math.max(axis, edge)], vertical
-      ? `<path d="M${axis} ${p}H${edge}" ${stroke}/><path d="M${axis - side * 12} ${p - 7}L${axis} ${p}L${axis - side * 12} ${p + 7}Z" fill="${tunedLine}"/>`
-      : `<path d="M${p} ${axis}V${edge}" ${stroke}/><path d="M${p - 7} ${axis - side * 12}L${p} ${axis}L${p + 7} ${axis - side * 12}Z" fill="${tunedLine}"/>`, following)
-  }
-  for (let k = Math.ceil(lo / step - 1e-9); k * step <= hi; k++) {
-    const khz = Math.round(k * step * 1000) / 1000, p = at(khz), parts = freqParts(khz, step < 1 ? 1 : 0, view.marks)
-    const w = readingWidths(parts, scaleSize).reduce((a, b) => a + b)
-    if (vertical) reading(`tick-${khz}`, parts, side < 0 ? axis + 10 : axis - 10 - w, p - 8, 16, scaleSize, c.onSurfaceVariant)
-    else if (p - w / 2 >= left - 4 && p + w / 2 <= right + 4) reading(`tick-${khz}`, parts, p - w / 2, side < 0 ? axis + 5 : axis - 19, 14, scaleSize, c.onSurfaceVariant)
-  }
+/** A spot's label: its call, at the size and weight the Spots panel shows calls, boxed from its capitals' tops to its baseline. */
+const callSize = 14, labelGap = 4, padding = 2, paddingY = 4
+const capHeight = callSize * 0.71
+/** A spot's dot, the gap between it and the call, and the room between the axis and the labels. */
+const dotSize = 6, textGap = 3, inset = 6
+/** RobotoMono advances 0.6 em a glyph; a hair over keeps a guess from letting two boxes touch. */
+const advance = callSize * 0.62
+/** A label's width: the call, the icon before it and the emoji after. */
+const widthOf = (s: MapSpot) => padding * 2 + s.call.length * advance + (s.icon ? callSize * 1.6 : 0) + (s.emoji ? callSize * 1.6 : 0)
+/** What a group's count adds after its call: a space, `+n` a little smaller, and its pill's ends. */
+const badgeWidth = (count: number) => advance + (String(count).length + 1) * advance * 0.85 + advance / 3 + 8
 
-  // The band plan's markers: a dashed line from the scale across the field to the pane's far edge,
-  // with its emoji there. The emoji keep a strip along the edge to themselves, so no spot's label sits
-  // under one, and spread along it where they crowd; the line bends at the strip to meet its own.
-  const markSize = 16, strip = 20, far = vertical ? (side < 0 ? left : right) : side < 0 ? top : bottom
-  const markers = (view.markers ?? []).filter(m => m.khz >= lo && m.khz <= hi).map(m => ({ m, p: at(m.khz) })).sort((a, b) => a.p - b.p)
-  const markTops = stack(markers.map(({ p }) => p), markSize, vertical ? top : left, vertical ? bottom : right)
-  const markShown = markers.map(({ m, p }, i) => {
-    const q = markTops[i] + markSize / 2, inner = far - side * markSize
-    return vertical
-      ? { m, p, q, icon: [Math.min(far, inner), markTops[i]], path: `M${axis} ${p}H${far - side * (strip + 2)}L${far - side * (markSize + 1)} ${q}`, reach: [Math.min(axis, inner), Math.min(p, q) - 1, Math.max(axis, inner), Math.max(p, q) + 1] }
-      : { m, p, q, icon: [markTops[i], Math.min(far, inner)], path: `M${p} ${axis}V${far - side * (strip + 2)}L${q} ${far - side * (markSize + 1)}`, reach: [Math.min(p, q) - 1, Math.min(axis, inner), Math.max(p, q) + 1, Math.max(axis, inner)] }
+/**
+ * The axis's depth: between the spectrum and the waterfall, no more than its line, the waterfall
+ * right against it, its ticks and labels standing over the spectrum; at the waterfall's head with
+ * no spectrum, a narrow strip; with no waterfall, over the spectrum's foot, deep enough for its labels.
+ */
+const axisBetween = 2, axisHead = 10, axisOver = 24
+/** Room across the waterfall's head for the axis's labels, where they lie on it: a reading's width and a little air. */
+const labelRoom = 46
+/** The axis's ticks over the spectrum; a label's is three quarters longer. */
+const tickLength = 8
+
+/** The round step, 1, 2 or 5 times a power of ten, at least [hz]. */
+const niceStep = (hz: number) => {
+  const power = 10 ** Math.floor(Math.log10(Math.max(1, hz)))
+  return [1, 2, 5, 10].map(m => m * power).find(step => step >= hz)!
+}
+/** The markers' strip along the part's far edge, which the labels stop short of. */
+const markStrip = 20
+/** The most spots shown: two layers each, of the 512 a band scope takes, the plan's taken first; under its 256 annotations. */
+const mostSpots = 150
+
+/** [key] set again as the newest, and the oldest let go past [most]: what a session keeps, not a leak. */
+function keepNewest<K, V>(kept: Map<K, V>, key: K, value: V, most: number) {
+  kept.delete(key)
+  kept.set(key, value)
+  while (kept.size > most) kept.delete(kept.keys().next().value!)
+}
+
+export function bandMapScene(e: PanelEnvironment, view: MapView, t: typeof en): { scene: PanelScene; spots: Map<string, MapSpot> } {
+  const c = e.colors, dark = e.brightness === 'dark'
+  const vertical = e.height > e.width
+  const along = Math.max(1, vertical ? e.height : e.width), across = Math.max(1, vertical ? e.width : e.height)
+  const [lo, hi] = view.edges, bandHz = Math.round((hi - lo) * 1000)
+  const hz = (khz: number) => Math.round(khz * 1000)
+  // Zoomed out or panned, the window runs a little past the band's edges.
+  const [windowLo, windowHi] = [lo - (hi - lo) * beyond, hi + (hi - lo) * beyond], widestHz = Math.round((windowHi - windowLo) * 1000)
+  const shownHz = Math.min(widestHz, Math.max(100, view.span ?? bandHz)), hzPerPx = shownHz / along
+  // Over the band alone, the waterfall's room is the spots' field; over the radio's sweep, its
+  // picture as the form asks, the spots on the waterfall where it is shown.
+  // With no sweep, the spectrum's room is still kept, blank, for the axis's labels to reach over.
+  const display = view.picture.waterfall && view.picture.pan ? 'both' : view.picture.pan ? 'spectrum' : 'waterfall'
+  const between = display === 'both'
+  // Tall with the waterfall alone, the axis is a strip of its own at the waterfall's head, its labels on the waterfall.
+  const headed = vertical && display === 'waterfall'
+  const strip = between || headed, axisGap = between ? axisBetween : headed ? axisHead : axisOver
+  // How far the spots' field starts past the part's edge: clear of the axis lying over it, or of its labels.
+  const clear = between ? 0 : headed ? labelRoom : axisGap
+  // A little room at the far edge, short of the pane's border.
+  const farRoom = 4
+  const part = display === 'spectrum' ? 'spectrum' : 'waterfall'
+  const split = view.split ?? 0.3
+  const partAcross = between ? (across - axisGap) * (1 - split) : across
+  // On the part's edge past the axis lying over it, moved `d` further in.
+  const edge = (d = 0) => (part === 'waterfall' ? `waterfall${px(clear + d)}` : `spectrum:bottom${px(-clear - d)}`)
+  // On its far edge, moved `d` back toward the axis.
+  const far = (d = 0) => (part === 'waterfall' ? `waterfall:bottom${px(-farRoom - d)}` : `spectrum${px(farRoom + d)}`)
+  const tunedLine = dark ? tuned.line : tuned.lineLight
+  const layers: ScopeLayer[] = [], annotations: Annotation[] = []
+
+  // Past the band's edges, shaded across the whole picture, the edges themselves solid.
+  layers.push({ id: 'below', kind: 'rect', x: `freq:${hz(windowLo)}`, x2: `freq:${hz(lo)}`, fill: alpha(c.onSurface, 0.12) })
+  layers.push({ id: 'above', kind: 'rect', x: `freq:${hz(hi)}`, x2: `freq:${hz(windowHi)}`, fill: alpha(c.onSurface, 0.12) })
+  for (const [i, khz] of [lo, hi].entries()) layers.push({ id: `edge:${i}`, kind: 'line', x: `freq:${hz(khz)}`, color: c.outline, width: 1.5 })
+  // The band plan across the field: a veil over what the radio's mode is not meant for, and a line where its mode changes.
+  for (const [from, to] of view.plan?.off ?? []) {
+    if (to > lo && from < hi) layers.push({ id: `off:${from}`, kind: 'rect', x: `freq:${hz(Math.max(from, lo))}`, x2: `freq:${hz(Math.min(to, hi))}`, y: edge(), y2: far(), fill: alpha(c.onSurface, 0.07) })
+  }
+  for (const khz of view.plan?.edges ?? []) {
+    if (khz > lo && khz < hi) layers.push({ id: `plan:${khz}`, kind: 'line', x: `freq:${hz(khz)}`, y: edge(), y2: far(), color: alpha(c.outline, 0.7) })
+  }
+  // The markers: a line from the axis across the field to the far edge, and its emoji there; a click
+  // on the emoji names it. An edge — a boundary rather than a place — solid and heavier.
+  const markers = (view.markers ?? []).filter(m => m.khz >= lo && m.khz <= hi)
+  markers.forEach((m, i) => {
+    layers.push({
+      id: `mark:${i}:line`, kind: 'line', x: `freq:${hz(m.khz)}`, y: edge(), y2: far(markStrip), color: c.outlineVariant,
+      ...(m.type === 'edge' ? { width: 2 } : { dashed: true }),
+    })
+    layers.push({
+      id: `mark:${i}`, kind: 'text', x: `freq:${hz(m.khz)}`, y: far(markStrip / 2), text: m.icon, size: 13, align: 'center', valign: 'center',
+      menu: [{ label: t.marker(m.label), event: 'marker' }],
+    })
   })
-  // An edge — a boundary rather than a place — is a solid line, and heavier.
-  const markStroke = (m: BandMarker) => (m.type === 'edge' ? 'stroke-width="2"' : 'stroke-width="1" stroke-dasharray="3 3"')
-  markShown.forEach(({ m, path, reach }, i) => {
-    piece(`mark-${i}-line`, reach, `<path d="${path}" fill="none" stroke="${c.outlineVariant}" ${markStroke(m)}/>`)
-  })
-  // Spots end short of the markers' strip.
-  const markStrip = markShown.length ? strip : 0
-  // Each marker takes four more layers further down: its emoji, and its lit line, label and emoji.
-  const scaleLayers = layers.length + markShown.length * 4
-
-  // The radio's scope, behind everything but the background: its waterfall a slow one across the
-  // field, in muted slate rising out of the map's own surface, so the spots stay what the eye reads
-  // first; its panadapter a quiet trace in the scale's strip, under the labels, peaking out from the
-  // line. The waterfall's own tuned-frequency line marks the radio; on the scale, the map's own does.
-  if (view.scope) {
-    const { waterfall: falls, pan, range: [r0, r1] } = view.scope
-    // Zoomed past the longest a control can be, the sweep's middle that long: the app crops it about its middle.
-    let [s0, s1] = [at(r0), at(r1)].sort((a, b) => a - b)
-    const cropped = s1 - s0 > longest
-    // The width it shows, which is also what it asks of a scope the app sizes to its displays (a
-    // FlexRadio's): all the map takes in, so it gets the widest — and never less than the sweep, which
-    // a crop would draw stretched across the place the whole of it belongs. At most the 10 MHz the app takes.
-    const span = Math.min(1e7, Math.floor(cropped ? ((r1 - r0) * 1000 * longest) / (s1 - s0) : Math.max(hi - lo, r1 - r0) * 1000))
-    if (cropped) [s0, s1] = [(s0 + s1 - longest) / 2, (s0 + s1 + longest) / 2]
-    // Frequency down the page or to the right, as the map's scale runs, whichever way the waterfall flows.
-    const common = {
-      kind: 'spectrum', radio: view.scope.radio, after: 'background', event: 'tune', span, scale: false, backgroundColor: c.surface,
-      flow: vertical ? (side < 0 ? 'left' : 'right') : side < 0 ? 'up' : 'down', rising: vertical ? 'down' : 'right',
-    } as const
-    // Across the line where the sweep is: the field from the line to the calls' edge, or the scale's
-    // strip from the line to the pane's.
-    const place = (to: number) => {
-      const [a, b] = [Math.min(axis, to), Math.max(axis, to)]
-      return vertical ? { x: a, y: s0, width: Math.max(1, b - a), height: Math.max(1, s1 - s0) } : { x: s0, y: a, width: Math.max(1, s1 - s0), height: Math.max(1, b - a) }
-    }
-    if (falls) {
-      controls.push({
-        ...common, id: 'scope', label: t.scope, display: 'waterfall', waterfallSpeed: 5,
-        waterfallColors: [c.surface, ...(dark ? waterfall.dark : waterfall.light)],
-        center: { waterfall: { color: tunedLine, width: tuned.width } },
-        overlays: view.passband ? [{ from: view.passband[0], to: view.passband[1], waterfall: { fill: dark ? tuned.passbandWaterfall : tuned.passbandWaterfallLight } }] : [],
-        ...place(vertical ? (side < 0 ? fieldLeft : fieldRight) : side < 0 ? fieldTop : fieldBottom),
-      })
-    }
-    if (pan) {
-      controls.push({
-        ...common, id: 'scope-pan', label: t.scope, display: 'pan', center: {},
-        traceColor: dark ? trace.dark : trace.light, fillColor: dark ? trace.darkFill : trace.lightFill, gridColor: '#00000000',
-        ...place(vertical ? (side < 0 ? right : left) : side < 0 ? bottom : top),
-      })
-    }
-  } else if (vfo != null) {
-    // Without one, the radio's line across the field, over its passband.
-    const p = vfo
-    // The passband at least a few pixels wide, so a CW filter on a whole band still shows.
-    const [q, r] = view.passband ? view.passband.map(hz => at(view.radioKHz! + hz / 1000)).sort((a, b) => a - b) : [p, p]
-    const pad = Math.max(0, (3 - (r - q)) / 2), fill = dark ? 'fill="#d6eef4" fill-opacity=".25"' : `fill="${tunedLine}" fill-opacity=".12"`
-    const band = view.passband ? (vertical
-      ? `<rect x="${fieldLeft}" y="${q - pad}" width="${Math.max(0, fieldRight - fieldLeft)}" height="${r - q + pad * 2}" ${fill}/>`
-      : `<rect x="${q - pad}" y="${fieldTop}" width="${r - q + pad * 2}" height="${Math.max(0, fieldBottom - fieldTop)}" ${fill}/>`) : ''
-    const [p0, p1] = [Math.min(p - 2, q - pad), Math.max(p + 2, r + pad)]
-    piece('radio', vertical ? [fieldLeft, p0, fieldRight, p1] : [p0, fieldTop, p1, fieldBottom], band + (vertical
-      ? `<path d="M${axis} ${p}H${side < 0 ? fieldLeft : fieldRight}" stroke="${tunedLine}" stroke-width="${tuned.width}"/>`
-      : `<path d="M${p} ${side < 0 ? fieldTop : fieldBottom}V${axis}" stroke="${tunedLine}" stroke-width="${tuned.width}"/>`), following)
+  // The preset button, in the pane's top left corner — the window's low end, on the control's first
+  // side, or its last where the map is turned the other way: drawn as the view the map is at, faint
+  // where there is no other to go to.
+  {
+    const button = 26, shown = view.preset ?? 'hand', inset = 4
+    const last = display === 'spectrum' ? 'spectrum' : 'waterfall'
+    const across = view.inverted ? { y: `${last}:bottom${px(-inset - button)}`, y2: `${last}:bottom${px(-inset)}` } : { y: px(inset), y2: px(inset + button) }
+    // Arrows along the band, which runs across a wide map.
+    const turn = vertical || shown === 'hand' || shown === 'radio' ? '' : ' transform="rotate(90 13 13)"'
+    layers.push({
+      id: 'preset', kind: 'svg', x: inset, x2: inset + button, ...across,
+      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 26 26"><g opacity="${view.next ? 1 : 0.35}"><circle cx="13" cy="13" r="12" fill="${c.surfaceContainer}" stroke="${c.outline}"/><g${turn} stroke="${c.onSurface}" fill="${c.onSurface}">${presetGlyph[shown]}</g></g></svg>`,
+      ...(view.next ? { event: 'preset' } : {}),
+    })
+  }
+  // With no radio to draw, the logging controls' frequency, as the scope would draw the dial.
+  if (!view.radio && view.draftKHz != null && view.draftKHz >= lo && view.draftKHz <= hi) {
+    layers.push({ id: 'draft', kind: 'line', x: `freq:${hz(view.draftKHz)}`, color: tunedLine, width: tuned.width })
   }
 
-  const ink = (s: MapSpot) => (s.notices ? c.primary : s.isSelf ? c.secondary : s.worked ? c.onSurfaceVariant : c.onSurface)
+  // A note in the ink it suggests; a station as the Spots panel accents it: a new multiplier over
+  // anything else new, then our own, then the worked.
+  const ink = (s: MapSpot) => s.color ?? (s.multiplier ? (dark ? accents.multiplierDark : accents.multiplier)
+    : s.fresh ? (dark ? accents.freshDark : accents.fresh) : s.isSelf ? c.secondary : s.worked ? c.onSurfaceVariant : c.onSurface)
   // Age shows only as fading: fresh at full strength, the oldest asked for at `faintest`.
   // A spot of a kind the radio is not on — its mode's, or the plan's guess — at `elsewhere` of that.
-  const faintest = 0.35, elsewhere = 0.45
+  const faintest = 0.4, elsewhere = 0.5
   const offMode = (s: MapSpot) => { const mode = s.mode ?? s.planned; return !!view.superMode && !!mode && superModeForRadio(mode) !== view.superMode }
   const fade = (s: MapSpot) => (1 - (1 - faintest) * Math.min(1, s.ageMinutes / view.maxAgeMinutes)) * (offMode(s) ? elsewhere : 1)
-  // A label: the spot's icon where it has one, its call, and its note's emoji where it has one.
-  // The text in the top `textHeight` of the box, with room left under it.
-  const iconSize = 13, emojiWidth = 16, labelHeight = row - 2, textHeight = labelHeight - 2
-  const callWidth = (s: MapSpot) => s.call.length * advance(callSize)
-  // Where the call starts in its label: after the icon, where it has one.
-  const callAt = (s: MapSpot) => (s.icon ? 3 + iconSize + 3 : 6)
-  const pillWidth = (s: MapSpot) => callAt(s) + callWidth(s) + (s.emoji ? 2 + emojiWidth : 0) + 6
-  const ranked = [...view.spots].sort(byRank).slice(0, mostSpots(scaleLayers))
 
-  // Where each spot shown goes: its point on the line, its label centred on it, and the leader between them.
-  type Shown = { s: MapSpot; p: number; x: number; y: number; w: number; leader: string; reach: number[] }
-  const shown: Shown[] = []
-  if (vertical) {
-    // Columns beside the line: as few as keep every label within `drift` of its point, and no more
-    // than the width holds. The labels keep their frequencies' order down the page across them all,
-    // so `count` columns hold one more label every `row / count` past the first.
-    // No calls at all where a column has no room for one, rather than boxes too narrow to draw.
-    // Each label hugs its column's edge nearer the line.
-    const gap = 16, drift = 2 * row, room = side < 0 ? axis - 22 - (left + markStrip) : right - markStrip - axis - 22
-    const fits = (count: number) => (room >= 48 && bottom - top >= row ? Math.floor(((bottom - top - row) * count) / row) + 1 : 0)
-    const want = (s: MapSpot) => at(s.khz)
-    const columnWidth = Math.max(0, ...ranked.slice(0, fits(3)).map(pillWidth))
-    const most = Math.max(1, Math.min(3, Math.floor((room + gap) / (columnWidth + gap))))
-    let chosen: MapSpot[] = [], tops: { column: number; top: number }[] = []
-    for (let count = 1; count <= most; count++) {
-      chosen = ranked.slice(0, fits(count)).sort((a, b) => want(a) - want(b))
-      tops = columns(chosen.map(want), count, row, top, bottom)
-      if (tops.every(({ top: y }, i) => Math.abs(y + row / 2 - want(chosen[i])) <= drift)) break
+  // Each spot's label, out from the axis past a little room, with its dot and its passband's bar
+  // beside it on its side facing the axis. The label is centred on the dot and the passband
+  // together, or where they are longer than the label, its background covers them, the call in its middle; boxed
+  // from the call's capitals to its baseline, padded across it and more above and below. Spots go
+  // in rank order. One whose label would overlap a placed one by more than `together` of the
+  // shorter's length joins that one's group, the most overlapped: the group's label reads "<call>
+  // + <how many more>", and lists them while the pointer is on it. One overlapping less is drawn
+  // over those it overlaps, a step further from the axis than the furthest of them; and where the
+  // room has no step left, it joins the group of the one it overlaps most.
+  const ranked = [...view.spots].sort(byRank).slice(0, mostSpots)
+  const together = 0.2, mostListed = 10
+  const step = vertical ? 8 : 10
+  // How deep a label is across the band: its dot, the gap, and the call across or along it.
+  const depthOf = (s: MapSpot) => dotSize + textGap + (vertical ? widthOf(s) : capHeight + paddingY * 2)
+  const room = partAcross - clear - inset - farRoom - (markers.length ? markStrip : 0)
+  type Placed = { head: MapSpot; box: [number, number]; level: number; members: MapSpot[]; marks: [number, number]; length: number }
+  const placed: Placed[] = []
+  const overlap = ([a0, a1]: [number, number], [b0, b1]: [number, number]) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0)) / Math.max(1e-9, Math.min(a1 - a0, b1 - b0))
+  const heardOf = (s: MapSpot) => s.heard ?? spotPassband(s.mode ?? s.planned, s.khz)
+  // What a spot marks along the band: its dot and its passband together, in Hz.
+  const marked = (s: MapSpot, heard: [number, number] | undefined): [number, number] => {
+    const at = hz(s.khz), dot = (dotSize / 2) * hzPerPx
+    return [Math.min(at - dot, at + (heard?.[0] ?? 0)), Math.max(at + dot, at + (heard?.[1] ?? 0))]
+  }
+  for (const s of ranked) {
+    const heard = heardOf(s), [low, high] = marked(s, heard), middle = (low + high) / 2
+    // Centred on its dot and passband, or where they are the longer, over them.
+    const length = (vertical ? capHeight + paddingY * 2 : widthOf(s)) * hzPerPx
+    const box: [number, number] = high - low > length ? [low, high] : [middle - length / 2, middle + length / 2]
+    // Those it overlaps, or comes nearer than a gap to.
+    const gap = (labelGap * hzPerPx) / 2
+    const near = placed.map(p => ({ p, by: overlap(box, p.box), touches: overlap([box[0] - gap, box[1] + gap], p.box) > 0 })).filter(o => o.touches)
+    const most = near.reduce<{ p: Placed; by: number } | undefined>((best, o) => (!best || o.by > best.by ? o : best), undefined)
+    const level = near.length ? Math.max(...near.map(o => o.p.level)) + 1 : 0
+    if (most && (most.by > together || level * step + depthOf(s) > room)) {
+      const p = most.p
+      p.members.push(s)
+      // Along a wide map, its count lengthens the label: the box grows to take it in.
+      if (!vertical) {
+        const grown = p.length + badgeWidth(p.members.length) * hzPerPx, [from, to] = p.marks, mid = (from + to) / 2
+        p.box = to - from > grown ? [from, to] : [mid - grown / 2, mid + grown / 2]
+      }
+      continue
     }
-    chosen.forEach((s, i) => {
-      // The column's edge nearer the line, the label's width out from it, and the label's other end.
-      const near = axis + side * (22 + tops[i].column * (columnWidth + gap)), w = Math.min(room - tops[i].column * (columnWidth + gap), pillWidth(s))
-      const p = at(s.khz), x = side < 0 ? near - w : near, y = tops[i].top
-      const meet = y + labelHeight / 2
-      // Straight across where the dot is level with the label's side, clear of its rounded corners.
-      // Elsewhere level out of the dot, a square turn just short of the label (in the gap before its
-      // column), and level into its middle: the long run on the line's side, the short one at the call.
-      const straight = p >= y + 4 && p <= y + labelHeight - 4
-      const turn = near - side * 6, bend = straight ? 0 : Math.min(3, Math.abs(meet - p) / 2), dir = Math.sign(meet - p), out = side * bend
-      const leader = bend
-        ? `M${axis} ${p}H${turn - out}Q${turn} ${p} ${turn} ${p + dir * bend}V${meet - dir * bend}Q${turn} ${meet} ${turn + out} ${meet}H${near}`
-        : `M${axis} ${p}H${near}`
-      shown.push({ s, p, x, y, w, leader, reach: [Math.min(axis, near) - 5, Math.min(p, meet) - 5, Math.max(axis, near) + 5, Math.max(p, meet) + 5] })
-    })
-  } else {
-    // Lanes on the calls' side of the line, the newest spots taking the nearest, each label centred
-    // on its point; short of the markers' strip at the field's far edge.
-    const count = Math.max(0, Math.floor((side < 0 ? axis - 6 - (top + markStrip) : bottom - markStrip - (axis + 6)) / row))
-    const nearest = [...ranked].sort(byAge)
-    const spans = nearest.map(s => {
-      const w = pillWidth(s), p = at(s.khz)
-      // In a pane narrower than the label, from its start: the call's first letters are what read.
-      const start = Math.max(left, Math.min(p - w / 2, right - w))
-      return [start, start + w] as [number, number]
-    })
-    lanes(spans, count, 4).forEach((lane, i) => {
-      if (lane == null) return
-      const s = nearest[i], p = at(s.khz), y = side < 0 ? axis - 6 - (lane + 1) * row : axis + 6 + lane * row + (row - labelHeight), [x, end] = spans[i]
-      const meet = side < 0 ? y + labelHeight : y
-      shown.push({ s, p, x, y, w: end - x, leader: `M${p} ${axis}V${meet}`, reach: [p - 5, Math.min(axis, meet) - 5, p + 5, Math.max(axis, meet) + 5] })
-    })
+    placed.push({ head: s, box, level, members: [], marks: [low, high], length })
   }
-  const hidden = view.spots.length - shown.length
-
-  // Under the pointer — its label, or its point on the scale — a spot's line, dot and label light up
-  // together: the host sets `hot` to the spot's number, and each lit layer shows only at its own.
-  values.hot = -1
-  const lit = (i: number, rest: number, value = 'hot') => ({ value, input: [i - 1, i + 1] as [number, number], output: [rest, rest] as [number, number], samples: [rest, 1, rest] })
-  const dot = (s: MapSpot, p: number, r: number) => (vertical ? `<circle cx="${axis}" cy="${p}" r="${r}" fill="${ink(s)}"/>` : `<circle cx="${p}" cy="${axis}" r="${r}" fill="${ink(s)}"/>`)
-  const strike = ({ s, x, y }: Shown) =>
-    s.worked ? `<path d="M${x + callAt(s) - 1} ${y + textHeight / 2}h${callWidth(s) + 2}" stroke="${c.onSurfaceVariant}" stroke-width="1"/>` : ''
-  const fill = view.scope ? c.surface : c.surfaceContainer, fillOpacity = view.scope ? 0.82 : 1
-  // The band the spot's signal takes by its mode, a bar along the line under its dot in the spot's ink, as its leader is, kept to the line.
-  const [lineStart, lineEnd] = [Math.min(a0, a1), Math.max(a0, a1)]
-  const signal = (s: MapSpot) => {
-    const hz = spotPassband(s.mode ?? s.planned, s.khz)
-    if (!hz) return undefined
-    const [q, r] = hz.map(h => Math.min(Math.max(at(s.khz + h / 1000), lineStart), lineEnd)).sort((a, b) => a - b)
-    return r > q ? [q, r] : undefined
-  }
-  const bar = (s: MapSpot, [q, r]: number[]) =>
-    vertical ? `<rect x="${axis - 3}" y="${q}" width="6" height="${r - q}" fill="${ink(s)}" fill-opacity=".6"/>`
-      : `<rect x="${q}" y="${axis - 3}" width="${r - q}" height="6" fill="${ink(s)}" fill-opacity=".6"/>`
-  // Leaders first, so a nearer label covers those passing behind it.
-  shown.forEach(({ s, p, leader, reach }, i) => {
-    const band = signal(s)
-    const box = band ? (vertical ? [Math.min(reach[0], axis - 3), Math.min(reach[1], band[0]), Math.max(reach[2], axis + 3), Math.max(reach[3], band[1])]
-      : [Math.min(reach[0], band[0]), Math.min(reach[1], axis - 3), Math.max(reach[2], band[1]), Math.max(reach[3], axis + 3)]) : reach
-    piece(`spot-${i}-line`, box, `${band ? bar(s, band) : ''}<path d="${leader}" fill="none" stroke="${ink(s)}" stroke-opacity=".6" stroke-width="1"/>${dot(s, p, 3.5)}`, { opacity: lit(i, fade(s)) })
-  })
-  shown.forEach((spot, i) => {
-    const { s, x, y, w } = spot
-    piece(`spot-${i}-box`, [x, y, x + w, y + labelHeight], `<g opacity="${fade(s).toFixed(2)}"><rect x="${x}" y="${y}" width="${w}" height="${labelHeight}" rx="3" fill="${fill}" fill-opacity="${fillOpacity}"/>${strike(spot)}</g>`)
-  })
-  shown.forEach((spot, i) => {
-    const { s, p, x, y, w, leader, reach } = spot
-    const box = [Math.min(reach[0], x), Math.min(reach[1], y), Math.max(reach[2], x + w), Math.max(reach[3], y + labelHeight)]
-    piece(`lit-${i}`, [box[0] - 2, box[1] - 2, box[2] + 2, box[3] + 2], `<path d="${leader}" fill="none" stroke="${ink(s)}" stroke-width="2.5"/>${dot(s, p, 5.5)}` +
-      `<rect x="${x}" y="${y}" width="${w}" height="${labelHeight}" rx="3" fill="${c.surface}"/>` +
-      `<rect x="${x + 0.5}" y="${y + 0.5}" width="${w - 1}" height="${labelHeight - 1}" rx="3" fill="none" stroke="${ink(s)}" stroke-width="1"/>${strike(spot)}`, { opacity: lit(i, 0) })
-  })
-  shown.forEach(({ s, x, y, w }, i) => {
-    // Text colours take no alpha, so each part fades through its layer's opacity: by age, and full when lit.
-    // The call's box runs to the label's end, so a guess short of the real advance never cuts it off.
-    if (s.icon) layers.push({ id: `spot-${i}-icon`, x: x + 3, y: y + (textHeight - iconSize) / 2 + 2, width: iconSize, height: iconSize, icon: { name: s.icon, color: s.iconColor ?? ink(s) }, opacity: lit(i, fade(s)) })
-    text(`spot-${i}-call`, x + callAt(s), y, Math.max(1, w - callAt(s) - 2), textHeight, s.call, callSize, ink(s), { fontFamily: mono, fontWeight: 700 })
-    layers[layers.length - 1].opacity = lit(i, fade(s))
-    if (s.emoji) {
-      text(`spot-${i}-emoji`, x + w - 6 - emojiWidth, y, emojiWidth + 4, textHeight, s.emoji, callSize - 1, ink(s), { align: 'center' })
-      layers[layers.length - 1].opacity = lit(i, fade(s))
-    }
-  })
-
-  // A marker's emoji, and under the pointer its line drawn solid and its label in a pill that takes
-  // in the emoji, over any spots and other emoji there. The host sets `mark` to its number.
-  values.mark = -1
-  const markText = 12, markHeight = 18
-  markShown.forEach(({ m, icon: [ix, iy] }, i) => {
-    text(`mark-${i}-icon`, ix, iy, markSize, markSize, m.icon, markText, c.onSurface, { align: 'center' })
-  })
-  markShown.forEach(({ m, icon: [ix, iy], path, reach }, i) => {
-    const label = t.marker(m.label)
-    // Proportional text, in a box a generous guess wide: one short of the text would wrap it.
-    const lw = Math.ceil(label.length * markText * 0.6) + 8
-    // The emoji's end of the pill, around it; the label runs from there into the pane, toward the line.
-    const ew = markSize + 4, pw = lw + ew, py = iy + markSize / 2 - markHeight / 2
-    const toRight = vertical ? side < 0 : ix - 2 + pw <= right
-    const px = toRight ? ix - 2 : Math.max(left, ix + markSize + 2 - pw)
-    const lx = toRight ? px + ew : px
-    const box = [Math.min(reach[0], px), Math.min(reach[1], py), Math.max(reach[2], px + pw), Math.max(reach[3], py + markHeight)]
-    piece(`mark-${i}-lit`, [box[0] - 1, box[1] - 1, box[2] + 1, box[3] + 1], `<path d="${path}" fill="none" stroke="${c.onSurfaceVariant}" stroke-width="${m.type === 'edge' ? 2.5 : 1.5}"/>` +
-      `<rect x="${px + 0.5}" y="${py + 0.5}" width="${pw - 1}" height="${markHeight - 1}" rx="${markHeight / 2}" fill="${c.surfaceContainer}" stroke="${c.outline}" stroke-width="1"/>`, { opacity: lit(i, 0, 'mark') })
-    text(`mark-${i}-label`, lx, py + 1, lw, markHeight - 2, label, markText, c.onSurface, { align: 'center' })
-    layers[layers.length - 1].opacity = lit(i, 0, 'mark')
-    // The pill hides the emoji under it; this one sits on the pill.
-    text(`mark-${i}-lit-icon`, ix, iy, markSize, markSize, m.icon, markText, c.onSurface, { align: 'center' })
-    layers[layers.length - 1].opacity = lit(i, 0, 'mark')
-    // Nothing to do on a click: the label is the whole of it.
-    controls.push({ id: `mark:${m.khz}:${i}`, label, kind: 'button', x: ix - 2, y: iy - 2, width: markSize + 4, height: markSize + 4, hoverSet: { value: 'mark', to: i } })
-  })
-
-  // The scale tunes where it is clicked, to its finest marks shown, or the kHz where it shows none:
-  // the host says how far along the line the click landed. Under the spots' own buttons on the line.
-  const tuneStep = divisions > 1 ? step / divisions : 1
-  const tuneAt = (along: number) => Math.round((lo + along * (hi - lo)) / tuneStep) * tuneStep
-  const scaleRect = vertical
-    ? { x: side < 0 ? axis - 8 : 0, y: a0, width: side < 0 ? width - (axis - 8) : axis + 8, height: Math.max(1, a1 - a0) }
-    : { x: a0, y: side < 0 ? axis - 8 : 0, width: Math.max(1, a1 - a0), height: side < 0 ? height - (axis - 8) : axis + 8 }
-  if (view.tunable) controls.push({ id: 'axis', label: t.tuneHere, kind: 'button', ...scaleRect, event: 'axis', tapAt: true })
-
-  // A label tunes to its spot; so does the line at its dot, shared with its neighbours halfway.
-  // Ids name the station, not its place in the list, which every new spot shifts: a click on the
-  // picture painted before a render must still reach the spot it showed. A map holds one spot a call.
-  const hover = (i: number) => ({ hoverSet: { value: 'hot', to: i } })
-  shown.forEach(({ s, x, y, w }, i) => {
-    controls.push({ id: `spot:${s.call}`, label: t.tune(s.call, mhz(s.khz)), kind: 'button', x, y, width: w, height: labelHeight, event: 'spot', ...hover(i) })
-    placed.push({ id: `spot:${s.call}`, spot: s })
-  })
-  const byPoint = shown.map((spot, i) => ({ ...spot, i })).sort((a, b) => a.p - b.p)
-  byPoint.forEach(({ s, p, i }, k) => {
-    const from = Math.max(p - 10, k ? (byPoint[k - 1].p + p) / 2 : -Infinity), to = Math.min(p + 10, k < byPoint.length - 1 ? (p + byPoint[k + 1].p) / 2 : Infinity)
-    if (to - from < 1) return
-    const rect = vertical ? { x: axis - 8, y: from, width: 16, height: to - from } : { x: from, y: axis - 8, width: to - from, height: 16 }
-    controls.push({ id: `scale:${s.call}`, label: t.tune(s.call, mhz(s.khz)), kind: 'button', ...rect, event: 'spot', ...hover(i) })
-    placed.push({ id: `scale:${s.call}`, spot: s })
-  })
-  // Zoom, down the top corner on the calls' side over everything else, clear of the markers' strip:
-  // in, out, and the next of the preset views, named and drawn as the one it goes to. A way it cannot
-  // go is shown faint and does nothing.
-  const button = 26, buttonGap = 4, next = view.zoom.reset || 'band'
-  const buttonX = vertical ? (side < 0 ? left + markStrip : paneRight - markStrip - button) : paneRight - button
-  const buttonsTop = vertical ? top : side < 0 ? top + markStrip : axis + 6
-  const ways = [['in', t.zoomIn, 'M8 13h10M13 8v10'], ['out', t.zoomOut, 'M8 13h10'], ['reset', t.zoomTo[next], '']] as const
-  const zoomArt = ways.map(([way, label, glyph], k) => {
-    const y = buttonsTop + k * (button + buttonGap), on = view.zoom[way]
-    controls.push({ id: `zoom-${way}`, label, kind: 'button', x: buttonX, y, width: button, height: button, event: `zoom-${way}`, disabled: !on, fixed: true })
-    return `<g transform="translate(${buttonX} ${y})" opacity="${on ? 1 : 0.35}"><circle cx="13" cy="13" r="12" fill="${c.surfaceContainer}" stroke="${c.outline}"/>${glyph ? `<path d="${glyph}" stroke="${c.onSurface}" stroke-width="2" stroke-linecap="round"/>` : ''}</g>`
-  })
-  if (hidden) {
-    if (vertical && side < 0) text('more', buttonX + button + 8, buttonsTop + (button - 16) / 2, 80, 16, t.more(hidden), scaleSize, c.onSurfaceVariant, { align: 'start' })
-    else text('more', buttonX - 8 - 80, buttonsTop + (button - 16) / 2, 80, 16, t.more(hidden), scaleSize, c.onSurfaceVariant, { align: 'end' })
-    layers[layers.length - 1].fixed = true
-  }
-
-  // A lit spot's frequency, white on a black pill on the scale where its dot meets it. One readout
-  // serves every spot: `hot` picks its text and moves it there, with no render between.
-  if (shown.length) {
-    const hzDigits = hzDigitsNeeded(shown.map(({ s }) => s.khz))
-    const all = shown.map(({ s }) => freqParts(s.khz, hzDigits, view.marks))
-    const widest = all.map(parts => readingWidths(parts, scaleSize)).reduce((a, b) => [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.max(a[2], b[2])] as const)
-    const pw = widest[0] + widest[1] + widest[2] + 12, ph = 16
-    const at0 = shown.map(({ p }) => (vertical ? p - ph / 2 : p - pw / 2))
-    // Samples run one past the last spot, so a lone spot still has a range to bind over.
-    const follow = { value: 'hot', input: [0, shown.length] as [number, number], output: [0, 0] as [number, number], samples: [...at0, at0[at0.length - 1]] }
-    const move = vertical ? { translateY: follow } : { translateX: follow }
-    // Its end over the lit dot, as though the dot carried it, the pill over the scale.
-    const [ox, oy] = vertical ? [side < 0 ? axis - 3 : axis + 3 - pw, 0] : [0, side < 0 ? axis - 3 : axis + 3 - ph]
-    const shownOnly = { value: 'hot', input: [-1, 0] as [number, number], output: [0, 1] as [number, number] }
-    layers.push({ id: 'readout', x: ox, y: oy, width: pw, height: ph, svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${pw} ${ph}"><rect width="${pw}" height="${ph}" rx="${ph / 2}" fill="#000000"/></svg>`, opacity: shownOnly, ...move })
-    let x = ox + 6
-    widest.forEach((w, k) => {
-      const key = (['mhz', 'khz', 'hz'] as const)[k]
-      if (!w) return
-      const small = key === 'hz'
-      layers.push({
-        id: `readout-${key}`, x, y: oy + (small ? hzLift(scaleSize) : 0), width: w + 1, height: ph, opacity: shownOnly, ...move,
-        text: { value: 'hot', samples: all.map(parts => parts[key] ?? ''), size: small ? hzSize(scaleSize) : scaleSize, color: '#ffffff', fontFamily: mono, fontWeight: key === 'mhz' ? 700 : small ? 300 : 400, lineHeight: small ? hzLine : 1.2, align: key === 'mhz' ? 'end' : 'start' },
-      })
-      x += w
+  const spots = new Map<string, MapSpot>()
+  // The furthest from the axis drawn last, over those it overlaps.
+  for (const { head: s, level, members } of [...placed].sort((a, b) => a.level - b.level)) {
+    const at = hz(s.khz), heard = heardOf(s), opacity = fade(s), color = ink(s)
+    // Its dot's place out from the part's edge, past the axis.
+    const from = inset + level * step
+    const id = spotId(s)
+    spots.set(id, s)
+    const across = from + dotSize / 2
+    if (heard) layers.push({ id: `heard:${spotKey(s)}`, kind: 'rect', x: `freq:${at + heard[0]}`, x2: `freq:${at + heard[1]}`, y: edge(across - 2), y2: edge(across + 2), fill: alpha(color, opacity * 0.5) })
+    layers.push({ id: `dot:${spotKey(s)}`, kind: 'rect', x: `freq:${at}-3px`, x2: `freq:${at}+3px`, y: edge(from), y2: edge(from + dotSize), radius: 3, fill: alpha(color, opacity) })
+    const called = (m: MapSpot) => (m.emoji ? `${m.call} ${m.emoji}` : m.call)
+    // Each listed under it, found again by the line a click on the open label names.
+    members.slice(0, mostListed).forEach((m, i) => spots.set(`${id}#${i + 1}`, m))
+    // Each with its icon, as the label has its own, the calls lined up past them.
+    const listed: (string | { text: string; icon?: { name: string; color: string } })[] = members.slice(0, mostListed).map(m => ({
+      text: called(m),
+      ...(m.icon ? { icon: { name: m.icon, color: alpha(m.iconColor ?? ink(m), fade(m)) } } : {}),
+    }))
+    if (members.length > mostListed) listed.push(t.more(members.length - mostListed))
+    const [low, high] = marked(s, heard), middle = Math.round((low + high) / 2)
+    annotations.push({
+      id, text: called(s), hz: middle, part, pointer: false, align: 'center', baseline: true,
+      stretch: { from: Math.round(low - middle), to: Math.round(high - middle) },
+      // How many more it stands for, in a gray pill, and they under it while the pointer is on it.
+      ...(members.length ? { more: listed, openBorder: { color: alpha(color, opacity), width: 2 }, openBackground: c.surface, badge: { text: `+${members.length}`, color: c.onSurfaceVariant, background: c.outlineVariant } } : {}),
+      // A right-click takes it off the map: the operator's band tag for good, anything else for now.
+      secondaryEvent: 'forget',
+      offset: clear + from + dotSize + textGap,
+      size: callSize, weight: 700, padding: { x: padding, y: paddingY }, radius: 0,
+      ...(e.typography.mono.fontFamily ? { fontFamily: e.typography.mono.fontFamily } : {}),
+      color: alpha(color, opacity), background: alpha(c.surface, 0.6),
+      ...(s.icon ? { icon: { name: s.icon, color: alpha(s.iconColor ?? color, opacity) } } : {}),
+      // With no radio to tune, a note is only something to read; one heading stations still lists them to pick.
+      ...(s.note && !view.radio && members.every(m => m.note) ? {} : { event: 'spot' }),
     })
   }
 
-  layers.push({ id: 'zoom', x: 0, y: 0, width: paneWidth, height: paneHeight, fixed: true, svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${paneWidth} ${paneHeight}">${zoomArt.join('')}</svg>` })
-  // The preset's glyph is one of the app's icons, a layer of its own; its faintness a binding that never moves.
-  const resetY = buttonsTop + 2 * (button + buttonGap), resetOpacity = view.zoom.reset ? 1 : 0.35
-  layers.push({
-    id: 'zoom-reset-icon', x: buttonX + 6, y: resetY + 6, width: button - 12, height: button - 12, fixed: true,
-    icon: { name: `${{ band: 'arrow-expand', segment: 'arrow-collapse', radio: 'focus-field' }[next]}-${vertical ? 'vertical' : 'horizontal'}`, color: c.onSurface }, opacity: { value: 'hot', input: [0, 1], output: [resetOpacity, resetOpacity] },
-  })
+  // The axis's labels a round step apart, far enough apart to read, and marks between them.
+  const labelStep = niceStep(hzPerPx * (vertical ? 56 : 84))
+  const markStep = [5, 4, 2].map(n => labelStep / n).find(m => m / hzPerPx >= 6)
 
-  // Where the scrolled view stands: where it was left, or centred on the radio, moved just enough
-  // to keep a radio that has retuned within the pane's middle 20–80%.
-  let offset: number | undefined, centerKHz: number | undefined, centerAt: ((offset: number) => number) | undefined
-  if (view.scroll) {
-    const pane = vertical ? paneHeight : paneWidth, end = Math.max(0, (vertical ? height : width) - pane)
-    const radio = view.radioKHz != null && view.radioKHz >= lo && view.radioKHz <= hi ? at(view.radioKHz) : undefined
-    if (view.scroll.centerOn != null) offset = at(view.scroll.centerOn) - pane / 2
-    else {
-      offset = view.scroll.offset ?? (radio ?? (vertical ? height : width) / 2) - pane / 2
-      if (radio != null && view.scroll.follow) offset = Math.min(Math.max(offset, radio - 0.8 * pane), radio - 0.2 * pane)
-    }
-    offset = Math.min(Math.max(offset, 0), end)
-    values.scroll = offset
-    centerAt = (at: number) => lo + ((at + pane / 2 - a0) / (a1 - a0)) * (hi - lo)
-    centerKHz = centerAt(offset)
-    // Dragging along the scale zooms about the pane's middle; a tap on it still tunes.
-    const strip = vertical ? (side < 0 ? { x: axis - 8, y: 0, width: width - (axis - 8), height } : { x: 0, y: 0, width: axis + 8, height }) : side < 0 ? { x: 0, y: axis - 8, width, height: height - (axis - 8) } : { x: 0, y: 0, width, height: axis + 8 }
-    // None where there is no zoom to drag to: the host refuses a strip whose range is a single factor.
-    if (view.scroll.stretch.max > view.scroll.stretch.min) {
-      controls.push({ id: 'stretch', label: t.zoomIn, kind: 'zoom', event: 'stretch', min: view.scroll.stretch.min, max: view.scroll.stretch.max, ...strip })
-    }
+  const scope: Control = {
+    id: 'map', label: t.mapTitle(view.band), kind: 'bandScope', radio: view.radio ?? noRadio, event: 'scope',
+    display, flow: vertical ? (view.inverted ? 'left' : 'right') : view.inverted ? 'up' : 'down', rising: vertical ? 'down' : 'right',
+    window: { lowHz: hz(windowLo), highHz: hz(windowHi) }, span: shownHz, maxWidthHz: widestHz, follow: 0.15,
+    // The band's middle until the operator pans or picks a view: the window's own runs as far past either edge.
+    ...(view.center != null ? { centerHz: view.center } : {}),
+    ...(display === 'both' ? { split } : {}),
+    backgroundColor: c.surface,
+    traceColor: dark ? trace.dark : trace.light, fillColor: dark ? trace.darkFill : trace.lightFill,
+    // No grid over a blank spectrum: its lines would mark levels nothing is drawn at.
+    gridColor: view.radio ? alpha(c.outlineVariant, 0.5) : '#00000000', gridDashed: true,
+    waterfallSpeed: 5, waterfallColors: [c.surface, ...(dark ? waterfall.dark : waterfall.light)],
+    // Tall, the labels lie on the spectrum where it shows, their ends at the axis, and else on the
+    // waterfall, starting at it; wide, they line up on the axis's waterfall side, reaching over the spectrum.
+    scale: strip ? {
+      gap: axisGap, background: c.surfaceContainer,
+      // A line along the axis where its ticks stand: its edge on the spectrum's side, or on the waterfall's where it heads it alone.
+      borderTop: headed ? { color: c.outlineVariant, width: 1 } : { color: c.outline, width: 1.5 },
+      ...(headed ? { borderBottom: { color: c.outline, width: 1.5 } } : {}),
+      // With the spectrum, the ticks rise over it from the axis, and its labels sit past them.
+      labels: { color: c.onSurfaceVariant, size: 11, interval: labelStep, ...(headed ? { align: 'start', offset: 3 } : { align: 'end', offset: -(tickLength * 1.75 + 3) }) },
+      ticks: { color: c.outline, width: 1.5, align: 'end', offset: 0, length: headed ? 5 : tickLength, ...(markStep ? { interval: markStep } : {}) },
+    } : {
+      over: part, gap: axisGap, background: alpha(c.surfaceContainer, 0.9),
+      borderTop: { color: c.outlineVariant, width: 1 }, borderBottom: { color: c.outlineVariant, width: 1 },
+      labels: { color: c.onSurfaceVariant, size: 11, offset: 6 }, ticks: { color: c.outline, width: 1, offset: 0, length: 5 },
+    },
+    // The spectrum's levels and the waterfall's age, along the end of the band: the bottom tall, the right wide.
+    levelScale: {
+      side: 'end',
+      labels: { color: c.onSurfaceVariant, size: 10 },
+      ticks: { color: c.outline, width: 1, length: 4 },
+    },
+    center: { spectrum: { color: tunedLine, width: tuned.width }, waterfall: { color: tunedLine, width: tuned.width } },
+    overlays: view.passband ? [{
+      from: view.passband[0], to: view.passband[1],
+      spectrum: { fill: dark ? tuned.passbandWaterfall : tuned.passbandWaterfallLight },
+      waterfall: { fill: dark ? tuned.passbandWaterfall : tuned.passbandWaterfallLight },
+    }] : [],
+    annotations, layers,
   }
-  const scroll = view.scroll ? { scroll: { axis: vertical ? ('y' as const) : ('x' as const), value: 'scroll', event: 'scrolled' } } : {}
-  return { scene: { version: 1, width, height, values, layers, controls, ...scroll, ...(view.follows ? { radio: {} } : {}) }, placed, offset, centerKHz, centerAt, tuneAt }
+  return {
+    scene: { version: 1, width: 600, height: 24, values: {}, layers: [], controls: [scope], layout: { column: [{ control: 'map', flex: 1 }], crossAxisAlignment: 'stretch' } },
+    spots,
+  }
+}
+
+/** A kept view as far as it reads as one: each field of the right kind, or left out. */
+function viewFrom(value: unknown): { band?: string; span?: number; center?: number; split?: number; preset?: Preset } {
+  if (!value || typeof value !== 'object') return {}
+  const { band, span, center, split, preset } = value as Record<string, unknown>
+  const number = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) ? n : undefined)
+  return {
+    ...(typeof band === 'string' && band in bandEdges ? { band } : {}),
+    ...(number(span) != null ? { span: number(span) } : {}), ...(number(center) != null ? { center: number(center) } : {}),
+    ...(number(split) != null ? { split: Math.min(0.9, Math.max(0.1, number(split)!)) } : {}),
+    ...(presets.includes(preset as Preset) ? { preset: preset as Preset } : {}),
+  }
 }
 
 export function createBandMap(host: BandMapHost): PanelHook {
-  /** What each placement's last render drew, so an event knows what it acts on. */
-  const placements = new Map<string, { placed: Placed[]; zoom: MapView['zoom']; resetTo?: ResetTo; centerAt?: (offset: number) => number; tuneAt?: (along: number) => number; operationUuid?: string }>()
+  /** The spots each placement's last render drew, by annotation id, and the operation it was for. */
+  const placements = new Map<string, { spots: Map<string, MapSpot>; operationUuid?: string }>()
   /**
-   * Each placement's zoom, as a multiple of the band across the pane; where its view stood and the
-   * frequency in its middle at the last render, and where the radio was then; for the render after a
-   * zoom, the frequency to keep in the middle; the band and pane the view was drawn for; and the
-   * preset view the reset button last went to, until another zoom.
+   * Each placement's view as the operator left it on the scope — the width and middle it was zoomed
+   * and panned to, for the band they were on, and the spectrum's share — kept for the session, so a
+   * reloaded map opens where it was.
    */
-  const views = new Map<string, { factor: number; offset?: number; center?: number; radioKHz?: number; recenter?: number; frame?: string; window?: [number, number]; lead?: number; preset?: Preset }>()
-  const viewOf = (key: string) => {
-    if (!views.has(key)) views.set(key, { factor: 1 })
-    if (views.size > 64) views.delete(views.keys().next().value!)
-    return views.get(key)!
+  type View = { band?: string; span?: number; center?: number; split?: number; preset?: Preset }
+  /** Where each placement's preset button goes next: the view's width and middle in Hz, and its name. */
+  const presetsNext = new Map<string, { preset: Preset; span: number; center: number }>()
+  /**
+   * The views of the placements drawn most recently, all under one key: the host keeps ten keys an
+   * extension, and a key a placement would leave behind once removed. Read once; until a read
+   * succeeds, nothing is kept or written over what it would have found.
+   */
+  const views = new Map<string, View>()
+  const stored = 'views', mostKept = 16
+  /**
+   * What the operator took off the map for the session: notes by their key, and stations by theirs
+   * with when — a station spotted again after that shows again.
+   */
+  const hiddenNotes = new Map<string, true>(), hiddenSpots = new Map<string, number>(), mostHidden = 500
+  const shown = (s: MapSpot) => (s.note ? !hiddenNotes.has(spotKey(s)) : !((hiddenSpots.get(spotKey(s)) ?? -Infinity) >= (s.heardAt ?? 0)))
+  let loaded: Promise<boolean> | undefined
+  const load = () => (loaded ??= host.kvGet(stored).then(kept => {
+    if (kept && typeof kept === 'object' && !Array.isArray(kept)) {
+      for (const [key, value] of Object.entries(kept)) if (!views.has(key)) views.set(key, viewFrom(value))
+    }
+    return true
+  }, error => {
+    console.warn(`ki2d-band-map: the kept views could not be read: ${error}`)
+    loaded = undefined
+    return false
+  }))
+  const viewOf = async (key: string): Promise<View> => {
+    // Unread, a view of this render's alone, so the next read is not shadowed by it.
+    if (!(await load())) return {}
+    const v = views.get(key) ?? {}
+    // The most recently drawn last, so the oldest go first.
+    keepNewest(views, key, v, mostKept)
+    return v
+  }
+  const keep = async () => {
+    if (await load()) await host.kvSet(stored, Object.fromEntries(views) as JSONValue)
   }
   return {
     async getPanels(_args, ctx) {
       const t = words(ctx.locale)
       return [{
-        key: 'band-map', title: t.title, description: t.description, icon: 'map-marker-radius', multiple: true, on: ['spots', 'qso', 'tick:1', 'radio'],
+        key: 'band-map', title: t.title, description: t.description, icon: 'map-marker-radius', multiple: true, on: ['spots', 'qso', 'tick:2', 'radio'],
         form: [
           { type: 'field', fieldType: 'select', key: 'band', label: t.band, value: 'auto', options: [{ value: 'auto', label: t.auto }, ...bands.map(b => ({ value: b, label: b }))] },
           { type: 'field', fieldType: 'select', key: 'age', label: t.age, value: '30', options: ages.map(n => ({ value: String(n), label: t.minutes(n) })) },
-          { type: 'field', fieldType: 'checkbox', key: 'waterfall', label: t.waterfall, value: true },
+          { type: 'field', fieldType: 'checkbox', key: 'notes', label: t.notes, value: true, description: t.notesHelp },
           { type: 'field', fieldType: 'checkbox', key: 'pan', label: t.panadapter, value: true },
+          { type: 'field', fieldType: 'checkbox', key: 'waterfall', label: t.waterfall, value: true },
           { type: 'field', fieldType: 'select', key: 'direction', label: t.direction, value: 'normal', options: [{ value: 'normal', label: t.normal }, { value: 'inverted', label: t.inverted }] },
         ],
       }]
@@ -670,112 +599,65 @@ export function createBandMap(host: BandMapHost): PanelHook {
       const draftBand = fromDraft && typeof draft.band === 'string' && draft.band in bandEdges ? draft.band : undefined
       const configured = typeof args.config.band === 'string' && args.config.band in bandEdges ? args.config.band : undefined
       const band = configured ?? bandForKHz(radioKHz) ?? draftBand ?? '20m'
-      // The scope's sweep, where it is on this band and placed where the map can follow it — never
-      // about the logging controls' frequency, which the radio's scope is not drawn around.
-      const sp = fromDraft ? undefined : radio?.spectrum
-      let window: [number, number] = bandEdges[band]
-      let scope: MapView['scope']
+      const edges = bandEdges[band]
+      const inBand = radioKHz != null && bandForKHz(radioKHz) === band
       // A toggle left as it was set; one never set follows the menu these replace, whose Off was no scope at all.
       const toggle = (value: unknown, fallback: boolean) => (value === true || value === 'true' ? true : value === false || value === 'false' ? false : fallback)
       const scoping = args.config.panadapter !== 'off'
-      const falls = toggle(args.config.waterfall, scoping), pan = toggle(args.config.pan, scoping)
-      if ((falls || pan) && radio?.id && sp && !sp.problem && radioKHz != null && bandForKHz(radioKHz) === band) {
-        // The edges the radio gives, fixed or centred apart from the dial (a FlexRadio's pan, which a
-        // retune inside it leaves put); else centred on the radio. Assumed centred, a pan left put
-        // would be drawn as far off the scale as the radio had tuned. The app runs a radio's scope
-        // only while a control shows it, and says nothing of it until then (no mode): the first
-        // render guesses it about the radio, its first span of 25 kHz or more either side, and the
-        // next one has it. A scope reporting a mode but no place for it is not drawn.
-        const guess = (sp.spansHz.find(s => s >= 25000) ?? 25000) / 1000
-        const scoped: [number, number] | undefined = sp.lowHz != null && sp.highHz != null && sp.highHz > sp.lowHz ? [sp.lowHz / 1000, sp.highHz / 1000]
-          : sp.mode === 'center' && sp.spanHz ? [radioKHz - sp.spanHz / 1000, radioKHz + sp.spanHz / 1000]
-          : sp.mode == null ? [radioKHz - guess, radioKHz + guess]
-          : undefined
-        if (scoped) scope = { radio: radio.id, waterfall: falls, pan, range: scoped }
-      }
+      const picture = { waterfall: toggle(args.config.waterfall, scoping), pan: toggle(args.config.pan, scoping) }
       // The plan where the operation's station is, or the library's own where there is none; the
       // markers for its IARU region (its ITU one) and entity, or all of them.
       const station = String(args.operation.stationCall ?? '').trim().toUpperCase()
       const where = station ? regionAndCountryForDxccCode(entityForCall(station).dxccCode) : {}
       const segments = bandPlan(band, where)
       const markers = markersFor(band, station ? { entity: entityPrefixForCall(station), region: where.ituRegion } : {})
-      const inBand = radioKHz != null && bandForKHz(radioKHz) === band
       const kind = radioMode && (inBand || draftBand === band) ? superModeForRadio(radioMode) : undefined
-      // Around the radio, in kHz either side: phone's wider, or a mode not known.
-      const around = kind === 'PHONE' || !kind ? 25 : 5
-      // The whole band at a multiple of the pane's length, which the app scrolls — the scope's sweep
-      // drawn over whatever of it the view takes in, at the map's own zoom.
-      let zoom: MapView['zoom'], scroll: MapView['scroll'], resetTo: ResetTo | undefined
-      const v = viewOf(key), [lo, hi] = bandEdges[band], pane = Math.max(args.environment.width, args.environment.height)
-      // The offset is in scene units, which a resized or turned pane lays out anew: there the view
-      // keeps the frequency in its middle instead. On another band nothing of the old view applies.
-      const frame = `${band} ${args.environment.width}x${args.environment.height}`
-      if (v.frame != null && v.frame !== frame) {
-        Object.assign(v, v.frame.startsWith(`${band} `) ? { recenter: v.recenter ?? v.center } : { offset: undefined, center: undefined, recenter: undefined, window: undefined, preset: undefined })
+      const maxAgeMinutes = ages.includes(Number(args.config.age)) ? Number(args.config.age) : 30
+      // Every spot from the sources the operator has on, as the app's Band Scope takes them, whatever
+      // the Spots panel's own filters leave out; and what is marked on the band among them.
+      const board = (await ctx.getSpots?.({ filter: 'sources', band, maxAgeMinutes })) ?? []
+      const notes = toggle(args.config.notes, true) ? noteSpots((await ctx.getBandAnnotations?.({ band })) ?? [], edges) : []
+      // The logging controls name a contact's mode, not a radio's: SSB is its sideband there, as a spot's is.
+      // FT8 and FT4 there are the radio's data passband, which a spot of them leaves unmarked.
+      const passband: [number, number] | undefined = fromDraft ? undefined
+        : radio?.passband ? [radio.passband.lowHz, radio.passband.highHz] : passbands[radioMode ?? '']
+      const plan = {
+        edges: segments.slice(1).map(s => s.from),
+        off: kind ? segments.filter(s => !planAllows(s, kind)).map(s => [s.from, s.to] as [number, number]) : [],
       }
-      v.frame = frame
-      const most = Math.max(1, (hi - lo) / narrowest)
-      const fit = (f: number) => Math.min(Math.max(f, 1), most)
-      const factor = (v.factor = fit(v.factor))
-      // The presets' stretches of the band, each where it shows more than the whole band does.
+      // The operator's zoom and pan, while the map stays on the band they were made on, and the split.
+      const v = await viewOf(key)
+      if (v.band !== band) {
+        Object.assign(v, { band, span: undefined, center: undefined, preset: undefined })
+        await keep()
+      }
+      // The preset views: the whole band; the plan's stretch for the radio's mode, a twentieth wider
+      // each side; and the radio with room either side, phone's wider, or a mode not known. Each but
+      // the band only where it shows less than the whole band.
+      const [lo, hi] = edges
       const stretch = kind && inBand ? modeStretch(segments, kind, radioKHz) : undefined
+      const around = kind === 'PHONE' || !kind ? 25 : 5
       const ranges: Partial<Record<Preset, [number, number]>> = {
         band: [lo, hi],
         ...(stretch ? { segment: [stretch[0] - (stretch[1] - stretch[0]) / 20, stretch[1] + (stretch[1] - stretch[0]) / 20] } : {}),
         ...(inBand ? { radio: [radioKHz - around, radioKHz + around] } : {}),
       }
-      const offered = presets.filter(p => ranges[p] && (p === 'band' || fit((hi - lo) / (ranges[p]![1] - ranges[p]![0])) > 1.001))
-      const reset = nextPreset(offered, v.preset ?? (factor <= 1.001 ? 'band' : undefined))
-      zoom = { in: factor < most * 0.999, out: factor > 1.001, reset }
-      if (reset) {
-        const [from, to] = ranges[reset]!
-        resetTo = { preset: reset, factor: fit((hi - lo) / (to - from)), center: (from + to) / 2 }
+      const offered = presets.filter(p => ranges[p] && (p === 'band' || ranges[p]![1] - ranges[p]![0] < (hi - lo) * 0.999))
+      // Where the view is now: the preset it was put at, or the whole band where it has not moved.
+      const current = v.preset ?? (v.span == null && v.center == null ? 'band' : undefined)
+      const next = nextPreset(offered, current)
+      if (next) {
+        const [from, to] = ranges[next]!
+        keepNewest(presetsNext, key, { preset: next, span: Math.round((to - from) * 1000), center: Math.round(((from + to) / 2) * 1000) }, 64)
+      } else presetsNext.delete(key)
+      const view: MapView = {
+        band, edges, spots: [...notes, ...mapSpots(board, args.clock.nowMillis, edges)].filter(shown), markers, maxAgeMinutes,
+        radio: radio?.id && inBand ? radio.id : undefined, picture, draftKHz: fromDraft ? radioKHz : undefined,
+        passband: inBand ? passband : undefined, plan, superMode: kind, inverted: args.config.direction === 'inverted', span: v.span, center: v.center, split: v.split,
+        preset: current, next,
       }
-      let follow = v.offset == null || v.radioKHz !== radioKHz, centerOn = v.recenter
-      // Longer than a scene can be, the scene is a window that long on the band. It stays put while
-      // the view keeps a quarter of it clear on either side, so a scroll come to rest is where the
-      // host already is; nearer an end it moves to centre on the view, and the band runs on past it.
-      // A radio that has retuned is kept within the pane's middle 20–80%, as the whole band's scroll keeps it.
-      const reach = (hi - lo) * Math.min(1, longest / (pane * factor))
-      v.window = reach < hi - lo ? v.window : undefined
-      if (reach < hi - lo) {
-        const across = (hi - lo) / factor
-        let middle = v.recenter ?? v.center ?? (inBand ? radioKHz : (lo + hi) / 2)
-        if (inBand && follow && v.recenter == null) middle = Math.min(Math.max(middle, radioKHz - 0.3 * across), radioKHz + 0.3 * across)
-        const [from, to] = v.window ?? [lo, lo]
-        const kept = v.window && v.recenter == null && Math.abs(to - from - reach) < 1e-6 && from >= lo && to <= hi &&
-          (middle - from >= reach / 4 || from <= lo) && (to - middle >= reach / 4 || to >= hi)
-        if (!kept) {
-          // The host moves its view only when asked for a place other than the last: a window that
-          // would put the view where the last one did is moved a few units more.
-          const place = (start: number) => Math.min(Math.max(start, lo), hi - reach), unit = reach / longest
-          let start = place(middle - reach / 2)
-          if (v.lead != null && Math.abs(middle - start - v.lead) < 2 * unit) start = place(start + 3 * unit) === start ? place(start - 3 * unit) : place(start + 3 * unit)
-          v.window = [start, start + reach]
-        }
-        window = v.window!
-        centerOn = kept && middle === v.center ? undefined : middle
-        follow = false
-      }
-      scroll = { factor: (factor * reach) / (hi - lo), offset: v.offset, follow, centerOn, stretch: { min: 1 / factor, max: most / factor } }
-      const maxAgeMinutes = ages.includes(Number(args.config.age)) ? Number(args.config.age) : 30
-      const board = (await ctx.getSpots?.({ filter: 'all', band, maxAgeMinutes })) ?? []
-      // The logging controls name a contact's mode, not a radio's: SSB is its sideband there, as a spot's is.
-      const passband: [number, number] | undefined = fromDraft ? (radioKHz != null ? spotPassband(radioMode, radioKHz) : undefined)
-        : radio?.passband ? [radio.passband.lowHz, radio.passband.highHz] : passbands[radioMode ?? '']
-      const marks = { group: ctx.groupingSeparator ?? ',', decimal: ctx.decimalSeparator ?? '.' }
-      const plan = {
-        edges: segments.slice(1).map(s => s.from),
-        off: kind ? segments.filter(s => !planAllows(s, kind)).map(s => [s.from, s.to] as [number, number]) : [],
-      }
-      const view: MapView = { band, window, inverted: args.config.direction === 'inverted', passband, plan, superMode: kind, tunable: !!radio?.id, spots: mapSpots(board, args.clock.nowMillis, window), markers, maxAgeMinutes, radioKHz, follows: !fromDraft, scope, marks, zoom, scroll }
-      const { scene, placed, offset, centerKHz, centerAt, tuneAt } = bandMapScene(args.environment, view, t)
-      if (scroll) {
-        const v = viewOf(key)
-        Object.assign(v, { offset, center: centerKHz, radioKHz, recenter: undefined, lead: v.window && centerKHz != null ? centerKHz - v.window[0] : undefined })
-      }
-      placements.set(key, { placed, zoom, resetTo, centerAt, tuneAt, operationUuid: typeof args.operation.uuid === 'string' ? args.operation.uuid : undefined })
-      if (placements.size > 64) placements.delete(placements.keys().next().value!)
+      const { scene, spots } = bandMapScene(args.environment, view, t)
+      keepNewest(placements, key, { spots, operationUuid: typeof args.operation.uuid === 'string' ? args.operation.uuid : undefined }, 64)
       return { kind: 'scene', title: t.mapTitle(band), scene }
     },
     async onEvent(args) {
@@ -786,33 +668,65 @@ export function createBandMap(host: BandMapHost): PanelHook {
         if (!result.accepted) throw new Error(t.refused(result.reason))
       }
       const key = args.instanceId ?? 'default', drawn = placements.get(key)
-      // The operator's scroll, come to rest: where the view stays until the radio moves or the zoom changes.
-      if (event.action === 'scrolled' && typeof event.value === 'number') {
-        // Its middle too, which a window on the band moves to at the next render.
-        Object.assign(viewOf(key), { offset: event.value, center: drawn?.centerAt?.(event.value) ?? viewOf(key).center })
+      // Where a zoom, a pan or a split drag ended, kept for the next render and a reloaded map; a zoom
+      // of 0 is a double click on the axis, the whole band back.
+      if (event.action === 'scope') {
+        const value = event.value
+        if (typeof value !== 'number' || !Number.isFinite(value)) return { values: {} }
+        // A click on the picture the app could not tune itself — the radio is on another band, or
+        // there is none to draw — tunes the radio there.
+        if (!event.gesture) {
+          const radio = await host.readRadio()
+          if (radio?.id) refusedBy(await host.setRadio({ id: radio.id, frequencyHz: Math.round(value) }))
+          return { values: {} }
+        }
+        const v = await viewOf(key)
+        // Moved by hand, the view is no longer the preset it was put at.
+        if (event.gesture === 'zoom') Object.assign(v, value > 0 ? { span: Math.round(value), preset: undefined } : { span: undefined, center: undefined, preset: undefined })
+        else if (event.gesture === 'pan') Object.assign(v, { center: Math.round(value), preset: undefined })
+        else if (event.gesture === 'split') v.split = Math.min(0.9, Math.max(0.1, value))
+        // The spectrum's levels and the waterfall's speed are the app's own to keep.
+        else return { values: {} }
+        await keep()
         return { values: {} }
       }
-      // A zoom keeps the frequency in the view's middle where it is: twice or half for a button, the
-      // drag's own factor along the scale. The next render clamps it to what the band allows.
-      if (event.action === 'stretch' && typeof event.value === 'number') {
-        const v = viewOf(key)
-        Object.assign(v, { factor: v.factor * event.value, recenter: v.center, preset: undefined })
+      // The preset button: the next of the views, the one it showed.
+      if (event.action === 'preset') {
+        const to = presetsNext.get(key)
+        if (!to) return { values: {} }
+        const v = await viewOf(key)
+        Object.assign(v, to.preset === 'band' ? { span: undefined, center: undefined, preset: 'band' } : { span: to.span, center: to.center, preset: to.preset })
+        await keep()
         return { values: {} }
       }
-      // Only the ways the last render offered: a click can land after the limit moved.
-      const zooming = event.action === 'zoom-in' || event.action === 'zoom-out' || event.action === 'zoom-reset'
-      if (zooming && !drawn?.zoom[event.action.slice(5) as keyof MapView['zoom']]) return { values: {} }
-      if (zooming) {
-        const v = viewOf(key), to = drawn?.resetTo
-        if (event.action !== 'zoom-reset') Object.assign(v, { factor: event.action === 'zoom-in' ? v.factor * 2 : v.factor / 2, recenter: v.center, preset: undefined })
-        else if (to) Object.assign(v, { factor: to.factor, recenter: to.center, preset: to.preset })
+      // A marker's name, shown in its menu: nothing more to do.
+      if (event.action === 'marker') return { values: {} }
+      // On a group's open list, the station on the line clicked; the label's own, its first.
+      const line = event.at?.line
+      const head = event.annotation ? drawn?.spots.get(event.annotation) : undefined
+      const listed = event.annotation && line ? drawn?.spots.get(`${event.annotation}#${line}`) : undefined
+      // A right-click: the operator's band tag taken down, another's note or a station hidden for the
+      // session. On the count past the list, nothing: no one station is named there.
+      if (event.action === 'forget') {
+        const spot = line ? listed : head
+        if (!spot) return { values: {} }
+        if (spot.note && spot.source === 'user' && spot.noteKey) await host.bandAnnotations.remove([spot.noteKey], { source: 'user' })
+        else if (spot.note) keepNewest(hiddenNotes, spotKey(spot), true, mostHidden)
+        else keepNewest(hiddenSpots, spotKey(spot), spot.heardAt ?? 0, mostHidden)
         return { values: {} }
       }
+      // A click on the count past the list works the group's first.
+      const spot = listed ?? head
       // As a Spots Panel tap: the station into this operation's logging fields, which move the radio
       // there too. With no such operation open, the radio alone.
       if (event.action === 'spot') {
-        const spot = drawn?.placed.find(p => p.id === event.controlId)?.spot
         if (!spot) return { values: {} }
+        // Nothing to log at a note: the radio alone, to where it is, in the mode it is in.
+        if (spot.note) {
+          const radio = await host.readRadio()
+          if (radio?.id) refusedBy(await host.setRadio({ id: radio.id, frequencyHz: Math.round(spot.khz * 1000) }))
+          return { values: {} }
+        }
         const qso = { their: { call: spot.call }, freq: spot.khz, band: spot.band, mode: spot.mode, refs: spot.refs }
         // Not accepted is no such operation open; a refusal throws, and is the host's to report.
         const { accepted } = await host.suggestQso({ qso, operationUuid: drawn?.operationUuid })
@@ -821,18 +735,6 @@ export function createBandMap(host: BandMapHost): PanelHook {
           const mode = radioModeFor(spot.mode ?? spot.planned, spot.khz, radio.modes ?? [])
           refusedBy(await host.setRadio({ id: radio.id, frequencyHz: Math.round(spot.khz * 1000), ...(mode && mode !== radio.mode ? { mode } : {}) }))
         }
-        return { values: {} }
-      }
-      const radio = await host.readRadio()
-      if (!radio?.id) return { values: {} }
-      // A click on the scale, at the frequency drawn where it landed; a key on it says nowhere.
-      if (event.action === 'axis') {
-        const khz = typeof event.value === 'number' ? drawn?.tuneAt?.(event.value) : undefined
-        if (khz != null) refusedBy(await host.setRadio({ id: radio.id, frequencyHz: Math.round(khz * 1000) }))
-        return { values: {} }
-      }
-      if (event.action === 'tune' && typeof event.value === 'number') {
-        refusedBy(await host.setRadio({ id: radio.id, frequencyHz: Math.round(event.value) }))
         return { values: {} }
       }
       // A control this map does not draw: a dead one would say nothing of why.

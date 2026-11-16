@@ -33,7 +33,8 @@
 
 import { fmtInteger } from "@ham2k/lib-format-tools"
 import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
-import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
+import type { ContestScorer, HookContext, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
+import { bandBreakdown } from "@ham2k/lib-contest-summary"
 
 import { tFor } from "./i18n.ts"
 import { ourPark, theirPark } from "./parks.ts"
@@ -56,7 +57,12 @@ export type WipotaScoresheet = {
   activated: Record<string, number>
   /// WI park worked → QSOs with it.
   hunted: Record<string, number>
+  /// band → QSOs on it.
   bands: Record<string, number>
+  /// band → the WI parks first worked on it, so the bands' parks add up to the
+  /// parks-worked count. Optional: a checkpoint cached before it existed has
+  /// none, and its band lines name no parks until the log is rescored.
+  bandParks?: Record<string, number>
   qsos: number
   dupes: number
 }
@@ -89,7 +95,7 @@ export function totalsFor(sheet: WipotaScoresheet): { qsos: number; worked: numb
 
 export const WipotaScorer: ContestScorer<WipotaScoresheet> = {
   startScoresheet(): WipotaScoresheet {
-    return { worked: {}, activated: {}, hunted: {}, bands: {}, qsos: 0, dupes: 0 }
+    return { worked: {}, activated: {}, hunted: {}, bands: {}, bandParks: {}, qsos: 0, dupes: 0 }
   },
 
   // Mutates and returns the given scoresheet — see ContestScorer.scoreQso.
@@ -132,7 +138,13 @@ export const WipotaScorer: ContestScorer<WipotaScoresheet> = {
     if (park && (credited || sheet.hunted[park] === undefined)) notices.push('newPark')
 
     bySlot[slot] = [...(credited ?? []), park]
-    if (park) sheet.hunted[park] = (sheet.hunted[park] ?? 0) + 1
+    if (park) {
+      if (sheet.hunted[park] === undefined) {
+        sheet.bandParks ??= {}
+        sheet.bandParks[band] = (sheet.bandParks[band] ?? 0) + 1
+      }
+      sheet.hunted[park] = (sheet.hunted[park] ?? 0) + 1
+    }
     const ours = ourPark(operation)
     if (ours) sheet.activated[ours] = (sheet.activated[ours] ?? 0) + 1
     sheet.bands[band] = (sheet.bands[band] ?? 0) + 1
@@ -162,37 +174,45 @@ export const WipotaScorer: ContestScorer<WipotaScoresheet> = {
       title: manifest.shortName,
       total: qsos * mult,
       arithmetic: contestArithmetic({ qsos, points: qsos, mults: mult, multParts }, ctx),
-      detail: longSummaryFor(sheet, { qsos, worked, activated }),
+      detail: longSummaryFor(sheet, ctx),
       extra: { points: qsos, mults: mult, qsos },
     }, ctx)
   },
 }
 
-/// The sponsor's form, filled in: its three counts under the names it gives
-/// them, then the parks behind each.
-function longSummaryFor(sheet: WipotaScoresheet, totals: { qsos: number; worked: number; activated: number }): string {
-  const parts: string[] = [
-    [
-      `**QSOs:** ${fmtInteger(totals.qsos)}`,
-      `**WI Only Parks worked:** ${fmtInteger(totals.worked)}`,
-      `**WI Parks Activated:** ${fmtInteger(totals.activated)}`,
-    ].join('\n'),
-  ]
+/// The parks behind the arithmetic's counts, then the bands. The arithmetic
+/// already states the form's three counts — QSOs, parks worked, parks
+/// activated — so they are not repeated here.
+function longSummaryFor(sheet: WipotaScoresheet, ctx: HookContext): string {
+  const t = tFor(ctx)
+  const parts: string[] = []
 
   const ours = Object.entries(sheet.activated)
   if (ours.length > 0) {
-    parts.push(`### Operated from\n${ours
-      .map(([park, qsos]) => `${park} (${fmtInteger(qsos)}${qsos < QSOS_TO_ACTIVATE ? ` of ${QSOS_TO_ACTIVATE}` : ''})`)
+    parts.push(`### ${t('operatedFromHeading')}\n${ours
+      .map(([park, qsos]) => (qsos < QSOS_TO_ACTIVATE
+        ? t('parkQsosOf', { park, formatted: fmtInteger(qsos), needed: fmtInteger(QSOS_TO_ACTIVATE) })
+        : t('parkQsos', { park, formatted: fmtInteger(qsos) })))
       .join(' • ')}`)
   }
 
   const theirs = Object.keys(sheet.hunted).sort()
-  if (theirs.length > 0) parts.push(`### Parks worked\n${theirs.join(' • ')}`)
+  if (theirs.length > 0) parts.push(`### ${t('parksWorkedHeading')}\n${theirs.join(' • ')}`)
 
-  const bands = Object.keys(sheet.bands).sort()
-  if (bands.length > 0) {
-    parts.push(bands.map((band) => `**${band}**: ${fmtInteger(sheet.bands[band])} QSOs`).join('\n'))
-  }
+  // Every QSO is a point. Of the multiplier, only the parks worked belong to a
+  // band — a park we activated is the entry's — so the band lines name that
+  // count rather than claim to add up to the whole multiplier.
+  const bands = bandBreakdown(
+    Object.entries(sheet.bands).map(([band, qsos]) => ({
+      band,
+      qsos,
+      points: qsos,
+      mults: sheet.bandParks ? (sheet.bandParks[band] ?? 0) : undefined,
+    })),
+    ctx,
+    { multNoun: (count) => (count === 1 ? t('parkWorkedOne') : t('parkWorkedMany', { formatted: fmtInteger(count) })) },
+  )
+  if (bands) parts.push(bands)
 
   return parts.join('\n\n')
 }

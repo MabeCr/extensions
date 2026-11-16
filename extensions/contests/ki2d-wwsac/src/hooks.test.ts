@@ -104,7 +104,7 @@ test("logging asks for their age group, suggesting the one they sent before", as
   const controls = (await contest.runHook("activity", "loggingControls", { operation: configured, qso: { their: { call: 'k1yl' } } }, { ctx })) as Control[]
   assert.deepEqual(controls.map((c) => c.key), ['wwsac/ageGroup'])
   assert.equal(controls[0].input.suggestedValue, 'YL')
-  assert.equal(asked[0].refType, 'wwsac')
+  assert.deepEqual(asked[0].refType, ['wwsac'])
 
   // Nothing known: hinted as OM, never filled in as one.
   const fresh = (await contest.runHook("activity", "loggingControls", { operation: configured, qso: { their: { call: 'W1AW' } } }, { ctx: { getHistoryForCall: async () => [] } })) as Control[]
@@ -116,6 +116,25 @@ test("logging asks for their age group, suggesting the one they sent before", as
   assert.equal(failing[0].input.placeholder, 'OM')
 
   assert.deepEqual(await contest.runHook("activity", "loggingControls", { operation: fixtureOperation() }), [])
+})
+
+test("the age group copied tonight beats an earlier week's, and an edited contact is not its own history", async () => {
+  const tonight = { ...configured, uuid: 'tonight' }
+  const log = [
+    { uuid: 'edited', op: 'tonight', ageGroup: 'YYL' },
+    { uuid: 'earlier-tonight', op: 'tonight', ageGroup: 'Y' },
+    { uuid: 'last-week', op: 'last-week', ageGroup: 'YL' },
+  ]
+  const ctx = {
+    getHistoryForCall: async (_call: string, options: Record<string, unknown>) => log
+      .filter((q) => options.operation === undefined || q.op === options.operation)
+      .filter((q) => options.excludeOperation === undefined || q.op !== options.excludeOperation)
+      .map((q) => ({ uuid: q.uuid, their: { call: 'K1YL' }, refs: [{ type: 'wwsac', ageGroup: q.ageGroup }] })),
+  }
+  const suggested = async (qso: Record<string, unknown>) =>
+    ((await contest.runHook("activity", "loggingControls", { operation: tonight, qso }, { ctx })) as Control[])[0].input.suggestedValue
+  // Last week's YL could be a different op at the same call; tonight's was heard minutes ago.
+  assert.equal(await suggested({ uuid: 'edited', their: { call: 'K1YL' } }), 'Y')
 })
 
 test("saving projects both age groups, spelling a typed one the rules' way", async () => {
@@ -139,7 +158,7 @@ test("saving projects both age groups, spelling a typed one the rules' way", asy
   // is stamped, and with none their side is left alone.
   assert.deepEqual(await save({}, 'k1yl'), { our: { exchange: 'OM' }, refs: [{ type: 'wwsac', ageGroup: 'YL' }], their: { exchange: 'YL' } })
   assert.deepEqual(await save({}), { our: { exchange: 'OM' } })
-  assert.deepEqual(asked, ['K1YL', 'K1AA'])
+  assert.deepEqual([...new Set(asked)], ['K1YL', 'K1AA'])
 
   assert.equal(await contest.runHook("activity", "processQsoBeforeSave", { operation: fixtureOperation(), qso: {} }), null)
 })

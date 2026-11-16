@@ -100,16 +100,53 @@ export function contestRules(operator: JSONValue | undefined): ContestRules {
   return { assistance: declared(operator, OPERATOR_CLASSES) !== 'SINGLE-OP', selfSpotting: true }
 }
 
-/// `OPERATORS`: the calls typed at setup, uppercased and space-separated —
-/// "Multioperator logs must include the complete list of operators" (ELOG.4).
-/// Empty when nothing was typed, so the caller can fall back to the app's
-/// operator call.
-export function declaredOperators(ref: Record<string, JSONValue> | undefined): string {
-  const typed = typeof ref?.operators === 'string' ? ref.operators : ''
-  return typed.toUpperCase().split(/[\s,;]+/).filter((call) => call).join(' ')
+/// The classes whose QSO lines end in a transmitter ID: "The submitted log
+/// must indicate which transmitter made each contact" (HCAT.4.3.4). Cabrillo's
+/// "t is transmitter id ... It is a single digit of 0 or 1."
+const LOGS_TRANSMITTER: readonly OperatorClass[] = ['MULTI-TWO']
+
+/// The transmitter column for each QSO line, as a function of the QSO —
+/// nothing unless the class declared on [ref] has one.
+///
+/// The transmitter is the operating position each contact was logged at
+/// (`our.multiIdentifier`, else `our.operatingPosition`). A position is any
+/// label a station gives its seats, so the column is not the label itself:
+/// the distinct positions in the log are sorted — numbers in numeric order,
+/// ahead of other labels — and numbered from 0, as Cabrillo counts
+/// transmitters. A contact logged from no position — made before the seat
+/// was set, or imported from another logger — is taken to be from the first
+/// position, transmitter 0. A log with more positions than its class has
+/// transmitters writes them as counted, 2 and on, for the log checker to flag
+/// rather than folded into one of the two here.
+///
+/// Counted over the contacts the Cabrillo writer writes, so an event row or
+/// a deleted contact never takes up a number.
+export function transmitterColumns(ref: Record<string, JSONValue> | undefined, qsos: Record<string, JSONValue>[]): (qso: Record<string, JSONValue>) => string[] {
+  const operator = declared(ref?.operator, OPERATOR_CLASSES)
+  if (!operator || !LOGS_TRANSMITTER.includes(operator)) return () => []
+  const written = qsos.filter((qso) => qso.band !== 'event' && qso.deleted !== true)
+  const positions = [...new Set(written.map(positionOf).filter((label) => label))].sort(byPosition)
+  return (qso) => {
+    const label = positionOf(qso)
+    return [String(label ? positions.indexOf(label) : 0)]
+  }
 }
 
-/// `CLUB`: the club name as typed, on one line.
-export function declaredClub(ref: Record<string, JSONValue> | undefined): string {
-  return typeof ref?.club === 'string' ? ref.club.replace(/\s+/g, ' ').trim() : ''
+function positionOf(qso: Record<string, JSONValue>): string {
+  const our = qso.our && typeof qso.our === 'object' && !Array.isArray(qso.our) ? qso.our : {}
+  for (const value of [our.multiIdentifier, our.operatingPosition]) {
+    const label = typeof value === 'number' ? String(value) : typeof value === 'string' ? value.trim() : ''
+    // A number is one position however it is written: `02` is seat 2.
+    if (/^\d+$/.test(label)) return String(Number(label))
+    if (label) return label
+  }
+  return ''
+}
+
+function byPosition(a: string, b: string): number {
+  const aNumber = /^\d+$/.test(a)
+  const bNumber = /^\d+$/.test(b)
+  if (aNumber && bNumber) return Number(a) - Number(b)
+  if (aNumber !== bNumber) return aNumber ? -1 : 1
+  return a < b ? -1 : a > b ? 1 : 0
 }

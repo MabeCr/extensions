@@ -65,3 +65,17 @@ test("a scoped ask is answered on a day the nearby list stays silent", async (t)
   assert.deepEqual(refs, [...refs].sort())
   assert.deepEqual(refs, ["2026-08-26-1300", "2026-08-26-1900", "2026-08-27-0300", "2026-08-27-0700"])
 })
+
+test("a non-member's state or province fills their State; a member number, or a DX prefix that spells a state, does not", async () => {
+  const operation = fixtureOperation({ stationCall: "N0DEV", refs: [{ type: "cwt", ref: "CWT-1300" }] })
+  const save = async (number: string, call = "W1AW", dxccCode = 291) =>
+    ((await cwt.runHook("activity", "processQsoBeforeSave", {
+      operation,
+      qso: { their: { call, guess: { dxccCode } }, refs: [{ type: "cwt", name: "hiram", number }] },
+    })) as { their?: Record<string, unknown> } | null)?.their
+
+  assert.deepEqual(await save("ct"), { exchange: "HIRAM CT", state: "CT" })
+  assert.deepEqual(await save("1234"), { exchange: "HIRAM 1234" })
+  // A DX non-member sends its prefix, and the Czech Republic's is not Oklahoma.
+  assert.deepEqual(await save("OK", "OK1RR", 503), { exchange: "HIRAM OK" })
+})

@@ -11,7 +11,9 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
+import { theirStateFields } from "@ham2k/lib-contest-exchange"
 import { rulesNotes, withRules } from "@ham2k/lib-contest-rules"
+import { cabrilloClub, cabrilloOperators, clubField } from "@ham2k/lib-contest-station"
 import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -31,7 +33,7 @@ import { tFor } from "./i18n.ts"
 import { cabrilloLocation, normalizeSection } from "./location.ts"
 import { MODES, nearestMode, nextContestDate, relevanceFor } from "./schedule.ts"
 import { ARRLDXScorer, POWER_PATTERN, contestTitle, isWveCall, weAreWve } from "./scorer.ts"
-import { BAND_CLASSES, OPERATOR_CLASSES, POWER_CLASSES, cabrilloCategories, contestRules, declaredClub, declaredOperators } from "./entry.ts"
+import { BAND_CLASSES, OPERATOR_CLASSES, POWER_CLASSES, cabrilloCategories, contestRules, transmitterColumns } from "./entry.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
 
@@ -69,17 +71,17 @@ async function ourSectionDefault(): Promise<string> {
   return lastKnownSection
 }
 
-/// The operator's name, email and club from their profile, for the Cabrillo
-/// header. All optional and free-form in the profile, so each may be ''. A
-/// host that cannot answer costs these lines, never the log itself.
-async function profileDetails(): Promise<{ name: string; email: string; club: string }> {
+/// The operator's name and email from their profile, for the Cabrillo header.
+/// Both optional and free-form in the profile, so each may be ''. A host that
+/// cannot answer costs these lines, never the log itself.
+async function profileDetails(): Promise<{ name: string; email: string }> {
   try {
     const settings = (await host.getSettings()) as Record<string, JSONValue> | undefined
     const line = (value: JSONValue | undefined) => str(value).replace(/\s+/g, ' ').trim()
-    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail), club: line(settings?.operatorClub) }
+    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail) }
   } catch (e) {
-    console.warn(`[arrl-dx] profile settings unavailable, exporting without name, email and profile club:`, e)
-    return { name: '', email: '', club: '' }
+    console.warn(`[arrl-dx] profile settings unavailable, exporting without name and email:`, e)
+    return { name: '', email: '' }
   }
 }
 
@@ -200,21 +202,7 @@ const ActivityHook = {
                 uppercase: true,
                 value: await ourSectionDefault(),
               },
-              {
-                type: 'field',
-                fieldType: 'text',
-                key: 'operators',
-                label: t('operatorsLabel'),
-                placeholder: t('operatorsPlaceholder'),
-                uppercase: true,
-              },
-              {
-                type: 'field',
-                fieldType: 'text',
-                key: 'club',
-                label: t('clubLabel'),
-                placeholder: t('clubPlaceholder'),
-              },
+              await clubField(ctx, 'arrl-dx'),
             ],
           },
         },
@@ -276,7 +264,7 @@ const ActivityHook = {
   /// (non-contest) ADIF export both come up empty on a contest log.
   ///
   /// Only ever a projection: the ref stays the source of truth, and the patch
-  /// touches exactly one field.
+  /// touches `their.exchange` and, on a DX station's log, `their.state`.
   async processQsoBeforeSave(
     args: { qso: Record<string, JSONValue>; operation: Record<string, JSONValue> },
     _ctx: HookContext,
@@ -290,7 +278,12 @@ const ActivityHook = {
     // save's `their.exchange` showing in the QSO row and in a plain ADIF export,
     // so a cleared exchange has to project the blank.
     if (!exchange) return qsoRef && 'theirExchange' in qsoRef ? { their: { exchange: '' } } : null
-    return { their: { exchange } }
+    // A W/VE station sends a DX one its state or province, which also reaches
+    // `their.state`: ADIF's STATE, the SOTA and POTA files and Worked All
+    // States read it there. What a W/VE station receives is a power level.
+    const their = args.qso.their as Record<string, JSONValue> | undefined
+    const state = weAreWve(args.operation, refOfType(args.operation, TYPE)) ? {} : theirStateFields(their, exchange)
+    return { their: { exchange, ...state } }
   },
 }
 
@@ -426,19 +419,17 @@ const ExportHook = {
 
     if (args.exportType === `${TYPE}-cabrillo`) {
       const profile = await profileDetails()
+      const transmitter = transmitterColumns(opRef, args.qsos)
       const content = qsonToCabrillo(args.qsos, {
         headers: [
           ['CONTEST', mode === 'Phone' ? 'ARRL-DX-SSB' : mode ? `ARRL-DX-${mode}` : 'ARRL-DX'],
           ['CALLSIGN', ourCall],
-          // The calls listed at setup — required for a multioperator entry —
-          // else the app's own operator call.
-          ['OPERATORS', declaredOperators(opRef) || str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          ['OPERATORS', cabrilloOperators(operation, args.qsos)],
           // Our section, or DX: see location.ts.
           ['LOCATION', cabrilloLocation(ourCall, opRef)],
           ...cabrilloCategories(opRef),
           ['GRID-LOCATOR', str(operation.grid)],
-          // The club typed at setup, else the profile's.
-          ['CLUB', declaredClub(opRef) || profile.club],
+          ['CLUB', await cabrilloClub(opRef, 'arrl-dx')],
           ['NAME', profile.name],
           ['EMAIL', profile.email],
         ],
@@ -449,6 +440,7 @@ const ExportHook = {
           str(((qso.their as Record<string, JSONValue>) ?? {}).call) || '-',
           reportFor(qso, 'their'),
           str(refOfType(qso, TYPE)?.theirExchange) || '-',
+          ...transmitter(qso),
         ],
       })
       return {

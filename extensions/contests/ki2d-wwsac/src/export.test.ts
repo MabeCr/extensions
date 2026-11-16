@@ -113,3 +113,12 @@ test("an age group the rules don't know is exported as typed, for the log checke
   const fields = (await contest.runHook('adifFields', 'fieldsForOneQSO', { qso: misheard, operation: OPERATION })) as { name: string; value: string }[]
   assert.deepEqual(fields.find((f) => f.name === 'SRX_STRING'), { name: 'SRX_STRING', value: 'OL' })
 })
+
+test("OPERATORS names whoever logged, then the operation's station owner", async () => {
+  // The log is the authority on who operated: without the derivation a
+  // multi-op log names only this device's operator.
+  const operation = { ...OPERATION, ownerCall: 'n1own' }
+  const qsos = ([QSOS[0], QSOS[0]] as Record<string, unknown>[]).map((qso, i) => ({ ...qso, our: { call: 'KI2D', operatorCall: i === 0 ? 'K1ABC' : 'W2DEF' } }))
+  const { content } = (await contest.runHook('export', 'generateExport', { operation, qsos, exportType: 'wwsac-cabrillo' })) as { content: string }
+  assert.ok(content.includes('\nOPERATORS: K1ABC W2DEF @N1OWN\n'), content)
+})

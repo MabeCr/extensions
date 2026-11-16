@@ -123,14 +123,19 @@ test("the Cabrillo file comes out of the export hook", async () => {
   assert.equal(delegated.length, 0, 'a Cabrillo file is written here, not delegated')
 })
 
-test("the Cabrillo header carries LOCATION, the declared entry, operators and club", async () => {
+test("the Cabrillo header carries LOCATION, the declared entry, whoever logged and the club", async () => {
+  // The operators are whoever logged, then the operation's own operator, the
+  // station owner closes the line, and a typed list from an older setup is
+  // ignored.
   const operation = {
     uuid: 'op-1',
     stationCall: 'N0DEV',
     local: { operatorCall: 'N0DEV' },
-    refs: [{ type: 'cqwpx', mode: 'CW', location: 'mn', operator: 'MULTI-TWO', power: 'HIGH', operators: 'k1abc, w2def', club: 'Yankee Clipper Contest Club' }],
+    ownerCall: 'n1own',
+    refs: [{ type: 'cqwpx', mode: 'CW', location: 'mn', operator: 'MULTI-TWO', power: 'HIGH', operators: 'N0OLD', club: 'Yankee Clipper Contest Club' }],
   }
-  const result = (await contest.runHook('export', 'generateExport', { operation, qsos: QSOS, exportType: 'cqwpx-cabrillo' })) as { content: string }
+  const qsos = QSOS.map((qso, i) => ({ ...qso, our: { call: 'N0DEV', operatorCall: i === 1 ? 'W2DEF' : 'K1ABC' } }))
+  const result = (await contest.runHook('export', 'generateExport', { operation, qsos, exportType: 'cqwpx-cabrillo' })) as { content: string }
   assert.deepEqual(result.content.split('\n').filter((line) => /^(LOCATION|CATEGORY-|OPERATORS|CLUB)/.test(line)), [
     'LOCATION: MN',
     'CATEGORY-OPERATOR: MULTI-OP',
@@ -139,7 +144,22 @@ test("the Cabrillo header carries LOCATION, the declared entry, operators and cl
     'CATEGORY-POWER: HIGH',
     'CATEGORY-MODE: CW',
     'CATEGORY-TRANSMITTER: TWO',
-    'OPERATORS: K1ABC W2DEF',
+    'OPERATORS: K1ABC W2DEF N0DEV @N1OWN',
     'CLUB: Yankee Clipper Contest Club',
   ])
 })
+
+test("each QSO line of a MULTI-TWO log ends in the transmitter its position is numbered as, and no other entry's does", async () => {
+  const qsos = QSOS.map((qso, i) => ({ ...qso, our: { ...qso.our, multiIdentifier: ['2', '1', '2'][i] } }))
+  const lines = async (operator: string) =>
+    ((await contest.runHook('export', 'generateExport', {
+      operation: { ...OPERATION, refs: [{ ...OPERATION.refs[0], operator }] },
+      qsos,
+      exportType: 'cqwpx-cabrillo',
+    })) as { content: string }).content.split('\n').filter((line) => line.startsWith('QSO:')).map((line) => line.trim().split(/\s+/))
+  const multi = await lines('MULTI-TWO')
+  const single = await lines('SINGLE-OP')
+  assert.deepEqual(multi.map((line) => line.at(-1)), ['1', '0', '1'])
+  assert.deepEqual(multi.map((line) => line.slice(0, -1)), single)
+})
+

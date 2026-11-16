@@ -37,7 +37,7 @@ import type {
 } from "@ham2k/extension-sdk"
 
 import { rulesNotes, withRules } from "@ham2k/lib-contest-rules"
-import { GRID_PATTERN, REG1TEST_BAND, guessedGrid, qsonToReg1test, refOfType, serial as serialFor, str, trimmedGrid } from "@ham2k/lib-vhf-contests"
+import { GRID_PATTERN, REG1TEST_BAND, suggestedGrid, qsonToReg1test, refOfType, serial as serialFor, str, theirGridFields, trimmedGrid } from "@ham2k/lib-vhf-contests"
 
 import { nextStartDate } from "./calendar.ts"
 import { EVENTS, contestRules, eventFor, hasDistrictExchange, type RsgbVhfEvent } from "./events.ts"
@@ -127,7 +127,7 @@ const ActivityHook = {
     if (!event) return []
 
     const t = tFor(ctx)
-    const guess = guessedGrid((qso?.their as Record<string, JSONValue>) ?? {})
+    const guess = await suggestedGrid(ctx, operation, qso, TYPE)
 
     const controls: LoggingControlDescriptor[] = [
       {
@@ -183,7 +183,7 @@ const ActivityHook = {
   /// same as r1-vhf-tests.
   async processQsoBeforeSave(
     { qso, operation }: { qso: Record<string, JSONValue>; operation: Record<string, JSONValue> },
-    _ctx: HookContext,
+    ctx: HookContext,
   ): Promise<Record<string, JSONValue> | null> {
     const event = eventOn(operation)
     if (!event) return null
@@ -192,7 +192,7 @@ const ActivityHook = {
     const gridDecided = qsoRef !== undefined && 'grid' in qsoRef
     const theirGrid = gridDecided
       ? trimmedGrid(str(qsoRef.grid))
-      : guessedGrid((qso.their as Record<string, JSONValue>) ?? {})
+      : await suggestedGrid(ctx, operation, qso, TYPE)
     const theirSerial = serial(qso, 'theirSerial')
     const ourSerial = serial(qso, 'ourSerial')
     const district = hasDistrictExchange(event) ? str(qsoRef?.location).toUpperCase() : ''
@@ -210,7 +210,9 @@ const ActivityHook = {
     // REG1TEST export (WWL column) both silently treat the QSO as gridless.
     return {
       refs: theirGrid ? [{ type: TYPE, grid: theirGrid, ...(district ? { location: district } : {}) }] : [],
-      their: { exchange: theirExchange },
+      // The grid also reaches `their.grid`, which every other reader takes
+      // it from: the ADIF and SOTA exports' GRIDSQUARE, the map, distances.
+      their: { exchange: theirExchange, ...theirGridFields(qso.their as Record<string, JSONValue> | undefined, theirGrid) },
       // Serial only: our grid never changes, and the QSO row shows this next to
       // their exchange, where repeating it on every line only costs width.
       our: { exchange: ourSerial },

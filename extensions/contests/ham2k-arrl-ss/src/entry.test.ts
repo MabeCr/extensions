@@ -9,7 +9,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 
-import { cabrilloCategories, declaredOperators, normalizeCheck, normalizePrecedence, ourPrecedence } from "./entry.ts"
+import { cabrilloCategories, normalizeCheck, normalizePrecedence, ourPrecedence } from "./entry.ts"
 
 function lines(entry: string, mode = 'CW') {
   return Object.fromEntries(cabrilloCategories({ entry, mode }).filter(([, value]) => value))
@@ -62,6 +62,3 @@ test("received precedence and check are only ever a letter and two digits", () =
   assert.equal(normalizeCheck('7'), '')
 })
 
-test("operators are uppercased and space-separated", () => {
-  assert.equal(declaredOperators({ operators: 'k1abc, w2def;n3ghi' }), 'K1ABC W2DEF N3GHI')
-})

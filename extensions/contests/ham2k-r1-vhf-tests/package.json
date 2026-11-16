@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-r1-vhf-tests",
-  "version": "0.2.7",
+  "version": "0.3.3",
   "private": true,
   "description": "Ham2K Logger extension: IARU R1 VHF Contests",
   "author": "Sebastian Delmont <sd@ham2k.com>",
@@ -13,7 +13,8 @@
     "pack": "npm run build && h2kext-pack build --force-name"
   },
   "dependencies": {
-    "@ham2k/lib-contest-rules": "^0.1.0"
+    "@ham2k/lib-contest-rules": "^0.1.0",
+    "@ham2k/lib-contest-summary": "^0.1.0"
   },
   "//devDependencies": [
     "The libraries the host carries are DECLARED in manifest.json and rewritten",
@@ -23,8 +24,8 @@
     "These are the ones this extension's own tests reach through the SDK."
   ],
   "devDependencies": {
-    "@ham2k/extension-sdk": "^1.12.0",
-    "@ham2k/extension-tools": "^1.12.0",
+    "@ham2k/extension-sdk": "^1.15.0",
+    "@ham2k/extension-tools": "^1.15.0",
     "esbuild": "^0.25.5"
   },
   "engines": {

@@ -1,0 +1,52 @@
+{
+  "key": "ki2d-hrwbota",
+  "name": "HRWBOTA",
+  "shortName": "HRWBOTA",
+  "version": "0.1.4",
+  "api": 19,
+  "description": "Ham Radio Workbenches On The Air: spots for the hosts on the air and your score as you work them",
+  "category": "activity",
+  "icon": "soldering-iron",
+  "accentColor": "#1D5A44",
+  "keywords": [
+    "hrwbota",
+    "ham radio workbench",
+    "workbench",
+    "workbenches on the air",
+    "event"
+  ],
+  "hooks": [
+    "account",
+    "activity",
+    "adifFields",
+    "lookup",
+    "ref:hrwbota",
+    "scoring",
+    "spots"
+  ],
+  "domains": [
+    "tracker.hrwbota.com"
+  ],
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  },
+  "translations": {
+    "es": {
+      "name": "HRWBOTA",
+      "description": "Ham Radio Workbenches On The Air: spots de los anfitriones en el aire y tu puntaje mientras los trabajas",
+      "keywords": [
+        "hrwbota",
+        "ham radio workbench",
+        "workbench",
+        "evento"
+      ]
+    }
+  }
+}

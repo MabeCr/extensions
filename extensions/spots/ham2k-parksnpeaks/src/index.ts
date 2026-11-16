@@ -66,7 +66,7 @@ interface PnPApiSpot {
   actMode?: string
   actFreq?: string
   actClass?: string
-  actLocation?: string
+  altLocation?: string
   actComments?: string
   actSpoter?: string
 }
@@ -149,7 +149,7 @@ const SpotsHook = {
         spot: {
           timeInMillis,
           source: SPOT_SOURCE,
-          label: [spot.actSiteID, spot.actLocation].filter((x) => x).join(': '),
+          label: [spot.actSiteID, spot.altLocation].filter((x) => x).join(': '),
           sourceInfo,
         },
       })

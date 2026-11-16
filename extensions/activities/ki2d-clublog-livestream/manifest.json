@@ -1,0 +1,53 @@
+{
+  "key": "ki2d-clublog-livestream",
+  "name": "KI2D’s Club Log Livestream (Experimental)",
+  "shortName": "Club Log Live",
+  "version": "0.1.0",
+  "api": 15,
+  "description": "Each contact you log goes to Club Log as you make it, so your Club Log Live Stream follows the operation",
+  "category": "activity",
+  "icon": "broadcast",
+  "accentColor": "#1E6FB8",
+  "keywords": [
+    "club log",
+    "clublog",
+    "livestream",
+    "live stream",
+    "real-time",
+    "upload",
+    "dxpedition"
+  ],
+  "hooks": [
+    "account",
+    "activity",
+    "ref:clublogLivestream"
+  ],
+  "domains": [
+    "clublog.org"
+  ],
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  },
+  "translations": {
+    "es": {
+      "name": "Club Log Livestream de KI2D (Experimental)",
+      "description": "Cada contacto que registras va a Club Log en el momento, para que tu Live Stream de Club Log siga la operación",
+      "keywords": [
+        "club log",
+        "clublog",
+        "livestream",
+        "transmisión en vivo",
+        "tiempo real",
+        "subir",
+        "dxpedición"
+      ]
+    }
+  }
+}

@@ -14,10 +14,14 @@
 //     contest's mode.
 //   * Total = QSO points x prefixes.
 
+import { bandBreakdown } from "@ham2k/lib-contest-summary"
 import { fmtInteger } from "@ham2k/lib-format-tools"
 import { parseCallsign } from "@ham2k/lib-callsigns"
 import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
 import { annotateCallAgainstCountryFile, contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
+import type { HookContext } from "@ham2k/extension-sdk"
+
+import { tFor } from "./i18n.ts"
 
 /// WPX is an HF contest: the WARC bands are excluded by the rules.
 export const VALID_BANDS = ['160m', '80m', '40m', '20m', '15m', '10m']
@@ -31,8 +35,9 @@ export type CQWPXScoresheet = {
   /// Prefix → times worked. Contest-wide, NOT per band: `Object.keys().length`
   /// IS the multiplier.
   mults: Record<string, number>
-  /// Per-band prefix counts, for the summary table only — they never multiply.
-  bandMults: Record<string, Record<string, number>>
+  /// Band → prefixes first credited on it, so the band lines add up to the
+  /// multiplier. Missing from a checkpoint scored before it existed.
+  bandFirstMults?: Record<string, number>
   bands: Record<string, number>
   bandPoints: Record<string, number>
   qsos: number
@@ -89,7 +94,7 @@ export const CQWPXScorer: ContestScorer<CQWPXScoresheet> = {
   startScoresheet({ operation }): CQWPXScoresheet {
     const ours = annotateCallAgainstCountryFile(str(operation.stationCall))
     return {
-      workedByCall: {}, mults: {}, bandMults: {}, bands: {}, bandPoints: {},
+      workedByCall: {}, mults: {}, bandFirstMults: {}, bands: {}, bandPoints: {},
       qsos: 0, points: 0,
       ourContinent: ours.continent,
       ourEntity: ours.entityPrefix,
@@ -151,8 +156,8 @@ export const CQWPXScorer: ContestScorer<CQWPXScoresheet> = {
     let isNewMult = false
     if (prefix) {
       isNewMult = base.mults[prefix] === undefined
+      if (isNewMult) (base.bandFirstMults ??= {})[band] = (base.bandFirstMults[band] ?? 0) + 1
       base.mults[prefix] = (base.mults[prefix] ?? 0) + 1
-      ;(base.bandMults[band] ??= {})[prefix] = (base.bandMults[band]?.[prefix] ?? 0) + 1
     }
 
     if (worked.length > 0) base.workedByCall[call].push(band)
@@ -183,7 +188,7 @@ export const CQWPXScorer: ContestScorer<CQWPXScoresheet> = {
         title: contestTitle(ref),
         total: scoresheet.points * mults,
         arithmetic: contestArithmetic({ qsos: scoresheet.qsos, points: scoresheet.points, mults }, ctx),
-        detail: breakdown(scoresheet),
+        detail: breakdown(scoresheet, ctx),
         extra: { points: scoresheet.points, mults, qsos: scoresheet.qsos },
       },
       ctx,
@@ -200,20 +205,24 @@ export function contestTitle(ref: Record<string, JSONValue> | undefined): string
 /// The per-band table plus the prefix list — in WPX the prefixes ARE the score,
 /// so seeing which ones are already in the log is what tells an operator
 /// whether a station on the band is worth calling.
-function breakdown(sheet: CQWPXScoresheet): string {
-  const lines = VALID_BANDS.map((band) => {
-    const qsos = sheet.bands[band] ?? 0
-    const points = sheet.bandPoints[band] ?? 0
-    const mults = Object.keys(sheet.bandMults[band] ?? {}).length
-    return qsos === 0
-      ? `**${band}**: —`
-      : `**${band}**: ${fmtInteger(qsos)} QSOs, ${fmtInteger(points)} pts, ${fmtInteger(mults)} prefixes`
-  })
+function breakdown(sheet: CQWPXScoresheet, ctx: Pick<HookContext, 'locale'>): string {
+  const t = tFor(ctx)
+  const prefixNoun = (count: number) => (count === 1 ? t('prefixOne') : t('prefixMany', { formatted: fmtInteger(count) }))
+  const lines = [bandBreakdown(
+    Object.entries(sheet.bands).map(([band, qsos]) => ({
+      band,
+      qsos,
+      points: sheet.bandPoints[band] ?? 0,
+      mults: sheet.bandFirstMults?.[band] ?? 0,
+    })),
+    ctx,
+    { bands: VALID_BANDS, multNoun: prefixNoun },
+  )]
 
   const prefixes = Object.keys(sheet.mults).sort()
   if (prefixes.length > 0) {
     lines.push('')
-    lines.push(`**${fmtInteger(prefixes.length)} prefixes**`)
+    lines.push(`**${prefixNoun(prefixes.length)}**`)
     lines.push(prefixes.join(' '))
   }
   return lines.join('\n')

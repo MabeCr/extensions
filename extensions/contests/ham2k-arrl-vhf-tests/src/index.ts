@@ -18,7 +18,8 @@
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 import { NO_RESTRICTIONS, rulesNote } from "@ham2k/lib-contest-rules"
-import { stampedExchange } from "@ham2k/lib-contest-exchange"
+import { cabrilloOperators } from "@ham2k/lib-contest-station"
+import { needsGuess, stampedExchange, theirGridFields, withTheirFields } from "@ham2k/lib-contest-exchange"
 import { adifForExport, contestScorer, defineExtension, exportFilename, operationForQso, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -37,7 +38,7 @@ import type {
 } from "@ham2k/extension-sdk"
 
 import { EVENTS, eventFor, nextStartDate, type VhfEvent } from "./events.ts"
-import { gridPatternFor, guessedGrid, trimmedGrid } from "./exchange.ts"
+import { gridPatternFor, suggestedGrid, trimmedGrid } from "./exchange.ts"
 import { tFor } from "./i18n.ts"
 import { ARRLVHFScorer, contestTitle } from "./scorer.ts"
 
@@ -140,7 +141,7 @@ const ActivityHook = {
     if (!event) return []
 
     const t = tFor(ctx)
-    const guess = guessedGrid((qso?.their as Record<string, JSONValue>) ?? {}, event)
+    const guess = await suggestedGrid(ctx, operation, qso, TYPE, event)
 
     return [
       {
@@ -167,20 +168,26 @@ const ActivityHook = {
   /// down to what this event's exchange actually asks for.
   async processQsoBeforeSave(
     { qso, operation }: { qso: Record<string, JSONValue>; operation: Record<string, JSONValue> },
-    _ctx: HookContext,
+    ctx: HookContext,
   ): Promise<Record<string, JSONValue> | null> {
     const event = eventOn(operation)
     if (!event) return null
 
+    const qsoRef = refOfType(qso, TYPE)
+    const guess = needsGuess(qsoRef, ['grid']) ? await suggestedGrid(ctx, operation, qso, TYPE, event) : ''
     // Our sent exchange is the operation's grid, the same on every QSO, so
     // it is not projected into `our.exchange` — the QSO row would repeat it
     // on every line; the exports read `operation.grid` directly.
-    return stampedExchange(TYPE, refOfType(qso, TYPE), {
+    let theirGrid = ''
+    const patch = stampedExchange(TYPE, qsoRef, {
       grid: {
         read: (value) => trimmedGrid(str(value), event),
-        guess: () => guessedGrid((qso.their as Record<string, JSONValue>) ?? {}, event),
+        guess: () => guess,
       },
-    }, ({ grid }) => grid)
+    }, ({ grid }) => (theirGrid = grid))
+    // The grid also reaches `their.grid`, which every other reader takes it
+    // from: the ADIF and SOTA exports' GRIDSQUARE, the map, distances.
+    return withTheirFields(patch, theirGridFields(qso.their as Record<string, JSONValue> | undefined, theirGrid))
   },
 }
 
@@ -308,7 +315,7 @@ const ExportHook = {
         headers: [
           ['CONTEST', contestTag(event)],
           ['CALLSIGN', ourCall],
-          ['OPERATORS', str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          ['OPERATORS', cabrilloOperators(operation, args.qsos)],
           ['GRID-LOCATOR', ourGrid],
         ],
         qsoParts: (qso) => {

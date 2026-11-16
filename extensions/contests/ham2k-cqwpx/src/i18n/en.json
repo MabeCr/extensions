@@ -33,12 +33,10 @@
   "overlay_CLASSIC": "Classic",
   "overlay_ROOKIE": "Rookie",
   "overlay_YOUTH": "Youth",
-  "operatorsLabel": "Operators",
-  "operatorsPlaceholder": "e.g. K1ABC W2DEF (multi-op)",
-  "clubLabel": "Club",
-  "clubPlaceholder": "Full club name — leave blank to use your profile's",
   "locationLabel": "Our State / Province / Section (US & Canada)",
   "locationPlaceholder": "e.g. MA, WMA, ON",
   "operator_MULTI-UNLIMITED": "Multi-Transmitter",
-  "overlay_TB-WIRES": "Tribander / Wires"
+  "overlay_TB-WIRES": "Tribander / Wires",
+  "prefixOne": "1 prefix",
+  "prefixMany": "{{formatted}} prefixes"
 }

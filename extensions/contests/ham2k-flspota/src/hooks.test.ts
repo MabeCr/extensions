@@ -6,8 +6,8 @@
 // (§7.5.1), one per park activated (§7.5.3). The traps:
 //   - that name following the operator's compact-filename preference, when the
 //     rules print it one way only;
-//   - losing it to POTA's own per-park export, whose compact name is the very
-//     same string — the core renames the SECOND of a colliding pair, so this
+//   - losing it to POTA's own export, whose compact name for a single park is
+//     the very same string — the core renames the SECOND of a colliding pair, so this
 //     file has to be generated first;
 //   - a setup form asking what the sponsor takes on its web form and scores
 //     nothing (the entry and power classes).

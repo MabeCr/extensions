@@ -7,9 +7,11 @@
 
 import { operationForQso } from "@ham2k/extension-sdk"
 import type { JSONValue, OperationSegmentPayload } from "@ham2k/extension-sdk"
+import { cabrilloOperators } from "@ham2k/lib-contest-station"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 
-import { STATE_FOR_SECTION } from "./locations.ts"
+import { CANADIAN_SECTIONS, STATE_FOR_SECTION, US_SECTIONS } from "./locations.ts"
+import { entityPrefixForCall } from "./dxcc.ts"
 
 import {
   ourEmail,
@@ -31,6 +33,7 @@ import {
   defaultTheirLocation,
   entityPrefixOf,
   nameForLocation,
+  normalizeLocation,
   ourOwnCodes,
   outOfPartyTables,
   parseOurLocations,
@@ -39,7 +42,7 @@ import {
   theirLocations,
 } from "./location.ts"
 import { CANADIAN_PROVINCES, US_STATES } from "./locations.ts"
-import { normalizeCode, type Party, partyStates, stateForCounty, WARC_BANDS } from "./party.ts"
+import { isInParty, normalizeCode, type Party, partyStates, stateForCounty, WARC_BANDS } from "./party.ts"
 
 /// What a contact with no exchange typed is recorded as, resolved the way the
 /// scorer resolves it: what this station sent us earlier, then what their
@@ -367,7 +370,8 @@ export function exchangeInheritPrefix(party: Party): number {
 /// under a legacy claim, whose contacts' `qp` refs name no party, and which
 /// such a host can then answer from another party's log. For an earlier
 /// running, [accept] is what holds that back: a code this party offers, in the
-/// station's state.
+/// station's state. The events declare extension API 2, which no such host
+/// loads, so these checks back up the filters rather than replace them.
 ///
 /// [operation] is the one the history was asked of, for a history of that one
 /// operation (`partyContactRefIn`); [accept]
@@ -433,6 +437,50 @@ function stateOfCode(party: Party, code: string): string {
   return STATE_FOR_SECTION[code] ?? code
 }
 
+/// The sections that place a station in no one state or province: Puerto Rico
+/// and the Virgin Islands are in none, and Territories is Yukon, the Northwest
+/// Territories or Nunavut, with nothing to say which.
+const NO_STATE_SECTIONS = new Set(['PR', 'VI', 'TER'])
+
+/// The state or province what a station sent puts them in, for the contact's
+/// State; '' where it names none. Each code is first resolved the way the
+/// scorer resolves it (`normalizeLocation`), so the State never disagrees with
+/// what the contact scored: a county of the party's is the state it lies in
+/// (`stateForCounty`), a neighbouring party's long county code is the state in
+/// its first two letters, a state or province is itself, and a section is the
+/// state it lies in. DX, a typo, and a code inside the party that nobody sends
+/// fill nothing. A county line fills a state only when both sides are in it.
+///
+/// [current] is the State already on the contact, kept where what was sent
+/// agrees with it but resolves elsewhere: MDC is Maryland AND DC, and a party
+/// that folds DC into Maryland resolves `DC` to `MD`, so a DC station keeps DC
+/// either way. PAC is Hawaii and the Pacific possessions, so it is Hawaii only
+/// for a call the country file doesn't place in a possession (KH0 to KH5,
+/// KH8, KH9): it reads Hawaii's own calls as `KH6`, or as plain `K` for some
+/// (`AH6`), so the test is "not a possession" rather than "is KH6".
+export function stateForSentLocation(party: Party, location: string, call: string, current: string): string {
+  const states = splitLocations(location).map((code) => stateForSentCode(party, code, call, current))
+  if (states.length === 0 || states.some((state) => !state)) return ''
+  return states.every((state) => state === states[0]) ? states[0] : ''
+}
+
+function stateForSentCode(party: Party, sent: string, call: string, current: string): string {
+  const code = normalizeLocation(party, sent, { received: true })
+  if (!code || code === 'DX') return ''
+  if (isInParty(party, code)) return stateForCounty(party, code)
+  if (party.sectionsForOutOfState && (code in US_SECTIONS || code in CANADIAN_SECTIONS)) {
+    if (NO_STATE_SECTIONS.has(code)) return ''
+    if (code === 'MDC' && current === 'DC') return 'DC'
+    if (code === 'PAC') {
+      const entity = entityPrefixForCall(call)
+      if (entity.startsWith('KH') && entity !== 'KH6') return ''
+    }
+    return STATE_FOR_SECTION[code] ?? code
+  }
+  if (code === 'MD' && (normalizeCode(sent) === 'DC' || current === 'DC')) return 'DC'
+  return code in US_STATES || code in CANADIAN_PROVINCES || code === 'DC' ? code : ''
+}
+
 /// The codes floated to the top of the suggestion list: the counties of the
 /// state the callsign lookup guessed, and the state itself.
 export function preferredCodesFor(party: Party, guessedState: string): string[] {
@@ -484,7 +532,7 @@ export function cabrilloFor(
       ['LOCATION', ourLocationForFile(party, operation)],
       ...cabrilloCategories(party, operation),
       ['EMAIL', ourEmail(party, operation as Record<string, unknown>)],
-      ['OPERATORS', str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+      ['OPERATORS', cabrilloOperators(operation, qsos)],
       ['GRID-LOCATOR', str(operation.grid)],
     ],
     qsoParts: (qso) => cabrilloRowsFor(

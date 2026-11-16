@@ -177,6 +177,15 @@ test('the band table counts each band\'s zones and countries apart', () => {
   assert.ok(lines.includes('| **10m** | — | — | — | — |'))
 })
 
+test('the band table reads longest wavelength first, whatever order the bands were worked in', () => {
+  // The same order every contest summary uses, so an operator moving between
+  // two events reads their bands alike; 40m worked after 20m still sits above it.
+  const { sheet } = run([qso('DL1ABC', '20m', 'SSB', '14'), qso('DL1ABC', '40m', 'SSB', '14')])
+  const summary = CQWWScorer.summarizeScore({ scoresheet: sheet, operation: usOperation, ref: ssbRef, scope: 'operation' }, ctx)
+  const bands = (summary.cqww.longSummary as string).split('\n').flatMap((line) => line.match(/^\| \*\*(\w+)\*\*/)?.[1] ?? [])
+  assert.deepEqual(bands, ['160m', '80m', '40m', '20m', '15m', '10m'])
+})
+
 test('offers no per-day summary', () => {
   // Multipliers are counted across the whole contest, so a day's share of the
   // score is not a number CQ WW defines.

@@ -12,10 +12,6 @@
   "ourPowerSourceLabel": "Power source",
   "powerBatteries": "Batteries, solar, wind",
   "powerGenerator": "Commercial power or generator",
-  "operatorsLabel": "Operators",
-  "operatorsPlaceholder": "e.g. K1ABC W2DEF",
-  "clubLabel": "Club or group",
-  "clubPlaceholder": "Full name, as on your entry — leave blank to use your profile's club",
   "bonusesHeader": "Bonus points",
   "bonusesNote": "Claim these on your submission too — HaLo totals them for you, it does not report them.",
   "bonusTransmitters": "Transmitters (100 pts each on emergency power, max 20)",
@@ -36,8 +32,6 @@
   "bonusWebSubmission": "Web submission (50 pts)",
   "theirClassLabel": "Class",
   "theirSectionLabel": "Sect",
-  "scoreSections": "{{sections}} sections",
-  "scorePleaseCopy": "{{copies}} \"please copy\" contacts",
   "adifExport": "Field Day ADIF",
   "cabrilloExport": "Field Day Cabrillo",
   "rulesLink": "[Field Day rules](https://field-day.arrl.org/)",
@@ -48,5 +42,12 @@
   "bonusSiteResponsibilities": "Site responsibilities — classes B–F (50 pts)",
   "notConfigured": "Not configured!",
   "activityDescription": "The ARRL's June operating event, out in the field",
-  "powerMultiplier": "power"
+  "powerMultiplier": "power",
+  "clubLabel": "Club or group",
+  "clubPlaceholder": "Full name, as on your entry",
+  "scorePleaseCopyOne": "1 \"please copy\" contact",
+  "scorePleaseCopyMany": "{{copies}} \"please copy\" contacts",
+  "modeCW": "CW",
+  "modePhone": "Phone",
+  "modeData": "Digital"
 }

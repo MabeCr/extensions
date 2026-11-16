@@ -122,8 +122,8 @@ export function entityPrefixOf(qso: Record<string, unknown> | undefined): string
   if (prefix) return prefix.toUpperCase()
   // Falls back to the country file. A QSO that came in through an ADIF import
   // or a sync carries no `guess` at all, and without this a DX station whose
-  // exchange was never typed resolves to NOTHING — scored `missingExchange` at
-  // zero, with no DX multiplier in the parties that count them, and an Alaskan
+  // exchange was never typed resolves to NOTHING — scored at zero, held back
+  // as `incomplete` on the location field, with no DX multiplier in the parties that count them, and an Alaskan
   // station never reaching `AK`.
   const call = str(their.call)
   return call ? entityPrefixForCall(call).toUpperCase() : ''
@@ -312,8 +312,8 @@ export function parseOurLocations(party: Party, text: string | undefined): QsoPa
 ///
 /// In the party's own country, what the lookup says: `their.state` if the
 /// operator or an import asserted one, else the callsign lookup's guess. It is
-/// consulted only here, where the alternative is `missingExchange` and a
-/// contact worth nothing — the entry row still asks the operator for the
+/// consulted only here, where the alternative is a contact held back as
+/// `incomplete` and worth nothing — the entry row still asks the operator for the
 /// exchange, and still ranks counties rather than inventing one, because a
 /// county is the thing a lookup cannot know.
 ///

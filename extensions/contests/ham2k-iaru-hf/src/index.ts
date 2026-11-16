@@ -15,8 +15,9 @@
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 import { rulesNotes, withRules } from "@ham2k/lib-contest-rules"
-import { stampedExchange } from "@ham2k/lib-contest-exchange"
-import { adifForExport, annotateCallAgainstCountryFile, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
+import { cabrilloClub, cabrilloOperators, clubField } from "@ham2k/lib-contest-station"
+import { needsGuess, stampedExchange } from "@ham2k/lib-contest-exchange"
+import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
   ExportOption,
@@ -31,18 +32,14 @@ import type {
   SuggestArgs,
 } from "@ham2k/extension-sdk"
 
+import { TYPE, suggestedExchange } from "./exchange.ts"
 import { tFor } from "./i18n.ts"
 import { cabrilloLocation, normalizeSection } from "./location.ts"
 import { nextContestDate, relevanceFor } from "./schedule.ts"
-import { EXCHANGE_PATTERN, IARUHFScorer, contestTitle, normalizeZone, ourExchange } from "./scorer.ts"
-import { OPERATOR_CLASSES, OVERLAY_CLASSES, POWER_CLASSES, cabrilloCategories, contestRules, declaredClub, declaredOperators } from "./entry.ts"
+import { EXCHANGE_PATTERN, IARUHFScorer, contestTitle, ourExchange } from "./scorer.ts"
+import { OPERATOR_CLASSES, OVERLAY_CLASSES, POWER_CLASSES, cabrilloCategories, contestRules, transmitterColumns } from "./entry.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
-
-/// The ref type an operation stores. It is data in the operator's log, so it
-/// stays what the app's own built-in wrote there whatever this package is
-/// called: the manifest key names the package, `TYPE` names the activation.
-const TYPE = 'iaru-hf'
 
 /// What a search has to contain to offer this contest. Matched as "does the
 /// alias contain what was typed", so "iaru" or "championship" finds it.
@@ -54,18 +51,6 @@ function refOfType(container: Record<string, JSONValue>, type: string): Record<s
 
 function str(value: JSONValue | undefined): string {
   return typeof value === 'string' ? value : ''
-}
-
-/// The ITU zone the country file resolves for a callsign, as a string. Used
-/// both to prefill the exchange field and to stamp it at save.
-function guessedZoneFor(their: Record<string, JSONValue>): string {
-  const guess = (their.guess as Record<string, JSONValue>) ?? {}
-  const call = str(their.call)
-  return (
-    normalizeZone(their.ituZone) ||
-    normalizeZone(guess.ituZone) ||
-    (call ? normalizeZone(annotateCallAgainstCountryFile(call).ituZone) : '')
-  )
 }
 
 /// Our section from the operator's profile, for the setup form's `value`.
@@ -84,17 +69,17 @@ async function ourSectionDefault(): Promise<string> {
   return lastKnownSection
 }
 
-/// The operator's name, email and club from their profile, for the Cabrillo
-/// header. All optional and free-form in the profile, so each may be ''. A
-/// host that cannot answer costs these lines, never the log itself.
-async function profileDetails(): Promise<{ name: string; email: string; club: string }> {
+/// The operator's name and email from their profile, for the Cabrillo header.
+/// Both optional and free-form in the profile, so each may be ''. A host that
+/// cannot answer costs these lines, never the log itself.
+async function profileDetails(): Promise<{ name: string; email: string }> {
   try {
     const settings = (await host.getSettings()) as Record<string, JSONValue> | undefined
     const line = (value: JSONValue | undefined) => str(value).replace(/\s+/g, ' ').trim()
-    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail), club: line(settings?.operatorClub) }
+    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail) }
   } catch (e) {
-    console.warn(`[iaru-hf] profile settings unavailable, exporting without name, email and profile club:`, e)
-    return { name: '', email: '', club: '' }
+    console.warn(`[iaru-hf] profile settings unavailable, exporting without name and email:`, e)
+    return { name: '', email: '' }
   }
 }
 
@@ -245,21 +230,7 @@ const ActivityHook = {
                 uppercase: true,
                 value: await ourSectionDefault(),
               },
-              {
-                type: 'field',
-                fieldType: 'text',
-                key: 'operators',
-                label: t('operatorsLabel'),
-                placeholder: t('operatorsPlaceholder'),
-                uppercase: true,
-              },
-              {
-                type: 'field',
-                fieldType: 'text',
-                key: 'club',
-                label: t('clubLabel'),
-                placeholder: t('clubPlaceholder'),
-              },
+              await clubField(ctx, 'iaru-hf'),
               // Markdown rather than a `link` element: a link renders dead from a
               // setup form, which has no link handler wired to it.
               { type: 'markdown', text: t('rulesLink') },
@@ -283,8 +254,7 @@ const ActivityHook = {
     // running; what this saves is a country-file annotation per refresh.
     if (!refOfType(args.operation, TYPE)) return []
 
-    const their = ((args.qso?.their as Record<string, JSONValue>) ?? {})
-    const suggested = guessedZoneFor(their)
+    const suggested = await suggestedExchange(ctx, args.operation, args.qso)
 
     return [
       {
@@ -314,7 +284,7 @@ const ActivityHook = {
   /// Records what was actually received, and mirrors it where the rest of the
   /// app can see it.
   ///
-  /// When the operator typed nothing, the country file's ITU zone for that call
+  /// When the operator typed nothing, the guessed exchange (`suggestedExchange`)
   /// is written onto the ref as DATA OF RECORD — not left to be re-derived
   /// later (docs/design/contests.md §8). The scorer falls back to the same
   /// value, so leaving the ref empty is how a log ends up scoring a zone and
@@ -325,16 +295,16 @@ const ActivityHook = {
   /// column and a plain (non-contest) ADIF export both come up empty.
   async processQsoBeforeSave(
     args: { qso: Record<string, JSONValue>; operation: Record<string, JSONValue> },
-    _ctx: HookContext,
+    ctx: HookContext,
   ): Promise<Record<string, JSONValue> | null> {
     if (!refOfType(args.operation, TYPE)) return null
 
-    // Only a ZONE can be guessed — nothing can infer a society or an office, so
-    // those are always the operator's own typing.
-    return stampedExchange(TYPE, refOfType(args.qso, TYPE), {
+    const qsoRef = refOfType(args.qso, TYPE)
+    const guess = needsGuess(qsoRef, ['theirExchange']) ? await suggestedExchange(ctx, args.operation, args.qso) : ''
+    return stampedExchange(TYPE, qsoRef, {
       theirExchange: {
         read: (value) => str(value).trim().toUpperCase(),
-        guess: () => guessedZoneFor((args.qso.their as Record<string, JSONValue>) ?? {}),
+        guess: () => guess,
       },
     }, ({ theirExchange }) => theirExchange)
   },
@@ -477,19 +447,17 @@ const ExportHook = {
 
     if (args.exportType === `${TYPE}-cabrillo`) {
       const profile = await profileDetails()
+      const transmitter = transmitterColumns(opRef, args.qsos)
       const content = qsonToCabrillo(args.qsos, {
         headers: [
           ['CONTEST', 'IARU-HF'],
           ['CALLSIGN', ourCall],
-          // The calls listed at setup — required for a multi-operator entry —
-          // else the app's own operator call.
-          ['OPERATORS', declaredOperators(opRef) || str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          ['OPERATORS', cabrilloOperators(operation, args.qsos)],
           // Our section, or DX: see location.ts.
           ['LOCATION', cabrilloLocation(ourCall, opRef)],
           ...cabrilloCategories(opRef),
           ['GRID-LOCATOR', str(operation.grid)],
-          // The club typed at setup, else the profile's.
-          ['CLUB', declaredClub(opRef) || profile.club],
+          ['CLUB', await cabrilloClub(opRef, 'iaru-hf')],
           ['NAME', profile.name],
           ['EMAIL', profile.email],
         ],
@@ -500,6 +468,7 @@ const ExportHook = {
           str(((qso.their as Record<string, JSONValue>) ?? {}).call) || '-',
           reportFor(qso, 'their'),
           str(refOfType(qso, TYPE)?.theirExchange) || '-',
+          ...transmitter(qso),
         ],
       })
       return {

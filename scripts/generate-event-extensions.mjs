@@ -12,7 +12,8 @@
 //       manifests of the extensions that already exist. The yearly re-sync:
 //       `relevance.dates` moves with every sponsor's calendar, and nothing
 //       else in an extension does — so this is the run that does not touch a
-//       line of anyone's hand-written prose.
+//       line of anyone's hand-written prose. It rewrites ABOUT.md too, which
+//       is derived from the party like the manifest.
 //
 // Fifty events differ from each other only in identity and in which party they
 // import, so every field that is not boilerplate is DERIVED here rather than
@@ -36,10 +37,13 @@ import { PARTIES } from "@ham2k/qso-parties"
 // description names a state and the scorer's summary names the same one, so a
 // second spelling here would be a second answer to one question.
 import { CANADIAN_PROVINCES, US_STATES } from "../packages/lib-qso-party/src/locations.ts"
+// The setup form's own test for whether to tell a rover how to move, so the
+// about text promises roving exactly where the form explains it.
+import { ROVING_STATION_CLASSES } from "../packages/lib-qso-party/src/entry.ts"
 
 const EXTENSIONS_DIR = resolve(import.meta.dirname, "..", "extensions", "contests")
 
-const VERSION = "0.2.29"
+const VERSION = "0.3.4"
 
 /// The accent an event carries, by the flag of the country whose party it is.
 /// Two colors for the family rather than fifty — what tells two events apart
@@ -262,6 +266,43 @@ function whenOf(party) {
   }
 }
 
+/// The event's ABOUT.md: what an operator does in this party, in and out of
+/// it, from the same params the setup form and the scorer read. A county line
+/// is promised only where the party allows one and roving only where the form
+/// explains it, so no event advertises what its own setup does not offer.
+///
+/// Derived, like the manifest, so it is rewritten on every run, `--manifests`
+/// included: nobody writes an event's about text by hand.
+function aboutFor(party) {
+  const states = party.state ? [party.state] : party.states
+  const names = states.map(placeName)
+  const plural = (party.labelForCounties ?? "Counties").toLowerCase()
+  const singular = NOUNS[plural].singular
+  const when = whenOf(party)
+  const roving = (party.entryClasses?.station ?? []).some((code) => ROVING_STATION_CLASSES.includes(code))
+
+  const where = party.state ? names[0] : joinList(names, "or")
+  const program = party.url ? `[${party.name}](${party.url})` : party.name
+
+  // A short list of what it does, not a walkthrough: whoever installs a party
+  // already knows it and its rules, and takes logging and Cabrillo for granted.
+  const features = [
+    "Call history",
+    `${singular} suggestions`,
+    ...(roving ? ["rover support"] : []),
+    "full scoring",
+    "multiplier and dupe alerts",
+  ]
+
+  return [
+    `Log the ${program}${when ? `, in ${when.en}` : ""}, from ${where}, or from anywhere else.`,
+    "",
+    `${features.join(", ")}.`,
+    "",
+  ].join("\n")
+}
+
+
 function manifestFor(code, key, party) {
   const isCanadian = party.entity === "VE"
   const states = party.state ? [party.state] : party.states
@@ -314,7 +355,11 @@ function manifestFor(code, key, party) {
     // without touching the engine.
     icon: isCanadian ? "leaf-maple" : "star-box",
     accentColor: isCanadian ? ACCENT_COLORS.ca : ACCENT_COLORS.us,
-    api: 1,
+    // A contact with no location to place it by is held back on the location
+    // field (`incomplete`), which a host reads from level 15; below it, the
+    // contact logs with nothing said. Level 2's history filters, which keep
+    // last year's county from passing for one copied minutes ago, come with it.
+    api: 15,
     keywords: [...new Set(keywords)],
     // Exactly what `src/index.ts` registers, `ref:` included: the panel and the
     // catalog read this list without loading the bundle.
@@ -373,8 +418,8 @@ function packageJsonFor(key, party) {
       "@ham2k/qso-parties": "^0.1.0",
     },
     devDependencies: {
-      "@ham2k/extension-sdk": "^1.12.0",
-      "@ham2k/extension-tools": "^1.12.0",
+      "@ham2k/extension-sdk": "^1.15.0",
+      "@ham2k/extension-tools": "^1.15.0",
       esbuild: "^0.25.5",
     },
     engines: { node: ">=24" },
@@ -511,6 +556,7 @@ function main() {
         continue
       }
       writeJson(join(dir, "manifest.json"), manifestFor(code, key, party))
+      writeFileSync(join(dir, "ABOUT.md"), aboutFor(party))
       // The manifest carries VERSION, so leaving package.json behind splits
       // the two silently. Only that field is touched: everything else in
       // there may have been edited by hand since it was generated.
@@ -526,6 +572,7 @@ function main() {
 
     mkdirSync(join(dir, "src"), { recursive: true })
     writeJson(join(dir, "manifest.json"), manifestFor(code, key, party))
+    writeFileSync(join(dir, "ABOUT.md"), aboutFor(party))
     writeJson(join(dir, "package.json"), packageJsonFor(key, party))
     writeFileSync(join(dir, "tsconfig.json"), TSCONFIG)
     writeFileSync(join(dir, "build.mjs"), BUILD_MJS)

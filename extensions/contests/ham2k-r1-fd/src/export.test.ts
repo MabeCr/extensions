@@ -123,20 +123,25 @@ test("the Cabrillo file comes out of the export hook", async () => {
   assert.equal(delegated.length, 0, 'a Cabrillo file is written here, not delegated')
 })
 
-test("the Cabrillo header lists the operators declared at setup, else the app's operator", async () => {
-  const cabrillo = async (operation: Record<string, unknown>) =>
-    ((await contest.runHook('export', 'generateExport', { operation, qsos: QSOS, exportType: 'r1-fd-cabrillo' })) as { content: string }).content
+test("the Cabrillo header names whoever logged, then the station owner", async () => {
+  const cabrillo = async (operation: Record<string, unknown>, qsos: Record<string, unknown>[] = QSOS) =>
+    ((await contest.runHook('export', 'generateExport', { operation, qsos, exportType: 'r1-fd-cabrillo' })) as { content: string }).content
   const ref = { type: 'r1-fd', ref: 'CW-2026', ourStationType: 'PORTABLE', ourOperators: 'MULTI-OP' }
 
+  // A typed list from an older setup is ignored: the log and the operation's
+  // own operator are the authority.
+  const byTwo = QSOS.map((qso, i) => ({ ...qso, our: { call: 'N0DEV', operatorCall: i === 1 ? 'DK2OY' : 'DF9LJ' } }))
   const multi = await cabrillo({
     ...OPERATION,
     local: { operatorCall: 'N0DEV' },
-    refs: [{ ...ref, operators: 'df9lj, dk2oy', club: '  Bavarian   Contest Club ' }],
-  })
-  assert.ok(multi.includes('\nOPERATORS: DF9LJ DK2OY\n'))
+    ownerCall: 'n1own',
+    refs: [{ ...ref, operators: 'N0OLD', club: '  Bavarian   Contest Club ' }],
+  }, byTwo)
+  assert.ok(multi.includes('\nOPERATORS: DF9LJ DK2OY N0DEV @N1OWN\n'))
   assert.ok(multi.includes('\nCLUB: Bavarian Contest Club\n'))
   assert.ok(multi.includes('\nCATEGORY-OPERATOR: MULTI-OP\n'))
 
+  // A log the station's own holder made names that call.
   const solo = await cabrillo({ ...OPERATION, local: { operatorCall: 'N0DEV' }, refs: [ref] })
   assert.ok(solo.includes('\nOPERATORS: N0DEV\n'))
   assert.ok(!solo.includes('\nCLUB:'))

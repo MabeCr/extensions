@@ -43,6 +43,13 @@ const DX_DE = /^DX de\s+([^\s:]+):?\s*(\d+(?:\.\d+)?)\s+(\S+)\s+(.*?)\s*(\d{4})Z
 /// or is cut short of it (CC Cluster), so the spotter is what ends the line.
 const LISTED = /^(\d+(?:\.\d+)?)\s+(\S+)\s+(\d{1,2})-([A-Za-z]{3})-(\d{4})\s+(\d{4})Z(.*?)<([^<>\s]+)>$/
 
+/// The lines worth reading at all, as the app is asked to hand them over: a
+/// loose first sieve, which `parseSpotLine` then reads exactly. Everything
+/// else the node sends — talk, announcements, WWV, the skimmers' chatter
+/// about nothing — stays in the app. A line can open with the bell or a
+/// stray control character, which the sieve lets through.
+export const SPOT_LINE_PATTERNS: RegExp[] = [/^[\x00-\x20]*DX de /i, /^[\x00-\x20]*\d+(?:\.\d+)?\s+\S+\s+\d{1,2}-[A-Za-z]{3}-\d{4}\s+\d{4}Z/]
+
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
 
 /// What a band mostly carries, for a frequency whose segment the band plan

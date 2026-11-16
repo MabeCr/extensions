@@ -20,7 +20,7 @@
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { rulesNote, withRules } from "@ham2k/lib-contest-rules"
 import type { ContestRules } from "@ham2k/lib-contest-rules"
-import { stampedExchange } from "@ham2k/lib-contest-exchange"
+import { stampedExchange, theirStateFields, withTheirFields } from "@ham2k/lib-contest-exchange"
 import { LOCATION_PATTERN, VALID_LOCATIONS, firstName, normalizeLocation, ourExchange } from "@ham2k/lib-naqp-exchange"
 import { type WeeklySession, relevanceFor, searchMatches } from "@ham2k/lib-weekly-contest"
 import { adifForExport, contestScorer, defineExtension, exportFilename, startMillisOf } from "@ham2k/extension-sdk"
@@ -178,7 +178,7 @@ const ActivityHook = {
 
     const t = tFor(ctx)
     const their = (qso?.their as Record<string, JSONValue>) ?? {}
-    const { name, location } = await suggestedExchange(ctx, operation, their)
+    const { name, location } = await suggestedExchange(ctx, operation, their, qso)
 
     return [
       {
@@ -231,11 +231,15 @@ const ActivityHook = {
     const decided = (key: string) => qsoRef !== undefined && key in qsoRef
     const guess = decided('name') && decided('location')
       ? { name: '', location: '' }
-      : await suggestedExchange(ctx, operation, (qso.their as Record<string, JSONValue>) ?? {})
-    const received = stampedExchange(TYPE, qsoRef, {
+      : await suggestedExchange(ctx, operation, (qso.their as Record<string, JSONValue>) ?? {}, qso)
+    let theirLocation = ''
+    const stamped = stampedExchange(TYPE, qsoRef, {
       name: { read: firstName, guess: () => guess.name },
       location: { read: normalizeLocation, guess: () => guess.location },
-    }, exchangeText)
+    }, (values) => ((theirLocation = values.location), exchangeText(values)))
+    // The location also reaches `their.state`, where ADIF's STATE, the SOTA
+    // and POTA files and Worked All States read it.
+    const received = withTheirFields(stamped, theirStateFields(qso.their as Record<string, JSONValue> | undefined, theirLocation))
 
     const ours = exchangeText(ourExchange(opRef))
     if (!ours) return received

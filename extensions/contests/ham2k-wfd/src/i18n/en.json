@@ -22,9 +22,11 @@
   "objectiveSixContinuousHours": "Six continuous hours (×2)",
   "theirClassLabel": "Class",
   "theirSectionLabel": "Sect",
-  "scoreSections": "{{sections}} sections",
   "adifExport": "Winter Field Day ADIF",
   "rulesLink": "[Winter Field Day rules](https://www.winterfieldday.org/)",
   "notConfigured": "Not configured!",
-  "activityDescription": "The January field event, run in winter conditions"
+  "activityDescription": "The January field event, run in winter conditions",
+  "modeCW": "CW",
+  "modePhone": "Phone",
+  "modeData": "Digital"
 }

@@ -16,9 +16,12 @@
 //   * One multiplier per WAE/DXCC entity per band. Total = points × mults.
 
 import { fmtInteger } from "@ham2k/lib-format-tools"
+import { bandBreakdown } from "@ham2k/lib-contest-summary"
 import { parseCallsign } from "@ham2k/lib-callsigns"
-import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
+import type { ContestScorer, HookContext, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
 import { annotateCallAgainstCountryFile, contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
+
+import { tFor } from "./i18n.ts"
 
 /// The ref type an operation stores. It is data in the operator's log, so it
 /// stays what the app's own built-in wrote there whatever this package is
@@ -168,7 +171,7 @@ export const R1FDScorer: ContestScorer<R1FDScoresheet> = {
         title: contestTitle(ref),
         total: scoresheet.points * mults,
         arithmetic: contestArithmetic({ qsos: scoresheet.qsos, points: scoresheet.points, mults }, ctx),
-        detail: breakdown(scoresheet),
+        detail: breakdown(scoresheet, ctx),
         extra: { points: scoresheet.points, mults, qsos: scoresheet.qsos },
       },
       ctx,
@@ -186,14 +189,16 @@ export function contestTitle(ref: Record<string, JSONValue> | undefined): string
 /// The per-band table — in a field day the per-band countries ARE the score,
 /// so seeing where the mults came from is what tells an operator which band
 /// needs work.
-function breakdown(sheet: R1FDScoresheet): string {
-  const lines = VALID_BANDS.map((band) => {
-    const qsos = sheet.bands[band] ?? 0
-    const points = sheet.bandPoints[band] ?? 0
-    const mults = Object.keys(sheet.mults).filter((key) => key.startsWith(`${band}|`)).length
-    return qsos === 0
-      ? `**${band}**: —`
-      : `**${band}**: ${fmtInteger(qsos)} QSOs, ${fmtInteger(points)} pts, ${fmtInteger(mults)} countries`
+function breakdown(sheet: R1FDScoresheet, ctx: Pick<HookContext, 'locale'>): string {
+  const t = tFor(ctx)
+  const rows = Object.entries(sheet.bands).map(([band, qsos]) => ({
+    band,
+    qsos,
+    points: sheet.bandPoints[band] ?? 0,
+    mults: Object.keys(sheet.mults).filter((key) => key.startsWith(`${band}|`)).length,
+  }))
+  return bandBreakdown(rows, ctx, {
+    bands: VALID_BANDS,
+    multNoun: (count) => (count === 1 ? t('countryOne') : t('countryMany', { count: fmtInteger(count) })),
   })
-  return lines.join('\n')
 }

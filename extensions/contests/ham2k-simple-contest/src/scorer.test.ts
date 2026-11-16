@@ -102,6 +102,22 @@ test('the summary names the contest by its identifier, with its points', () => {
   assert.equal((operation.contest.longSummary as string).split('\n')[0], '2 QSOs')
 })
 
+// The band lines are what an operator reads to decide where to go next: a dupe
+// on a band must count as a contact there but add no point, or the band's
+// points stop agreeing with the total.
+test('the summary breaks the score down by band, with points per band', () => {
+  const { sheet } = run([qso('W1AW', '40m'), qso('K2ABC', '20m'), qso('N3XYZ', '20m'), qso('N3XYZ', '20m')])
+  const operation = SimpleContestScorer.summarizeScore({ scoresheet: sheet, operation: op, scope: 'operation' }, ctx)
+  assert.equal(operation.contest.longSummary, '4 QSOs\n\n**40m**: 1 QSO, 1 pt\n**20m**: 3 QSOs, 2 pts')
+})
+
+// Checkpoints cached by an older version carry no band tallies.
+test('a scoresheet without band tallies still summarizes', () => {
+  const sheet = { worked: {}, qsos: 2, points: 2 }
+  const operation = SimpleContestScorer.summarizeScore({ scoresheet: sheet, operation: op, scope: 'operation' }, ctx)
+  assert.equal(operation.contest.longSummary, '2 QSOs')
+})
+
 // A contest's score belongs to the whole entry, so a day's share of it is not
 // a number the contest defines.
 test('offers no per-day summary', () => {

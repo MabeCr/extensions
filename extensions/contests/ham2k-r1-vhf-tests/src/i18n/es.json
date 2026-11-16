@@ -8,5 +8,6 @@
   "unconfigured": "IARU R1 VHF (sin configurar)",
   "adifExport": "ADIF para {{contest}}",
   "reg1testExport": "REG1TEST/EDI para {{contest}}",
-  "ourExchangeSubtitle": "Enviando {{grid}}"
+  "ourExchangeSubtitle": "Enviando {{grid}}",
+  "longest": "Más lejano: {{formatted}} km"
 }

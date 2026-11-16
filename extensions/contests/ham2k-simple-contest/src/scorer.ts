@@ -14,6 +14,7 @@
 
 import { contestArithmetic, contestSummary, modesMatchForDupe } from "@ham2k/extension-sdk"
 import type { ContestScorer, HookContext, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
+import { bandBreakdown } from "@ham2k/lib-contest-summary"
 
 import { tFor } from "./i18n.ts"
 
@@ -25,6 +26,9 @@ export type SimpleContestScoresheet = {
   worked: Record<string, string[]>
   qsos: number
   points: number
+  /// band → its contacts and points. Optional: a checkpoint cached before it
+  /// existed has none, and reads as no bands until the log is rescored.
+  bands?: Record<string, { qsos: number, points: number }>
 }
 
 function str(value: JSONValue | undefined): string {
@@ -37,7 +41,7 @@ function bandModeKey(qso: Record<string, JSONValue>): string {
 
 export const SimpleContestScorer: ContestScorer<SimpleContestScoresheet> = {
   startScoresheet(): SimpleContestScoresheet {
-    return { worked: {}, qsos: 0, points: 0 }
+    return { worked: {}, qsos: 0, points: 0, bands: {} }
   },
 
   // Mutates and returns the given scoresheet — see CoreScorer's note and
@@ -87,6 +91,13 @@ export const SimpleContestScorer: ContestScorer<SimpleContestScoresheet> = {
     }
     base.qsos += 1
     base.points += points
+    // A contact with no band has no line to sit on; it still counts above.
+    if (band) {
+      base.bands ??= {}
+      const bandTally = base.bands[band] ??= { qsos: 0, points: 0 }
+      bandTally.qsos += 1
+      bandTally.points += points
+    }
 
     return { scoresheet: base, score }
   },
@@ -102,6 +113,10 @@ export const SimpleContestScorer: ContestScorer<SimpleContestScoresheet> = {
         // One point a contact and no multipliers: the count of contacts IS the
         // arithmetic.
         arithmetic: contestArithmetic({ qsos: scoresheet.qsos }, ctx),
+        detail: bandBreakdown(
+          Object.entries(scoresheet.bands ?? {}).map(([band, { qsos, points }]) => ({ band, qsos, points })),
+          ctx,
+        ),
         extra: { count: scoresheet.qsos },
       },
       ctx,

@@ -13,6 +13,7 @@
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 import { NO_RESTRICTIONS, rulesNote } from "@ham2k/lib-contest-rules"
+import { cabrilloClub, cabrilloOperators, clubField } from "@ham2k/lib-contest-station"
 import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -101,31 +102,17 @@ function classDesignation(ref: Record<string, JSONValue> | undefined): string {
   return cls ? `${cls}${str(ref?.ourShelter).toUpperCase()}` : ''
 }
 
-/// `OPERATORS`: the calls typed at setup, uppercased and space-separated, with
-/// an `@station` kept as written. NRRL's summary sheet names every operator,
-/// and a Class A entry has at least two. Empty when nothing was typed, so the
-/// caller can fall back to the app's operator call.
-function declaredOperators(ref: Record<string, JSONValue> | undefined): string {
-  const typed = typeof ref?.operators === 'string' ? ref.operators : ''
-  return typed.toUpperCase().split(/[\s,;]+/).filter((call) => call).join(' ')
-}
-
-/// `CLUB`: the club or group name as typed, on one line.
-function declaredClub(ref: Record<string, JSONValue> | undefined): string {
-  return typeof ref?.club === 'string' ? ref.club.replace(/\s+/g, ' ').trim() : ''
-}
-
-/// The operator's name, email and club from their profile, for the Cabrillo
-/// header. All optional and free-form in the profile, so each may be ''. A
-/// host that cannot answer costs these lines, never the log itself.
-async function profileDetails(): Promise<{ name: string; email: string; club: string }> {
+/// The operator's name and email from their profile, for the Cabrillo header.
+/// Both optional and free-form in the profile, so each may be ''. A host that
+/// cannot answer costs these lines, never the log itself.
+async function profileDetails(): Promise<{ name: string; email: string }> {
   try {
     const settings = (await host.getSettings()) as Record<string, JSONValue> | undefined
     const line = (value: JSONValue | undefined) => str(value).replace(/\s+/g, ' ').trim()
-    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail), club: line(settings?.operatorClub) }
+    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail) }
   } catch (e) {
-    console.warn(`[nrrl-nfd] profile settings unavailable, exporting without name, email and profile club:`, e)
-    return { name: '', email: '', club: '' }
+    console.warn(`[nrrl-nfd] profile settings unavailable, exporting without name and email:`, e)
+    return { name: '', email: '' }
   }
 }
 
@@ -201,21 +188,7 @@ const ActivityHook = {
         label: t('shelterLabel'),
         options: SHELTERS.map((s) => ({ value: s.value, label: t(s.labelKey) })),
       },
-      {
-        type: 'field',
-        fieldType: 'text',
-        key: 'operators',
-        label: t('operatorsLabel'),
-        placeholder: t('operatorsPlaceholder'),
-        uppercase: true,
-      },
-      {
-        type: 'field',
-        fieldType: 'text',
-        key: 'club',
-        label: t('clubLabel'),
-        placeholder: t('clubPlaceholder'),
-      },
+      await clubField(ctx, 'nrrl-nfd', { label: t('clubLabel'), placeholder: t('clubPlaceholder') }),
 
       { type: 'header', title: t('bonusesHeader') },
       // HaLo totals these; it does not submit them, and NRRL adjudicates every
@@ -469,11 +442,9 @@ const ExportHook = {
           // "For foreign stations LOCATION must be 'DX'" (Cabrillo v3), as NRRL's
           // own N1MM sample writes it; the locator has GRID-LOCATOR.
           ['LOCATION', 'DX'],
-          // The calls listed at setup, else the app's own operator call.
-          ['OPERATORS', declaredOperators(opRef) || str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          ['OPERATORS', cabrilloOperators(operation, args.qsos)],
           ['GRID-LOCATOR', str(operation.grid)],
-          // The club typed at setup, else the profile's.
-          ['CLUB', declaredClub(opRef) || profile.club],
+          ['CLUB', await cabrilloClub(opRef, 'nrrl-nfd')],
           ['NAME', profile.name],
           ['EMAIL', profile.email],
           // The shelter subcategory has no Cabrillo field at all, so the full

@@ -243,3 +243,46 @@ export const PREFIX_TO_LOCATION: Record<string, string> = {
   VY1: "TER",
   VY2: "PE",
 }
+
+/// The state or province a section lies in, where the two codes differ: what
+/// a contact's State is filled with. A section whose code IS its state's or
+/// province's (`CT`, `OH`, `AB`, `QC`) is absent, answered by the code itself.
+///
+/// DUPLICATED from `lib-qso-party`'s table, on purpose (see the top of this
+/// file). `PR` and `VI` are in no state, and `TER` spans three territories, so
+/// none of them is here: they fill nothing (see `stateForSection`).
+export const STATE_FOR_SECTION: Record<string, string> = {
+  EB: "CA",
+  EMA: "MA",
+  ENY: "NY",
+  EPA: "PA",
+  EWA: "WA",
+  GH: "ON",
+  LAX: "CA",
+  MDC: "MD",
+  NFL: "FL",
+  NLI: "NY",
+  NNJ: "NJ",
+  NNY: "NY",
+  NTX: "TX",
+  ONE: "ON",
+  ONN: "ON",
+  ONS: "ON",
+  ORG: "CA",
+  PAC: "HI",
+  SB: "CA",
+  SCV: "CA",
+  SDG: "CA",
+  SF: "CA",
+  SFL: "FL",
+  SJV: "CA",
+  SNJ: "NJ",
+  STX: "TX",
+  SV: "CA",
+  WCF: "FL",
+  WMA: "MA",
+  WNY: "NY",
+  WPA: "PA",
+  WTX: "TX",
+  WWA: "WA",
+}

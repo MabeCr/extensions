@@ -15,12 +15,14 @@
 // A contact whose age group is missing is still a contact: it counts as an
 // OM's single point — the least the other station can be worth — and says so.
 
+import { bandBreakdown } from "@ham2k/lib-contest-summary"
 import { fmtInteger } from "@ham2k/lib-format-tools"
-import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
+import type { ContestScorer, HookContext, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
 import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
 
 import { AGE_GROUPS, POINTS, TYPE, ageGroupOf, refOfType, str } from "./exchange.ts"
 import type { AgeGroup } from "./exchange.ts"
+import { tFor } from "./i18n.ts"
 import { wpxPrefix } from "./prefix.ts"
 
 export const CONTEST_TITLE = 'WWSAC'
@@ -38,6 +40,9 @@ export type WwsacScoresheet = {
   mults: Record<string, number>
   bands: Record<string, number>
   bandPoints: Record<string, number>
+  /// Band → prefixes first worked on it, so the band lines add up to the
+  /// multiplier. Missing from a checkpoint scored before it existed.
+  bandFirstMults?: Record<string, number>
   /// Contacts per age group, for the summary.
   ageGroups: Partial<Record<AgeGroup, number>>
   /// Contacts scored as an OM for want of a recognized age group — each one
@@ -49,7 +54,7 @@ export type WwsacScoresheet = {
 
 export const WwsacScorer: ContestScorer<WwsacScoresheet> = {
   startScoresheet(): WwsacScoresheet {
-    return { workedByCall: {}, mults: {}, bands: {}, bandPoints: {}, ageGroups: {}, unconfirmed: 0, qsos: 0, points: 0 }
+    return { workedByCall: {}, mults: {}, bands: {}, bandPoints: {}, bandFirstMults: {}, ageGroups: {}, unconfirmed: 0, qsos: 0, points: 0 }
   },
 
   // Mutates and returns the given scoresheet — see ContestScorer.scoreQso.
@@ -79,6 +84,7 @@ export const WwsacScorer: ContestScorer<WwsacScoresheet> = {
     const prefix = wpxPrefix(call)
     const isNewMult = !!prefix && sheet.mults[prefix] === undefined
     if (prefix) sheet.mults[prefix] = (sheet.mults[prefix] ?? 0) + 1
+    if (isNewMult) (sheet.bandFirstMults ??= {})[band] = (sheet.bandFirstMults[band] ?? 0) + 1
 
     const heardBefore = worked.length > 0
     if (heardBefore) sheet.workedByCall[call].push(band)
@@ -96,8 +102,10 @@ export const WwsacScorer: ContestScorer<WwsacScoresheet> = {
     if (heardBefore) notices.push('newBand')
     if (notices.length > 0) score.notices = notices
     if (prefix) score.prefix = prefix
-    // Still a contact, but one the operator can fix while it is fresh.
-    if (!typed) score.alerts = ['missingExchange']
+    // An age group not yet copied holds the contact back while the station is
+    // still there to ask; one that is not an age group still scores, as a
+    // contact the operator can fix while it is fresh.
+    if (!typed) score.incomplete = [`${TYPE}/ageGroup`]
     else if (!ageGroup) score.alerts = ['invalidExchange']
 
     return { scoresheet: sheet, score }
@@ -113,7 +121,7 @@ export const WwsacScorer: ContestScorer<WwsacScoresheet> = {
         title: CONTEST_TITLE,
         total: scoresheet.points * mults,
         arithmetic: contestArithmetic({ qsos: scoresheet.qsos, points: scoresheet.points, mults }, ctx),
-        detail: breakdown(scoresheet),
+        detail: breakdown(scoresheet, ctx),
         extra: { points: scoresheet.points, mults, qsos: scoresheet.qsos },
       },
       ctx,
@@ -123,9 +131,19 @@ export const WwsacScorer: ContestScorer<WwsacScoresheet> = {
 
 /// The bands worked, who was worked, and the prefixes — which, as in WPX, are
 /// what tells an operator whether a station is worth calling.
-function breakdown(sheet: WwsacScoresheet): string {
-  const lines = VALID_BANDS.filter((band) => sheet.bands[band]).map((band) =>
-    `**${band}**: ${fmtInteger(sheet.bands[band])} QSOs, ${fmtInteger(sheet.bandPoints[band] ?? 0)} pts`)
+function breakdown(sheet: WwsacScoresheet, ctx: Pick<HookContext, 'locale'>): string {
+  const t = tFor(ctx)
+  const prefixNoun = (count: number) => (count === 1 ? t('prefixOne') : t('prefixMany', { formatted: fmtInteger(count) }))
+  const lines = [bandBreakdown(
+    Object.entries(sheet.bands).map(([band, qsos]) => ({
+      band,
+      qsos,
+      points: sheet.bandPoints[band] ?? 0,
+      mults: sheet.bandFirstMults?.[band] ?? 0,
+    })),
+    ctx,
+    { multNoun: prefixNoun },
+  )]
 
   const groups = AGE_GROUPS.filter((group) => sheet.ageGroups[group]).map((group) => `${group} ${fmtInteger(sheet.ageGroups[group]!)}`)
   if (sheet.unconfirmed) groups.push(`? ${fmtInteger(sheet.unconfirmed)}`)
@@ -137,7 +155,7 @@ function breakdown(sheet: WwsacScoresheet): string {
   const prefixes = Object.keys(sheet.mults).sort()
   if (prefixes.length > 0) {
     lines.push('')
-    lines.push(`**${fmtInteger(prefixes.length)} prefixes**`)
+    lines.push(`**${prefixNoun(prefixes.length)}**`)
     lines.push(prefixes.join(' '))
   }
   return lines.join('\n')

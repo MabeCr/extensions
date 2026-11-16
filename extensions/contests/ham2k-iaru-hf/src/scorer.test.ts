@@ -176,7 +176,7 @@ test('a QSO with no exchange still occupies its dupe slot', () => {
   const { scores, sheet } = run([noExchange, { ...noExchange, refs: [{ type: 'iaru-hf', theirExchange: '28' }] }])
 
   assert.equal(scores[0].value, 0, 'nothing to score it against')
-  assert.deepEqual(scores[0].alerts, ['missingExchange'])
+  assert.deepEqual(scores[0].incomplete, ['iaru-hf/exchange'])
   assert.equal(Object.keys(sheet.mults).length, 0, 'and no multiplier')
 
   assert.equal(scores[1].value, 0)
@@ -189,7 +189,7 @@ test('an exchange the operator deliberately emptied earns no multiplier', () => 
     { their: { call: 'DL1ABC' }, band: '20m', mode: 'CW', refs: [{ type: 'iaru-hf', theirExchange: '' }] },
   ])
   assert.equal(scores[0].value, 0)
-  assert.deepEqual(scores[0].alerts, ['missingExchange'])
+  assert.deepEqual(scores[0].incomplete, ['iaru-hf/exchange'], 'a blank is no zone to fall back on, so the field is asked for')
   assert.equal(Object.keys(sheet.mults).length, 0)
 
   // …while a field nobody touched still gets the country file's zone.
@@ -237,6 +237,22 @@ test('the summary names the contest and its score, and splits the multipliers by
   const summary = IARUHFScorer.summarizeScore({ scoresheet: sheet, operation: usOperation, ref: mixedRef, scope: 'operation' }, ctx)['iaru-hf']
   assert.equal(summary.label, 'IARU HF: 21 points')
   assert.equal((summary.longSummary as string).split('\n')[0], '3 QSOs, 7 pts × 3 mults (1 zone, 1 HQ, 1 official)')
+})
+
+test('each band line carries its QSOs, points and multipliers, in band order', () => {
+  // Multipliers count per band, so a band line without its points and mults
+  // hides what that band is worth; and 40m worked after 20m still reads above it.
+  const { sheet } = run([qso('DL1ABC', '20m', 'CW', '28'), qso('DL0HQ', '20m', 'CW', 'DARC'), qso('W1AW', '40m', 'CW', '8')])
+  const summary = IARUHFScorer.summarizeScore({ scoresheet: sheet, operation: usOperation, ref: mixedRef, scope: 'operation' }, ctx)['iaru-hf']
+  const lines = (summary.longSummary as string).split('\n').filter((line) => line.startsWith('**'))
+  assert.deepEqual(lines, [
+    '**160m**: —',
+    '**80m**: —',
+    '**40m**: 1 QSO, 1 pt, 1 mult',
+    '**20m**: 2 QSOs, 6 pts, 2 mults',
+    '**15m**: —',
+    '**10m**: —',
+  ])
 })
 
 test('a restricted entry is titled by its mode, as the operation is', () => {

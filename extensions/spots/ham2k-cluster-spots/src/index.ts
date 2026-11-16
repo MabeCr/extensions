@@ -6,10 +6,12 @@
 // holds the one connection to the node picked in Settings (its
 // docs/design/cluster.md), logged in as the operator.
 //
-// The node pushes spots as they happen, and the board asks for them every two
-// minutes, so the lines are kept here in between: the newest spot of each
-// station on each band in each mode, for as long as a spot is worth showing,
-// and none once the station has spotted itself QRT there.
+// The node sends spots as they happen, and they go on the board as they come:
+// the newest spot of each station on each band in each mode, kept here for as
+// long as a spot is worth showing, and taken off once the station has spotted
+// itself QRT there. The board also asks for all of them every two minutes,
+// which is what takes the ones too old to show off it. Only the lines that
+// can be spots reach this extension at all; the app keeps the rest.
 //
 // Reading needs the session held open, which a subscription does. The session
 // is the operator's own login, which their other cluster client (N1MM, a band
@@ -35,7 +37,7 @@ import type { ClusterHook, ClusterLine, ClusterReply, ClusterStatus, HookContext
 
 import manifest from "../manifest.json" with { type: "json" }
 import { tFor } from "./i18n.ts"
-import { isPromptFor, isSignOff, nodeProgramFromPrompt, parseSpotLine } from "./parse.ts"
+import { SPOT_LINE_PATTERNS, isPromptFor, isSignOff, nodeProgramFromPrompt, parseSpotLine } from "./parse.ts"
 import type { NodeProgram } from "./parse.ts"
 import { firstCall, isTestCall, selfSpotCall, spotComment, type Json } from "./spotText.ts"
 
@@ -103,14 +105,30 @@ const cleared = new Set<string>()
 /// The program behind each node, as `host:port`, once a prompt has named it.
 const programs = new Map<string, NodeProgram>()
 
-function take(lines: ClusterLine[]) {
+/// Holds what [lines] say, and answers what changed on the board for it: the
+/// spots that are new or newer, and the keys of those a station signed off.
+/// Each spot carries its key, so a newer one replaces it on the board too.
+/// A spot already past [MAX_AGE_MILLIS] — the older end of a backfill — is
+/// neither held nor pushed.
+function take(lines: ClusterLine[]): { put: Spot[]; removed: string[] } {
+  const changed = new Map<string, Spot | undefined>()
+  const oldest = Date.now() - MAX_AGE_MILLIS
   for (const line of lines) {
-    const spot = parseSpotLine(line.text, line.at)
-    if (!spot) continue
-    const key = `${spot.their.call}|${spot.band ?? ""}|${spot.mode ?? ""}`
+    const parsed = parseSpotLine(line.text, line.at)
+    if (!parsed || parsed.spot.timeInMillis < oldest) continue
+    const key = `${parsed.their.call}|${parsed.band ?? ""}|${parsed.mode ?? ""}`
+    const spot: Spot = { ...parsed, key }
     const previous = held.get(key)
-    if (!previous || spot.spot.timeInMillis >= previous.spot.timeInMillis) held.set(key, spot)
+    if (previous && spot.spot.timeInMillis < previous.spot.timeInMillis) continue
+    held.set(key, spot)
+    changed.set(key, isSignOff(spot) ? undefined : spot)
   }
+  const put: Spot[] = [], removed: string[] = []
+  for (const [key, spot] of changed) {
+    if (spot) put.push(spot)
+    else removed.push(key)
+  }
+  return { put, removed }
 }
 
 function current(now: number): Spot[] {
@@ -130,7 +148,7 @@ function holdSession() {
     // Not awaited: connecting and logging in take up to ten seconds, which
     // is the whole of a spots hook's budget. The spots arrive on the next
     // refresh instead.
-    host.clusterSubscribe().then(startSession, () => {
+    host.clusterSubscribe({ match: SPOT_LINE_PATTERNS }).then(startSession, () => {
       subscribed = false
     })
   }
@@ -228,7 +246,7 @@ const Spots: SpotsHook = {
     // What the node sent since the last read — the scrollback on the first —
     // and anything a delivery to the hook below missed: a failed one is not
     // retried, but its lines stay readable here.
-    const lines = await host.clusterLines({ after: cursor })
+    const lines = await host.clusterLines({ after: cursor, match: SPOT_LINE_PATTERNS })
     take(lines)
     if (lines.length) cursor = lines[lines.length - 1].seq
     return current(Date.now())
@@ -257,8 +275,20 @@ const Spots: SpotsHook = {
 }
 
 const Cluster = {
+  /// Onto the board as they come, rather than at its next fetch: the spots
+  /// a new session asks the node for most of all, which would otherwise wait
+  /// up to two minutes on a board that shows nothing yet.
+  ///
+  /// A push the app refuses is only logged: the spots are held here, and the
+  /// next fetch answers with all of them, which puts the board right.
   async onLines({ lines }: { lines: ClusterLine[] }) {
-    take(lines)
+    const { put, removed } = take(lines)
+    try {
+      if (put.length) await host.spots.put(put)
+      if (removed.length) await host.spots.remove(removed)
+    } catch (e) {
+      host.log(`spots not pushed, left for the next fetch: ${e instanceof Error ? e.message : String(e)}`)
+    }
   },
 } satisfies ClusterHook
 

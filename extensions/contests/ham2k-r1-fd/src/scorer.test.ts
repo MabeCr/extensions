@@ -193,6 +193,18 @@ describe('R1FDScorer multipliers', () => {
     assert.equal((summary.r1fd.longSummary as string).split('\n')[0], '3 QSOs, 10 pts × 3 mults')
   })
 
+  it('breaks the score down by band, counting countries in words that agree with their number', () => {
+    // The mults are per band, so each band's line carries its own countries;
+    // a band of one country reads "1 country", not "1 countries".
+    const { sheet } = run([{ call: 'DL1AAA' }, { call: 'K1AAA/P' }, { call: 'F4AAA', band: '40m' }])
+    const detail = R1FDScorer.summarizeScore({ scoresheet: sheet, operation: {}, ref: SSB_RUNNING, scope: 'operation' }, {} as never).r1fd.longSummary as string
+    assert.match(detail, /^\*\*40m\*\*: 1 QSO, 2 pts, 1 country$/m)
+    assert.match(detail, /^\*\*20m\*\*: 2 QSOs, 8 pts, 2 countries$/m)
+    assert.match(detail, /^\*\*160m\*\*: —$/m)
+    const es = R1FDScorer.summarizeScore({ scoresheet: sheet, operation: {}, ref: SSB_RUNNING, scope: 'operation' }, { locale: 'es' } as never).r1fd.longSummary as string
+    assert.match(es, /^\*\*20m\*\*: 2 QSOs, 8 pts, 2 países$/m)
+  })
+
   it('offers no per-day summary', () => {
     // Countries are a contest-long tally, so a day's share of the score is not
     // a number the contest defines.

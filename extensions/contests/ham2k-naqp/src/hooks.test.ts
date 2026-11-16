@@ -44,3 +44,16 @@ test("an operation already running the contest is offered nothing", async () => 
 test("the activity search stays out of unrelated searches", async () => {
   assert.deepEqual(await contest.runHook("activity", "suggest", { searchTerm: "pota" }), [])
 })
+
+test("the location they sent fills their State, which ADIF, SOTA and POTA files and WAS read", async () => {
+  const operation = fixtureOperation({ stationCall: "N0DEV", refs: [{ type: "naqp", mode: "CW" }] })
+  const save = async (location: string, their: Record<string, unknown> = {}) =>
+    ((await contest.runHook("activity", "processQsoBeforeSave", {
+      operation,
+      qso: { their: { call: "W1AW/7", ...their }, refs: [{ type: "naqp", name: "hiram", location }] },
+    })) as { their?: Record<string, unknown> } | null)?.their
+
+  assert.deepEqual(await save("az", { guess: { state: "CT" } }), { exchange: "HIRAM AZ", state: "AZ" })
+  assert.deepEqual(await save("XE"), { exchange: "HIRAM XE" })
+  assert.deepEqual(await save("AZ", { state: "AZ" }), { exchange: "HIRAM AZ" })
+})

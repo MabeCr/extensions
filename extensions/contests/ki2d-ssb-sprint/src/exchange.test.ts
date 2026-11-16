@@ -10,8 +10,9 @@ import { afterEach, test } from "node:test"
 import assert from "node:assert/strict"
 
 import { annotateCallAgainstCountryFile } from "@ham2k/extension-sdk"
+import type { HookContext, JSONValue } from "@ham2k/extension-sdk"
 
-import { guessedLocation, guessedName } from "./exchange.ts"
+import { guessedLocation, suggestedExchange } from "./exchange.ts"
 import { historyFor, loadHistory, parseHistory, removeHistory } from "./history.ts"
 import { normalizeLocation } from "./locations.ts"
 
@@ -48,13 +49,52 @@ test('a portable call finds its name under the plain call, never its location', 
   assert.equal(historyFor('W1AW'), undefined)
 })
 
-test('what a station sent before beats the lookup, which beats nothing', () => {
+/// A host whose log holds [log] for every call, newest first, split by
+/// operation the way the app's filters split it.
+function hostWith(log: { op: string; refs: Record<string, JSONValue>[] }[]): HookContext {
+  return {
+    getHistoryForCall: async (_call: string, options: Record<string, unknown>) => log
+      .filter((q) => options.operation === undefined || q.op === options.operation)
+      .filter((q) => options.excludeOperation === undefined || q.op !== options.excludeOperation)
+      .map((q) => ({ refs: q.refs }) as Record<string, JSONValue>),
+  } as unknown as HookContext
+}
+
+const tonight = { uuid: 'tonight', refs: [{ type: 'ssb-sprint' }] }
+const suggested = (ctx: HookContext, their: Record<string, JSONValue>) => suggestedExchange(ctx, tonight, { their })
+
+test("what a station sent earlier in this operation beats the call history file", async () => {
   loadHistory(parseHistory(HISTORY))
-  assert.equal(guessedName({ call: 'AA0AC', name: 'David Smith' }), 'DAVE')
-  assert.equal(guessedLocation({ call: 'AA0AC', state: 'IA' }), 'MN')
-  assert.equal(guessedName({ call: 'W1AW', guess: { name: 'Hiram Percy Maxim' } }), 'HIRAM')
+  const ctx = hostWith([{ op: 'tonight', refs: [{ type: 'ssb-sprint', name: 'DAVID', location: 'IA' }] }])
+  // The file says DAVE in MN; the operator copied DAVID in IA an hour ago, and
+  // that is what the station is sending tonight.
+  assert.deepEqual(await suggested(ctx, { call: 'AA0AC', name: 'David Smith', state: 'WI' }), { name: 'DAVID', location: 'IA' })
+})
+
+test("the call history file beats earlier Sprints, which beat the lookup's name", async () => {
+  const ctx = hostWith([{ op: 'last-spring', refs: [{ type: 'naqp', name: 'DAVY', location: 'WI' }] }])
+  loadHistory(parseHistory(HISTORY))
+  assert.deepEqual(await suggested(ctx, { call: 'AA0AC', name: 'David Smith', state: 'IA' }), { name: 'DAVE', location: 'MN' })
   removeHistory()
-  assert.equal(guessedName({ call: 'AA0AC' }), '')
+  // Without the file, the name an earlier contest logged beats the lookup's…
+  assert.equal((await suggested(ctx, { call: 'AA0AC', name: 'David Smith', state: 'IA' })).name, 'DAVY')
+  assert.equal((await suggested({} as HookContext, { call: 'W1AW', guess: { name: 'Hiram Percy Maxim' } })).name, 'HIRAM')
+  assert.equal((await suggested({} as HookContext, { call: 'AA0AC' })).name, '')
+})
+
+test("the lookup's location beats an earlier one, which fills in where the lookup has none", async () => {
+  const ctx = hostWith([{ op: 'last-spring', refs: [{ type: 'pwt', name: 'STEVE', location: 'NY' }] }])
+  // They have moved since: the lookup is the fresher word on where they are.
+  assert.equal((await suggested(ctx, { call: 'K2LE', state: 'FL' })).location, 'FL')
+  assert.equal((await suggested(ctx, { call: 'K2LE' })).location, 'NY')
+})
+
+test("an earlier location the Sprint does not list is passed over", async () => {
+  const ctx = hostWith([
+    { op: 'a', refs: [{ type: 'naqp', location: 'ZZ' }] },
+    { op: 'b', refs: [{ type: 'ssb-sprint', location: 'ny' }] },
+  ])
+  assert.equal((await suggested(ctx, { call: 'K2LE' })).location, 'NY')
 })
 
 test('a US or Canadian station is guessed at its state or province, never its prefix', () => {

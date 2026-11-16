@@ -54,11 +54,3 @@ export function cabrilloCategories(ref: Record<string, JSONValue> | undefined): 
     ['CATEGORY-MODE', mode || undefined],
   ]
 }
-
-/// `OPERATORS`: the calls typed at setup, uppercased and space-separated, with
-/// an `@station` kept as written. Empty when nothing was typed, so the caller
-/// can fall back to the app's operator call.
-export function declaredOperators(ref: Record<string, JSONValue> | undefined): string {
-  const typed = typeof ref?.operators === 'string' ? ref.operators : ''
-  return typed.toUpperCase().split(/[\s,;]+/).filter((call) => call).join(' ')
-}

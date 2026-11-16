@@ -1,0 +1,21 @@
+{
+  "invalidReference": "Cuadrícula inválida: seis caracteres de un locator, como FN42HN",
+  "activationControl": "Activación de Tiles",
+  "huntingControl": "Tiles",
+  "tileName": "Cuadrícula {{grid}}",
+  "tile": "cuadrícula",
+  "tilesPlural": "cuadrículas",
+  "accountDescription": "Autospots de tus activaciones de Tiles",
+  "callsignLabel": "Indicativo",
+  "callsignPostface": "El indicativo con el que está registrada tu cuenta de Tiles.",
+  "pinLabel": "PIN del Offline Spot Gateway",
+  "pinPostface": "En tilesontheair.com, en Profile. El mismo PIN que usa el gateway de email; no es tu contraseña.",
+  "missingCredentials": "Ingresa tu indicativo de Tiles y el PIN del Offline Spot Gateway",
+  "credentialsUnchecked": "Guardado para **{{callsign}}**. Tiles solo puede comprobar un PIN publicando un spot, así que tu primer autospot lo dirá.",
+  "noActivation": "Esta operación no tiene una activación de Tiles",
+  "noFrequency": "Esta operación no tiene frecuencia para el spot",
+  "pinRejected": "Tiles no aceptó este indicativo y PIN. Revisa el PIN en Profile en tilesontheair.com",
+  "rateLimited": "Tiles acepta hasta seis spots por minuto; inténtalo de nuevo en un momento",
+  "callMismatch": "Tu cuenta de Tiles es de {{account}}, pero esta operación es con {{station}}",
+  "unconfirmed": "Tiles respondió HTTP {{status}} sin confirmar el spot"
+}
