@@ -25,12 +25,18 @@ export const READOUT_BOXES = [
   { x: 244, y: 4, width: 112, height: 34 },
 ]
 
-/// Where the time and elevation of the moment being scrubbed to go: the bottom left corner, outside the circle.
-export const SCRUB_BOX = { x: 4, y: 336, width: 120, height: 20 }
+/// The satellite's absolute position goes in the bottom left corner, outside the circle, while it is up or
+/// being scrubbed to: its elevation above its compass heading, with the time of a scrubbed moment over both.
+/// The path across the plot is the picture; these are the numbers. Each box is clear of the circle: at the
+/// top of a box the circle starts just right of its right edge.
+export const SCRUB_BOX = { x: 4, y: 304, width: 90, height: 16 }
+export const ELEVATION_BOX = { x: 4, y: 320, width: 120, height: 16 }
+export const HEADING_BOX = { x: 4, y: 336, width: 120, height: 16 }
 
-/// Where the compass heading of the satellite goes, while it is up or being scrubbed to: just above the
-/// time and elevation, in the same bottom left corner. At this height the circle starts at x 126, so the box is clear of it.
-export const HEADING_BOX = { x: 4, y: 320, width: 120, height: 16 }
+/// An elevation as it is written in the corner, like `El 45°`.
+export function elevationText(elevation: number): string {
+  return `El ${Math.round(Math.max(0, elevation))}°`
+}
 
 /// An azimuth as a compass heading, like `Az 245° WSW`.
 export function headingText(azimuth: number): string {

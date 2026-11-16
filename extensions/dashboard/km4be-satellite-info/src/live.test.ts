@@ -13,7 +13,7 @@ import type { Pass } from "./orbit.ts"
 import { liveDoppler, shiftText } from "./radio.ts"
 import { datasetCalls } from "./datasetTesting.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
-import { DEFAULT_SKY_COLORS, headingText, liveSpot, satelliteIcon, skySvg, skyTrack, skyXY } from "./sky.ts"
+import { DEFAULT_SKY_COLORS, elevationText, headingText, liveSpot, satelliteIcon, skySvg, skyTrack, skyXY } from "./sky.ts"
 import type { SkyPoint } from "./sky.ts"
 
 const catalog = buildCatalog(parseList(LIST), parseElements(ELEMENTS), {})
@@ -84,11 +84,10 @@ test("it is turned so its panels are across the way it is going", () => {
 
 // --- the readouts on the plot -----------------------------------------------------------------
 
-test("under way, the plot has the satellite's elevation beside it and the Doppler shift in its corners", () => {
+test("under way, the plot has the Doppler shift in its top corners, and the satellite itself carries no label", () => {
   const detail = buildDetail(ao7, miami, best, mid, true, "sky")
   assert.equal(detail.underWay, true)
-  const now = detail.sky.labels.find((l) => l.id === "nowAt")!
-  assert.equal(now.text.literal, `${Math.round(lookAt(satrec, miami, mid)!.elevation)}°`)
+  assert.ok(!detail.sky.labels.some((l) => (l.id as string) === "nowAt"), "its elevation is in the corner now")
 
   const rate = rangeRate(satrec, miami, mid)!
   const byId = Object.fromEntries(detail.sky.readout.map((l) => [l.id, l.text!.literal]))
@@ -104,17 +103,29 @@ test("under way, the plot has the satellite's elevation beside it and the Dopple
   assert.ok(right.x + right.width > 350 && right.y < 10 && right.text!.align === "end")
 })
 
-test("under way, the satellite's compass heading is in the bottom left corner, outside the circle", () => {
+test("under way, the satellite's elevation and compass heading are together in the bottom left corner, outside the circle", () => {
   const detail = buildDetail(ao7, miami, best, mid, true, "sky")
+  const el = detail.sky.readout.find((l) => l.id === "elNow")!
   const az = detail.sky.readout.find((l) => l.id === "azNow")!
   const look = lookAt(satrec, miami, mid)!
+  assert.equal(el.text!.literal, elevationText(look.elevation))
+  assert.match(el.text!.literal!, /^El \d{1,2}°$/)
   assert.equal(az.text!.literal, headingText(look.azimuth))
   assert.match(az.text!.literal!, /^Az \d{1,3}° [NESW]{1,3}$/)
-  assert.ok(az.x < 10 && az.y > 300 && az.text!.align === "start")
-  // Every corner of its box is outside the horizon ring, so it covers no part of the sky.
-  for (const [x, y] of [[az.x, az.y], [az.x + az.width, az.y], [az.x, az.y + az.height], [az.x + az.width, az.y + az.height]]) {
-    assert.ok(Math.hypot(x - 180, y - 180) > 150, `${x},${y}`)
+  // The elevation sits right over the heading.
+  assert.ok(el.x === az.x && el.y + el.height === az.y)
+  for (const l of [el, az]) {
+    assert.ok(l.x < 10 && l.y > 300 && l.text!.align === "start")
+    // Every corner of its box is outside the horizon ring, so it covers no part of the sky.
+    for (const [x, y] of [[l.x, l.y], [l.x + l.width, l.y], [l.x, l.y + l.height], [l.x + l.width, l.y + l.height]]) {
+      assert.ok(Math.hypot(x - 180, y - 180) > 150, `${l.id} ${x},${y}`)
+    }
   }
+})
+
+test("an elevation reads as whole degrees", () => {
+  assert.equal(elevationText(44.6), "El 45°")
+  assert.equal(elevationText(-0.2), "El 0°")
 })
 
 test("a heading reads as degrees and a point of the compass", () => {
@@ -133,10 +144,11 @@ test("none of it is there before the satellite rises or after it sets", () => {
   }
 })
 
-test("at the peak the peak's own label gives way to the satellite's, which says the same", () => {
+test("at the peak the peak's own label gives way to the satellite, whose elevation the corner says", () => {
   const atPeak = buildDetail(ao7, miami, best, best.maxElevationAt, true, "sky")
   const ids = atPeak.sky.labels.map((l) => l.id)
-  assert.ok(ids.includes("nowAt") && !ids.includes("peakAt"), ids.join())
+  assert.ok(!ids.includes("peakAt"), ids.join())
+  assert.ok(atPeak.sky.readout.some((l) => l.id === "elNow"))
   const early = buildDetail(ao7, miami, best, before, true, "sky")
   assert.ok(early.sky.labels.map((l) => l.id).includes("peakAt"), "away from the peak it keeps its label")
 })
@@ -220,7 +232,7 @@ test("the Sky page is redrawn every two seconds while the satellite is overhead,
   assert.deepEqual((await p.render(config, best.aos - 5 * 60_000)).triggers, [])
   const overhead = await p.render(config, mid)
   assert.deepEqual(overhead.triggers, ["tick:2"])
-  assert.ok(overhead.scene.layers.some((l) => l.id === "nowAt") && overhead.scene.layers.some((l) => l.id === "dnFreq"))
+  assert.ok(overhead.scene.layers.some((l) => l.id === "elNow") && overhead.scene.layers.some((l) => l.id === "dnFreq"))
   assert.deepEqual((await p.render({ ...config, countdown: true }, mid)).triggers, ["tick:1"])
   assert.deepEqual((await p.render(config, best.los + 5 * 60_000)).triggers, [], "set again")
 

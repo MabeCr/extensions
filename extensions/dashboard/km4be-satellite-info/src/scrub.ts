@@ -18,7 +18,7 @@ import type { Observer, Pass } from "./orbit.ts"
 import { clock } from "./passes.ts"
 import { liveDoppler, shiftText } from "./radio.ts"
 import { compass } from "./orbit.ts"
-import { HEADING_BOX, headingText, READOUT_BOXES, SCRUB_BOX, SKY_SIZE, skyXY } from "./sky.ts"
+import { ELEVATION_BOX, elevationText, HEADING_BOX, headingText, READOUT_BOXES, SCRUB_BOX, SKY_SIZE, skyXY } from "./sky.ts"
 import type { SkyPoint } from "./sky.ts"
 
 export const SCRUB_VALUE = "scrub"
@@ -94,8 +94,11 @@ export function buildScrub(
       text("scrubUpShift", READOUT_BOXES[1], 1, moments.map((m) => (m.shift?.up ? shiftText(m.shift.up.kHz) : "")), "end"),
     )
   }
-  layers.push(text("scrubAtHeading", HEADING_BOX, 0, moments.map((m) => headingText(m.p.azimuth)), "start"))
-  layers.push(text("scrubAtTime", SCRUB_BOX, 0, moments.map((m) => `${clock(m.p.at, pass.aos, utc, true)} · ${Math.round(m.p.elevation)}°`), "start"))
+  layers.push(
+    text("scrubAtTime", SCRUB_BOX, 0, moments.map((m) => clock(m.p.at, pass.aos, utc, true)), "start"),
+    text("scrubAtElevation", ELEVATION_BOX, 0, moments.map((m) => elevationText(m.p.elevation)), "start"),
+    text("scrubAtHeading", HEADING_BOX, 0, moments.map((m) => headingText(m.p.azimuth)), "start"),
+  )
 
   const control: PanelSceneControl = {
     id: "scrub",

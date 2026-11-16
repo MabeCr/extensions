@@ -13,7 +13,7 @@ import { forgetAll } from "./memory.ts"
 import { datasetCalls } from "./datasetTesting.ts"
 import { loadExtension } from "./sdkGapTesting.ts"
 import { passOfOpen, openId, rowOpenId } from "./scene.ts"
-import { compassLayers, headingText, skySvg, skyTrack, skyXY } from "./sky.ts"
+import { compassLayers, elevationText, headingText, skySvg, skyTrack, skyXY } from "./sky.ts"
 
 // No corrections: these tests are about the maths and the page, not about what we know of each bird.
 const catalog = buildCatalog(parseList(LIST), parseElements(ELEMENTS), {})
@@ -135,14 +135,19 @@ test("a slider over the plot scrubs along the pass, with everything it shows wor
     assert.equal(samples("scrubDnFreq")[i], `↓ ${downlinkDoppler(29.45, rate).toFixed(4)}`)
     assert.equal(samples("scrubUpFreq")[i], `↑ ${uplinkDoppler(145.9, rate).toFixed(4)}`)
     assert.equal(samples("scrubDnShift")[i], shiftText((downlinkDoppler(29.45, rate) - 29.45) * 1000))
-    assert.match(String(samples("scrubAtTime")[i]), /^\d\d:\d\d:\d\dZ · \d+°$/)
+    assert.match(String(samples("scrubAtTime")[i]), /^\d\d:\d\d:\d\dZ$/)
+    assert.equal(samples("scrubAtElevation")[i], elevationText(track[i].elevation))
     assert.equal(samples("scrubAtHeading")[i], headingText(track[i].azimuth))
     assert.match(String(scrub.control.valueLabels![i]), / toward [NESW]{1,3}$/)
   }
   assert.equal(samples("scrubDnFreq")[track.length], "")
   assert.equal(samples("scrubAtHeading")[track.length], "")
-  // The heading sits just above the time, in the bottom left corner, and clear of the circle of the sky.
-  assert.ok(byId.scrubAtHeading.y + byId.scrubAtHeading.height <= byId.scrubAtTime.y && byId.scrubAtHeading.x < 10)
+  // In the bottom left corner, top to bottom: the time, the elevation, the heading.
+  assert.ok(byId.scrubAtTime.y + byId.scrubAtTime.height <= byId.scrubAtElevation.y)
+  assert.ok(byId.scrubAtElevation.y + byId.scrubAtElevation.height <= byId.scrubAtHeading.y && byId.scrubAtHeading.x < 10)
+  for (const l of [byId.scrubAtTime, byId.scrubAtElevation, byId.scrubAtHeading]) {
+    for (const [x, y] of [[l.x + l.width, l.y], [l.x + l.width, l.y + l.height]]) assert.ok(Math.hypot(x - 180, y - 180) > 150, `${l.id} clear of the sky at ${x},${y}`)
+  }
   // The marker rides the path: a sample of the plot's x and y for every moment, centered on the point.
   const mid = Math.floor(track.length / 2)
   const spot = skyXY(track[mid].azimuth, track[mid].elevation)
