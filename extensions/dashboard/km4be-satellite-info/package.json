@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-km4be-satellite-info",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "private": true,
   "description": "Ham2K Logger extension: Satellite Info panel",
   "author": "km4be",
@@ -14,7 +14,7 @@
   },
   "devDependencies": {
     "@ham2k/extension-sdk": "^1.13.0",
-    "@ham2k/extension-tools": "^1.13.0",
+    "@ham2k/extension-tools": "^1.16.1",
     "esbuild": "^0.25.5"
   },
   "engines": {

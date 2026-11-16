@@ -23,7 +23,7 @@ import type { StatusRow } from "./status.ts"
 export const LIST_URL = "https://polo.ham2k.com/data/satellites.json"
 /// CelesTrak's amateur group, through Ham2K's caching proxy, which asks CelesTrak once for everyone instead of once for every phone.
 export const ELEMENTS_URL = "https://services.ham2k.net/celestrak.org/NORAD/elements/gp.php?GROUP=amateur&FORMAT=json"
-export const statusUrl = (hours: number): string => `https://amsat.org/status/api/v1/summary.php?hours=${hours}`
+export const statusUrl = (hours: number): string => `https://status.amsat.org/api/v1/summary.php?hours=${hours}`
 /// The categories the two datasets are stored under, which is where the rows are read from.
 export const LIST_CATEGORY = "km4be-satellite-list"
 export const ORBITS_CATEGORY = "km4be-satellite-orbits"

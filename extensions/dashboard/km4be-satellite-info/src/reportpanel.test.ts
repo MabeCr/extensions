@@ -135,7 +135,7 @@ test("sending asks first, and only the second tap posts the report, once", async
   await openReport(p)
   assert.equal((await p.event(t0, "kind", "kind", { text: "heard" })).strings!.kind, "heard")
   const ready = await p.render(t0)
-  assert.match(ready.strings.summary, /^(AO-7|FO-29) \[(U\/v|V\/u)\]: heard, 00:00–00:15Z, as KM4BE, EL95vs$/)
+  assert.match(ready.strings.summary, /^(AO-7|FO-29) \[(U\/v|V\/u)\]: heard, 00:00–00:14Z, as KM4BE, EL95vs$/)
   assert.equal(control(ready, "send")?.disabled, false)
 
   await p.event(t0, "send", "send")
@@ -187,7 +187,7 @@ test("the callsign can be changed before it is sent, and is tidied and checked",
   await p.event(t0, "kind", "kind", { text: "telemetry" })
   const patch = await p.event(t0, "call", "call", { text: " w8abe " })
   assert.equal(patch.strings.call, "W8ABE")
-  assert.match(patch.strings.summary, /telemetry only, 00:00–00:15Z, as W8ABE/)
+  assert.match(patch.strings.summary, /telemetry only, 00:00–00:14Z, as W8ABE/)
 
   const bad = await p.event(t0, "call", "call", { text: "banana" })
   assert.match(bad.strings.summary, /BANANA does not look like a callsign/)
@@ -223,6 +223,15 @@ test("a report that was sent makes the marks fetch AMSAT's reports again", async
   await p.event(t0, "confirm", "confirm")
   await p.render(t0)
   assert.equal(p.fetched.filter((u) => u === statusUrl(24)).length, before + 1)
+})
+
+test("a report that corrects an earlier one says so", async () => {
+  const p = await panel({ answer: () => ({ status: 201, body: JSON.stringify({ data: { id: 2, correction: true } }) }) })
+  await openReport(p)
+  await p.event(t0, "kind", "kind", { text: "heard" })
+  await p.event(t0, "send", "send")
+  await p.event(t0, "confirm", "confirm")
+  assert.match((await p.render(t0)).strings.message, /^Sent to AMSAT: .* It corrects your earlier report for that period/)
 })
 
 test("a refusal, an error page and a dead connection are each said, and the report is kept to try again", async () => {
