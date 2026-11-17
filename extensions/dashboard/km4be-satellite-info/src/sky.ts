@@ -146,6 +146,20 @@ export function satelliteIcon(at: { x: number; y: number; rotation: number }, co
   )
 }
 
+/// The satellite as a layer of its own over the plot, so that moving it is a change to this layer alone (see live.ts).
+export const SAT_LAYER = 48
+export function satelliteLayer(spot: { x: number; y: number; rotation: number }, colors: SkyColors) {
+  const half = SAT_LAYER / 2
+  return {
+    id: "satNow",
+    x: +(spot.x - half).toFixed(1),
+    y: +(spot.y - half).toFixed(1),
+    width: SAT_LAYER,
+    height: SAT_LAYER,
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SAT_LAYER} ${SAT_LAYER}">${satelliteIcon({ x: half, y: half, rotation: spot.rotation }, colors)}</svg>`,
+  }
+}
+
 /// Where the satellite is on the plot right now, and which way it is heading, when the pass is
 /// under way; null otherwise. The place is `here` when it is known exactly, and the nearest point of
 /// the track when not. `rotation` turns the icon so its panels are across the way it is going.

@@ -15,7 +15,7 @@
 // which both views have, and the host's render after it draws the new view.
 
 import { defineExtension, host } from "@ham2k/extension-sdk"
-import type { HookContext, PanelContent, PanelDescriptor, PanelHook, PanelRenderArgs, PanelSceneEvent, PanelSceneEventResult } from "@ham2k/extension-sdk"
+import type { HookContext, JSONValue, PanelContent, PanelDescriptor, PanelHook, PanelRenderArgs, PanelSceneEvent, PanelSceneEventResult } from "@ham2k/extension-sdk"
 
 import manifest from "../manifest.json" with { type: "json" }
 import { expireStatus, loadCatalog, loadStatus } from "./data.ts"
@@ -32,6 +32,18 @@ import type { Report } from "./report.ts"
 import type { Cells, SatellitePass } from "./passes.ts"
 import { linksFor } from "./radio.ts"
 import { SCRUB_VALUE } from "./scrub.ts"
+import { DopplerTracker, uplinkOptions } from "./tracking.ts"
+import { RotatorTracker, rotatorOptions } from "./rotor.ts"
+import { ContactFiller, refsWith } from "./contact.ts"
+import { liveFrame, liveTarget, stillMoving } from "./live.ts"
+import { AlertLine, alertSettingsFrom, alertsFor, loadAlertSettings, sameSettings, saveAlertSettings } from "./alerts.ts"
+import type { AlertSettings } from "./alerts.ts"
+import { bandLabels, BandMarks } from "./bandscope.ts"
+import type { LiveTarget } from "./live.ts"
+import { completePass } from "./detail.ts"
+import { skyTrack } from "./sky.ts"
+import { satrecFromOmm } from "./orbit.ts"
+import type { TrackingView } from "./tracking.ts"
 import { PREVIEW_SVG } from "./preview.ts"
 import { buildNow, buildNowScene, upNow, upNowHint } from "./upnow.ts"
 import type { NowModel } from "./upnow.ts"
@@ -92,6 +104,211 @@ interface PaneState {
   utc: boolean
   /// The pass the detail view shows: its satellite and when it ends.
   detail?: { name: string; los: number; tab: Tab }
+}
+
+/// Doppler tracking: one for the whole extension, since there is one logging radio. It runs on a timer of its own, once a
+/// second, so the radio follows the satellite whatever the pane shows, and stops on its own after the pass.
+/// The pane's clock is the app's (`clock.realNowMillis`), which a developer's time travel moves; the timer keeps to it by the
+/// difference last seen.
+let clockSkew = 0
+const followClock = (args: PanelRenderArgs): void => {
+  if (args.clock?.realNowMillis !== undefined) clockSkew = args.clock.realNowMillis - Date.now()
+}
+const tracker = new DopplerTracker(host, () => Date.now() + clockSkew)
+let trackTimer: number | null = null
+const TRACK_EVERY_MS = 1000
+
+/// The rotator, pointed by the same timer as the radio is tuned (rotor.ts).
+const rotor = new RotatorTracker(host, () => Date.now() + clockSkew)
+
+const anyTracking = (): boolean => tracker.active || rotor.active
+
+function runTracking(): void {
+  if (trackTimer === null) {
+    // An app without timers answers 0, and the pane's own redraws, every two seconds while tracking, keep it going instead.
+    const id = host.setInterval(() => {
+      void Promise.all([tracker.tick(), rotor.tick()]).then(() => {
+        if (!anyTracking() && trackTimer !== null) {
+          host.clearInterval(trackTimer)
+          trackTimer = null
+        }
+      })
+    }, TRACK_EVERY_MS)
+    trackTimer = id || null
+  }
+  void tracker.tick()
+  void rotor.tick()
+}
+
+function stopTracking(which: "doppler" | "rotor"): void {
+  if (which === "doppler") tracker.stop()
+  else rotor.stop()
+  if (!anyTracking() && trackTimer !== null) {
+    host.clearInterval(trackTimer)
+    trackTimer = null
+  }
+}
+
+/// Pass alerts on the FYI line (alerts.ts), and the satellites on the Band Scope (bandscope.ts): a timer from activation,
+/// so they come with the panel closed.
+let alertSettings: AlertSettings | null = null
+let alertTimer: number | null = null
+let alerting = false
+const alertLine = new AlertLine(host.fyi)
+const bandMarks = new BandMarks(host.bandAnnotations)
+const ALERT_EVERY_MS = 10_000
+const anyAlerts = (s: AlertSettings | null): boolean => !!s && (s.on || s.labels)
+
+async function postAlerts(): Promise<void> {
+  const settings = alertSettings
+  if (!anyAlerts(settings) || !settings || alerting) return
+  alerting = true
+  try {
+    const now = Date.now() + clockSkew
+    const place = await findPlace({ grid: settings.grid }, undefined, now)
+    if (!place) return
+    // The catalog's read takes no context, which a timer does not have.
+    const [{ satellites, elementsAt }, favorites] = await Promise.all([loadCatalog(undefined as unknown as HookContext, now), loadFavorites()])
+    if (!satellites.length) return
+    const passes = upcomingPasses(satellites, place, now, settings.minEl, elementsAt)
+    await alertLine.show(alertsFor(passes, favorites, settings, place, now))
+    await bandMarks.show(bandLabels(passes, favorites, settings, place, now))
+  } catch {
+    // A failed reading is tried again at the next.
+  } finally {
+    alerting = false
+  }
+}
+
+function followAlerts(settings: AlertSettings): void {
+  alertSettings = settings
+  // What is switched off comes down at once; what is still on is put by the next reading.
+  if (!settings.on) void alertLine.clearAll().catch(() => undefined)
+  if (!settings.labels) void bandMarks.clearAll().catch(() => undefined)
+  if (anyAlerts(settings)) {
+    if (alertTimer === null) alertTimer = host.setInterval(() => void postAlerts(), ALERT_EVERY_MS) || null
+    void postAlerts()
+  } else {
+    if (alertTimer !== null) host.clearInterval(alertTimer)
+    alertTimer = null
+  }
+}
+
+/// The panel's settings, as they are on each draw: kept when they change, so the timer has them from the next start.
+async function syncAlerts(args: PanelRenderArgs): Promise<void> {
+  const settings = alertSettingsFrom(args.config, minElevation(args.config))
+  if (alertSettings && sameSettings(alertSettings, settings)) {
+    // An app without timers posts with each draw instead.
+    if (anyAlerts(settings) && alertTimer === null) void postAlerts()
+    return
+  }
+  followAlerts(settings)
+  await saveAlertSettings(settings).catch(() => undefined)
+}
+
+/// Putting the satellite on the contacts of a pass (contact.ts).
+const filler = new ContactFiller()
+
+/// The draft contact, given the satellite when it does not have it yet. Answers whether it was changed.
+async function fillDraft(args: PanelRenderArgs, now: number): Promise<boolean> {
+  const ref = filler.refAt(now)
+  if (!ref || !args.qso) return false
+  const refs = refsWith((args.qso as { refs?: unknown }).refs, ref)
+  if (!refs) return false
+  try {
+    const { accepted } = await host.updateDraft({ refs: refs as unknown as JSONValue }, typeof args.operation?.uuid === "string" ? { operationUuid: args.operation.uuid } : {})
+    return accepted
+  } catch {
+    return false
+  }
+}
+
+/// What a pass's Radio page shows of tracking; the radios are asked for only there, where the uplink is chosen.
+async function trackingView(name: string, los: number, radios: boolean): Promise<TrackingView> {
+  const status = tracker.status()
+  const mine = tracker.isTracking(name, los)
+  let options: TrackingView["uplinkOptions"] = []
+  if (radios) {
+    try {
+      const [all, logging] = await Promise.all([host.listRadios(), host.readRadio()])
+      options = uplinkOptions(all ?? [], logging?.id ?? null)
+    } catch {
+      options = []
+    }
+  }
+  let rotators: TrackingView["rotatorOptions"] = []
+  if (radios) {
+    try {
+      rotators = rotatorOptions((await host.listEquipment()) ?? [])
+    } catch {
+      rotators = []
+    }
+  }
+  // Tracking another satellite: say so, so switching it on here is known to move it.
+  const line = mine ? status.line : status.on ? `Doppler tracking is on for ${status.name}. Switch it on here to follow this pass instead.` : status.line
+  const rotorMine = rotor.isTracking(name, los)
+  const rotorLine = rotorMine ? rotor.status().line : rotor.active ? "The rotator is following another pass. Switch it on here to follow this one instead." : rotor.status().line
+  const fillMine = filler.isFilling(name, los)
+  const fillLine = fillMine
+    ? `Each contact you start gets ${name} as its satellite, until a few minutes after it sets.`
+    : filler.name
+      ? `Contacts are getting ${filler.name} as their satellite. Switch this on to use ${name} instead.`
+      : `Puts ${name} on each contact you log during this pass, as the Satellites activity does, so your exports carry SAT_NAME and PROP_MODE.`
+  return { on: mine, line, uplink: tracker.uplink ?? "", uplinkOptions: options, rotorOn: rotorMine, rotorLine, rotator: rotor.rotatorId, rotatorOptions: rotators, fillOn: fillMine, fillLine }
+}
+
+/// What moves on each pane between its full draws, by placement (live.ts), and the one timer that moves it. An app that cannot
+/// take a patch turns this off for good, and the pages are drawn again in full as often as they were before.
+const live = new Map<string, LiveTarget>()
+let liveTimer: number | null = null
+let liveWorks = true
+const LIVE_EVERY_MS = 1000
+
+async function moveLive(): Promise<void> {
+  const now = Date.now() + clockSkew
+  for (const [id, target] of [...live]) {
+    if (!stillMoving(target, now)) {
+      live.delete(id)
+      continue
+    }
+    const steps = liveFrame(target, now)
+    if (target.tab === "sky" && target.layers.has("trackSky")) {
+      const [name, los] = [target.satellite.name, target.pass.los]
+      const lines = [tracker.isTracking(name, los) ? tracker.status().line : "", rotor.isTracking(name, los) ? rotor.status().line : ""].filter(Boolean)
+      if (lines.length) steps.push({ merge: ["controls", "trackSky"], value: { label: lines.join("\n") } })
+    }
+    if (!steps.length) continue
+    try {
+      // False: the pane shows something else now, and the app draws it again, which says what moves there next.
+      if (!(await host.updateScene(id, steps))) live.delete(id)
+    } catch {
+      liveWorks = false
+      live.clear()
+    }
+  }
+  if (!live.size && liveTimer !== null) {
+    host.clearInterval(liveTimer)
+    liveTimer = null
+  }
+}
+
+/// After a full draw: what on this pane moves from now until the next.
+function followLive(args: PanelRenderArgs, view: View, layers: string[]): boolean {
+  const id = args.instanceId
+  if (!id) return false
+  live.delete(id)
+  if (!liveWorks || view.kind !== "detail") return false
+  const { model, source } = view
+  const moving = (model.tab === "sky" && model.underWay) || model.tab === "map"
+  if (!moving) return false
+  const now = nowMillis(args)
+  const pass = completePass(source.satellite, source.place, source.pass, now)
+  const track = source.satellite.omm ? skyTrack(satrecFromOmm(source.satellite.omm), source.place, pass) : []
+  const target = liveTarget(id, model.tab === "map" ? "map" : "sky", source.satellite, source.place, pass, track, themeOf(args.environment?.colors), layers)
+  if (!target) return false
+  live.set(id, target)
+  if (liveTimer === null) liveTimer = host.setInterval(() => void moveLive(), LIVE_EVERY_MS) || null
+  return liveTimer !== null
 }
 
 /// Per placement, keyed the way the spot map keys its own.
@@ -249,7 +466,7 @@ function listModel(r: Ready, state: PaneState, now: number, seconds: boolean, co
   }
 }
 
-type View = { kind: "list"; model: Model; waiting?: "place" | "data" } | { kind: "detail"; model: DetailModel } | { kind: "report"; model: ReportModel } | { kind: "now"; model: NowModel }
+type View = { kind: "list"; model: Model; waiting?: "place" | "data" } | { kind: "detail"; model: DetailModel; source: { satellite: Satellite; place: Place; pass: SatellitePass } } | { kind: "report"; model: ReportModel } | { kind: "now"; model: NowModel }
 
 /// The Report page of a pass: what AMSAT's form offers for the satellite, and what the operator has filled in,
 /// starting from their own callsign and where they are.
@@ -310,7 +527,8 @@ async function snapshot(args: PanelRenderArgs, ctx: HookContext): Promise<View> 
         statusLines(statusFor(ready.reports, pass.satellite), ready.hours, now, state.utc),
         { countdown: countdownOn(args.config), compact, pane: paneOf(args), skyPercent: skyPercent(args.config) },
       )
-      if (tab !== "report") return { kind: "detail", model: detail }
+      detail.tracking = await trackingView(name, los, tab === "radio")
+      if (tab !== "report") return { kind: "detail", model: detail, source: { satellite: pass.satellite, place: ready.place, pass } }
       return { kind: "report", model: await reportModel(args, ctx, state, pass.satellite, ready.place, detail.title, compact, now) }
     }
     state.view = "list" // it has ended, or the settings no longer list it
@@ -431,12 +649,38 @@ export const PassesPanel: PanelHook = {
             label: "Count down to rise, peak and set",
             description: "On a pass's page, shows the time to or since each event, such as −4:12 before it and +2:05 after, and redraws every second while that page is open.",
           },
+          {
+            type: "field",
+            key: "alerts",
+            fieldType: "checkbox",
+            label: "Pass alerts",
+            description: "Puts a line under the call info a few minutes before a satellite rises, and while it is up, even with this panel closed.",
+          },
+          {
+            type: "field",
+            key: "bandLabels",
+            fieldType: "checkbox",
+            label: "Label satellites on the band scope",
+            description: "Marks the downlink of each satellite that is up, or about to rise, on the Band Scope, Doppler-corrected, and its uplink.",
+          },
+          { type: "field", key: "alertsFavorites", fieldType: "checkbox", label: "Alerts and labels for favorites only" },
+          {
+            type: "field",
+            key: "alertLead",
+            fieldType: "number",
+            label: "Alert before rise (minutes)",
+            description: "How long before a satellite rises its alert and label go up: 1 to 30, default 3.",
+          },
         ],
       },
     ]
   },
 
   async render(args: PanelRenderArgs, ctx: HookContext): Promise<PanelContent> {
+    // A step of tracking with every redraw too, which is all there is where the app has no timers; two at once never run.
+    followClock(args)
+    if (tracker.active) void tracker.tick()
+    await syncAlerts(args)
     const view = await snapshot(args, ctx)
     // The pass's Sky page is redrawn often while something on it moves: every second if the countdown is on, since
     // a countdown that is not fresh is wrong; every two seconds while the satellite is overhead, so it is seen to cross
@@ -444,18 +688,38 @@ export const PassesPanel: PanelHook = {
     if (view.kind === "report") return { kind: "scene", scene: buildReportScene(view.model), triggers: [], title: TAB_TITLE }
     // The satellites cross the sky in minutes: the plot is drawn again every few seconds.
     if (view.kind === "now") return { kind: "scene", scene: buildNowScene(view.model), triggers: ["tick:3"], title: TAB_TITLE }
+    const detailScene = view.kind === "detail" ? buildDetailScene(view.model) : null
+    // What moves between draws, moved by patches; where that works, the full draw is needed only now and then.
+    const moved = followLive(args, view, detailScene ? [...detailScene.layers.map((l) => l.id), ...(detailScene.controls ?? []).filter((c) => c.id === "trackSky").map((c) => c.id)] : [])
     const onSky = view.kind === "detail" && view.model.tab === "sky"
     // The Radio page has the Doppler-corrected frequencies for right now, which are only right for a moment: while the
     // satellite is up they are redrawn as the plot is.
     const onRadio = view.kind === "detail" && view.model.tab === "radio"
-    const tick = onSky && countdownOn(args.config) ? "tick:1" : (onSky || onRadio) && view.kind === "detail" && view.model.underWay ? "tick:2" : undefined
+    // While the radio is being tracked, the page says where it is, and is drawn again as often as the plot.
+    const tracking = view.kind === "detail" && (view.model.tracking?.on === true || view.model.tracking?.rotorOn === true)
+    // The map moves the satellite along its track: every few seconds while it is up, and less often while it is not.
+    const onMap = view.kind === "detail" && view.model.tab === "map"
+    const tick = onSky && countdownOn(args.config)
+      ? "tick:1"
+      : moved
+        ? onMap
+          ? "tick:30"
+          : "tick:10"
+        : (onSky || onRadio || onMap) && view.kind === "detail" && (view.model.underWay || tracking)
+          ? "tick:2"
+          : onMap
+            ? "tick:10"
+            : undefined
     // A list that has nothing to show yet asks again in a few seconds, not at the panel's minute: it is what the operator is looking at.
-    const triggers = view.kind === "list" && view.waiting ? [view.waiting === "place" ? WAITING_FOR_PLACE : WAITING_FOR_DATA] : tick ? [tick] : []
-    return { kind: "scene", scene: view.kind === "list" ? buildScene(view.model) : buildDetailScene(view.model), triggers, title: TAB_TITLE }
+    // While contacts are being given the satellite, a new one wakes the panel to give it.
+    const filling = filler.refAt(nowMillis(args)) !== null ? ["qso"] : []
+    const triggers = view.kind === "list" && view.waiting ? [view.waiting === "place" ? WAITING_FOR_PLACE : WAITING_FOR_DATA] : [...(tick ? [tick] : []), ...filling]
+    return { kind: "scene", scene: view.kind === "list" ? buildScene(view.model) : detailScene ?? buildDetailScene(view.model), triggers, title: TAB_TITLE }
   },
 
   async onEvent(args, ctx): Promise<PanelSceneEventResult> {
     const { event } = args
+    followClock(args)
     const state = paneState(args)
     // Both views have the UTC switch and nothing else in common, so a change of view answers with that alone.
     const stay = (): PanelSceneEventResult => ({ values: { utc: state.utc ? 1 : 0 } })
@@ -486,11 +750,52 @@ export const PassesPanel: PanelHook = {
     }
     // A tab's chip names its page in its action; the text is for a control that carries one.
     const page = event.action.startsWith("tab-") ? event.action.slice(4) : event.action === "tab" ? event.text : undefined
-    if (page && state.detail && (page === "sky" || page === "radio" || page === "report")) {
+    if (page && state.detail && (page === "sky" || page === "map" || page === "radio" || page === "report")) {
       state.detail.tab = page
       return stay()
     }
     if (state.view === "detail" && state.detail?.tab === "report" && REPORT_ACTIONS.includes(event.action)) return reportEvent(args, ctx, state)
+    // Doppler tracking, switched on for the pass shown, or off; and which receiver the uplink goes to.
+    if (event.action === "uplinkRadio") tracker.setUplinkRadio(typeof event.text === "string" ? event.text : null)
+    if (event.action === "track" && state.detail) {
+      if (event.value === 1) {
+        const ready = await gather(args, ctx)
+        const shown = state.detail
+        const pass = "waitingFor" in ready ? undefined : ready.passes.find((p) => p.satellite.name === shown.name && Math.abs(p.los - shown.los) < 120_000)
+        if (pass && !("waitingFor" in ready)) {
+          tracker.start({ satellite: pass.satellite, observer: ready.place, aos: pass.aos, los: pass.los }, tracker.uplink)
+          runTracking()
+        }
+      } else if (tracker.isTracking(state.detail.name, state.detail.los)) stopTracking("doppler")
+    }
+    // The satellite on the contacts of this pass, or not; the contact being typed gets it at once.
+    if (event.action === "fill" && state.detail) {
+      if (event.value === 1) {
+        const { satellites } = await loadCatalog(ctx, nowMillis(args))
+        const satellite = satellites.find((s) => s.name === state.detail?.name)
+        if (satellite) {
+          filler.start(satellite, state.detail.los)
+          await fillDraft(args, nowMillis(args))
+        }
+      } else if (filler.isFilling(state.detail.name, state.detail.los)) filler.stop()
+    }
+    // The rotator: which one, and pointing it at the pass shown, or not. With only one set up, that is the one.
+    if (event.action === "rotator") rotor.setRotator(typeof event.text === "string" ? event.text : null)
+    if (event.action === "rotate" && state.detail) {
+      if (event.value === 1) {
+        if (!rotor.rotatorId) {
+          const only = (await host.listEquipment().catch(() => [])).filter((e) => e.kind === "rotator")
+          if (only.length === 1) rotor.setRotator(only[0].id)
+        }
+        const ready = await gather(args, ctx)
+        const shown = state.detail
+        const pass = "waitingFor" in ready ? undefined : ready.passes.find((p) => p.satellite.name === shown.name && Math.abs(p.los - shown.los) < 120_000)
+        if (pass && !("waitingFor" in ready)) {
+          rotor.start({ satellite: pass.satellite, observer: ready.place, aos: pass.aos, los: pass.los })
+          runTracking()
+        }
+      } else if (rotor.isTracking(state.detail.name, state.detail.los)) stopTracking("rotor")
+    }
     if (event.action === "links" && state.detail) {
       const { satellites } = await loadCatalog(ctx, nowMillis(args))
       const satellite = satellites.find((s) => s.name === state.detail?.name)
@@ -528,5 +833,11 @@ defineExtension({
     registerHook("panel", { key: manifest.key, hook: PassesPanel })
     registerHook("dataFile", { key: listFile.key, hook: listFile })
     registerHook("dataFile", { key: orbitsFile.key, hook: orbitsFile })
+    // Alerts switched on last time start now, without waiting for the panel to be drawn.
+    void loadAlertSettings()
+      .then((settings) => {
+        if (!alertSettings) followAlerts(settings)
+      })
+      .catch(() => undefined)
   },
 })

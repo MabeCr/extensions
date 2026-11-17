@@ -275,7 +275,7 @@ test("tapping a row opens its pass: the Sky page, then Radio, then back to the l
   assert.match(sky.strings.title, /^(AO-7|FO-29) · /)
   assert.equal(sky.strings.tab, "sky")
   assert.ok(sky.strings.time0.startsWith("Rise"))
-  assert.equal(sky.controls.length, 6 + 3 + 1 + 1 + 1, "the Sky page keeps only the times under the plot, the slider and its Reset button over it, and the line that says how to use them")
+  assert.equal(sky.controls.length, 7 + 3 + 1 + 1 + 1, "the Sky page keeps only the times under the plot, the slider and its Reset button over it, and the line that says how to use them")
   assert.equal(sky.strings.status0, undefined)
   assert.ok(sky.controls.length <= 64)
   assert.equal(sky.controls.find((c) => c.id === "scrubHint")!.label, "Scrub across the sky chart for details, then tap Reset to clear it.")

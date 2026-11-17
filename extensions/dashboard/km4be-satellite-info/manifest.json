@@ -2,8 +2,8 @@
   "key": "km4be-satellite-info",
   "name": "KM4BE Satellite Info",
   "shortName": "Satellites",
-  "version": "0.4.7",
-  "api": 12,
+  "version": "0.11.0",
+  "api": 25,
   "description": "Amateur radio satellite passes, frequencies and status in one place",
   "category": "dashboard",
   "icon": "satellite-variant",
@@ -25,6 +25,8 @@
     "status.amsat.org"
   ],
   "requiresLocation": true,
+  "requiresRadioWrite": true,
+  "requiresDraftWrite": true,
   "relevance": {
     "interests": [
       "satellite"

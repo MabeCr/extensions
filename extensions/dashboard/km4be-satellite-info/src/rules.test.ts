@@ -120,10 +120,10 @@ test("the list, the favorites with none, and the sky are as the app wants them, 
   check(await none.render({}, t0), "no location at all")
 })
 
-test("a pass's three pages are as the app wants them", async () => {
+test("a pass's four pages are as the app wants them", async () => {
   const p = await panel()
   await p.open(cfg)
-  for (const tab of ["sky", "radio", "report"]) {
+  for (const tab of ["sky", "map", "radio", "report"]) {
     await p.event(cfg, mid, `tab_${tab}`, `tab-${tab}`)
     check(await p.render(cfg, mid), `the ${tab} page`)
   }

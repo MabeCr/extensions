@@ -22,7 +22,7 @@ export type Mode = "favorites" | "all" | "now"
 
 /// What is kept, as last read or written: the settings are read once, and this copy is the
 /// answer after that, since nothing else writes them.
-let known: { favorites: string[]; mode: Mode } | undefined
+let known: { favorites: string[]; mode: Mode; own: Record<string, unknown> } | undefined
 onForget(() => {
   known = undefined
 })
@@ -34,7 +34,7 @@ async function ownSettings(): Promise<Record<string, unknown> | undefined> {
   return extensions?.[`extension_${manifest.key}`] as Record<string, unknown> | undefined
 }
 
-async function load(): Promise<{ favorites: string[]; mode: Mode }> {
+async function load(): Promise<{ favorites: string[]; mode: Mode; own: Record<string, unknown> }> {
   if (known) return known
   const own = await ownSettings()
   const stored = own?.[KEY]
@@ -42,8 +42,14 @@ async function load(): Promise<{ favorites: string[]; mode: Mode }> {
     favorites: Array.isArray(stored) ? stored.filter((n): n is string => typeof n === "string") : [],
     // All unless the operator has chosen another: that is what a new install starts on.
     mode: own?.[MODE_KEY] === "favorites" || own?.[MODE_KEY] === "now" ? (own[MODE_KEY] as Mode) : "all",
+    own: own ?? {},
   }
   return known
+}
+
+/// Something else kept in the group, from the same one read, as it was at that read.
+export async function keptSetting(key: string): Promise<unknown> {
+  return (await load()).own[key]
 }
 
 export async function loadFavorites(): Promise<string[]> {
@@ -65,10 +71,11 @@ export async function saveMode(mode: Mode): Promise<void> {
 
 /// Adds or removes `name`, and answers with the list as it now stands.
 export async function setFavorite(name: string, on: boolean): Promise<string[]> {
-  const { favorites: current, mode } = await load()
+  const loaded = await load()
+  const current = loaded.favorites
   const next = on ? (current.includes(name) ? current : [...current, name]) : current.filter((n) => n !== name)
   if (next.length !== current.length) {
-    known = { favorites: next, mode }
+    known = { ...loaded, favorites: next }
     await host.setSettings({ [KEY]: next })
   }
   return next

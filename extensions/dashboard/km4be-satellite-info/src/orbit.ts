@@ -7,7 +7,7 @@
 //
 // Elements are CelesTrak's OMM JSON, which `json2satrec` reads as it is.
 
-import { degreesToRadians, ecfToLookAngles, eciToEcf, gstime, json2satrec, propagate, radiansToDegrees } from "./vendor/satellite.js/index.js"
+import { degreesToRadians, ecfToLookAngles, eciToEcf, eciToGeodetic, gstime, json2satrec, propagate, radiansToDegrees } from "./vendor/satellite.js/index.js"
 import type { OMMJsonObject, SatRec } from "./vendor/satellite.js/index.js"
 
 export type Omm = OMMJsonObject
@@ -60,6 +60,22 @@ export function lookAt(satrec: SatRec, observer: Observer, at: number): LookAngl
     rangeKm: look.rangeSat,
   }
 }
+
+/// The point on the Earth straight under the satellite at `at`, and how high it is; null when SGP4 cannot place it.
+export function subPoint(satrec: SatRec, at: number): { lat: number; lon: number; altKm: number } | null {
+  const date = new Date(at)
+  const state = propagate(satrec, date)
+  if (!state || !state.position) return null
+  const g = eciToGeodetic(state.position, gstime(date))
+  const lon = ((radiansToDegrees(g.longitude) + 540) % 360) - 180
+  return { lat: radiansToDegrees(g.latitude), lon, altKm: g.height }
+}
+
+const EARTH_RADIUS_KM = 6371
+
+/// How far across the ground a satellite at `altKm` can be heard from: the distance from the point under it to where it sits on the
+/// horizon, along the Earth.
+export const footprintKm = (altKm: number): number => EARTH_RADIUS_KM * Math.acos(EARTH_RADIUS_KM / (EARTH_RADIUS_KM + Math.max(0, altKm)))
 
 /// How fast the distance to the satellite is changing, km/s: negative while it
 /// approaches, positive as it recedes. A central difference over one second.

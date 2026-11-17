@@ -67,11 +67,12 @@ interface Scene {
   layout: { column: Record<string, unknown>[] }
 }
 
-async function panel(environment?: { width: number; height: number }) {
+async function panel(environment?: { width: number; height: number }, radio: Record<string, (params: Record<string, unknown>) => unknown> = {}) {
   forgetAll()
   const id = ++panes
   const ext = await loadExtension(() => import("./index.ts"), {
     hostCalls: {
+      ...radio,
       ...datasetCalls().hostCalls,
       getLocation: () => null,
       kvGet: () => null,
@@ -91,7 +92,8 @@ async function panel(environment?: { width: number; height: number }) {
   const args = (config: Record<string, unknown>, at: number) => ({
     panelKey: "passes",
     instanceId: `view-${id}`,
-    operation: {},
+    operation: { uuid: "op-1" },
+    qso: { their: { call: "K1ABC" }, refs: [{ type: "pota", ref: "US-1234" }] },
     qsoCount: 0,
     reason: "",
     config,
@@ -214,7 +216,7 @@ test("the back button and the tabs are drawn lower than they were, and the plot 
   assert.equal(rows.length, 2)
   for (const row of rows) assert.ok(row.height! >= 28 && row.height! <= 36, String(row.height))
   // The tabs are chips at their own height, which keeps their text in the middle; only the rows are held to a height.
-  assert.deepEqual(rows[1].row!.filter((c) => c.control).map((c) => [c.control, c.height]), [["tab_sky", undefined], ["tab_radio", undefined], ["tab_report", undefined], ["utc", undefined]])
+  assert.deepEqual(rows[1].row!.filter((c) => c.control).map((c) => [c.control, c.height]), [["tab_sky", undefined], ["tab_map", undefined], ["tab_radio", undefined], ["tab_report", undefined], ["utc", undefined]])
 })
 
 test("tapping a tab's chip shows its page, and lights only that chip", async () => {
@@ -257,7 +259,7 @@ test("a Reset button over the corner of the plot puts the scrubber back at rest,
 
   // Tapping it answers with where the slider rests, and keeps the UTC switch and the lit tab, which every answer carries.
   const answer = (await p.event(cfg, t0, "scrubReset", "scrubReset")) as unknown as { values: Record<string, number> }
-  assert.deepEqual(answer.values, { utc: 1, tab_sky: 1, tab_radio: 0, tab_report: 0, scrub: rest })
+  assert.deepEqual(answer.values, { utc: 1, tab_sky: 1, tab_map: 0, tab_radio: 0, tab_report: 0, track: 0, rotate: 0, fill: 0, scrub: rest })
 })
 
 test("Reset does nothing when there is nothing to scrub", async () => {
@@ -269,4 +271,62 @@ test("Reset does nothing when there is nothing to scrub", async () => {
   await p.event(cfg, t0, "tab_radio", "tab-radio", { value: 1 })
   const onRadio = (await p.event(cfg, t0, "scrubReset", "scrubReset")) as unknown as { values: Record<string, number> }
   assert.equal(onRadio.values.scrub, undefined)
+})
+
+test("the Radio page switches Doppler tracking on for its pass, which tunes the logging radio, and off again", async () => {
+  const sets: Record<string, unknown>[] = []
+  let frequencyHz = 145_000_000
+  const rig = (id: string, name: string, channel?: { key: string; label: string }) => ({ id, name, ...(channel ? { channel } : {}), status: "connected", stale: false, problem: null, frequencyHz, mode: "USB", modes: ["USB", "FM"], powerWatts: 10, transmitting: false, meters: {}, canTune: true })
+  const p = await panel({ width: 390, height: 700 }, {
+    listRadios: () => [rig("main", "IC-9700", { key: "main", label: "Main" }), rig("sub", "IC-9700", { key: "sub", label: "Sub" })],
+    readRadio: (params) => (params.id === "sub" ? rig("sub", "IC-9700") : rig("main", "IC-9700")),
+    setRadio: (params) => {
+      sets.push(params)
+      if (typeof params.frequencyHz === "number" && params.id === "main") frequencyHz = params.frequencyHz
+      return { accepted: true, state: null }
+    },
+  })
+  await openFirst(p, cfg, t0)
+  await p.event(cfg, t0, "tab_radio", "tab-radio", { value: 1 })
+  const before = (await p.render(cfg, t0)).scene as unknown as { values: Record<string, number>; strings: Record<string, string>; controls: { id: string; kind: string; options?: { label: string; value: string }[] }[] }
+  assert.equal(before.values.track, 0)
+  assert.match(before.strings.trackLine, /Keeps the logging radio on the downlink/)
+  const uplink = before.controls.find((c) => c.id === "uplinkRadio")!
+  assert.deepEqual(uplink.options, [{ label: "No uplink radio", value: "" }, { label: "IC-9700 Sub", value: "sub" }])
+
+  await p.event(cfg, t0, "track", "track", { value: 1 })
+  // The first step goes out as it is switched on; let it land.
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.ok(sets.length > 0 && sets[0].id === "main", JSON.stringify(sets))
+  assert.ok(Math.abs(frequencyHz - 29_450_000) < 5_000, `AO-7's downlink, shifted: ${frequencyHz}`)
+  const on = await p.render(cfg, t0)
+  const scene = on.scene as unknown as { values: Record<string, number>; strings: Record<string, string> }
+  assert.equal(scene.values.track, 1)
+  assert.match(scene.strings.trackLine, /^Doppler (ready for rise|tracking): ↓ 29\.4/)
+  assert.deepEqual(on.triggers, ["tick:2"], "the line is kept fresh while it tracks")
+
+  await p.event(cfg, t0, "track", "track", { value: 0 })
+  assert.equal(((await p.render(cfg, t0)).scene as unknown as { values: Record<string, number> }).values.track, 0)
+})
+
+test("switching on Log contacts via this satellite gives the contact being typed the satellite, and new ones after it", async () => {
+  const drafts: Record<string, unknown>[] = []
+  const p = await panel({ width: 390, height: 700 }, { updateDraft: (params) => (drafts.push(params), { accepted: true }) })
+  await openFirst(p, cfg, t0)
+  await p.event(cfg, t0, "tab_radio", "tab-radio", { value: 1 })
+  const off = (await p.render(cfg, t0)).scene as unknown as { values: Record<string, number>; strings: Record<string, string> }
+  assert.equal(off.values.fill, 0)
+  assert.match(off.strings.fillLine, /SAT_NAME and PROP_MODE/)
+  await p.event(cfg, t0, "fill", "fill", { value: 1 })
+  assert.equal(drafts.length, 1)
+  const patch = drafts[0].patch as { refs: { type: string; ref: string }[] }
+  assert.deepEqual(patch.refs[0], { type: "pota", ref: "US-1234" }, "the contact's own refs stay")
+  assert.equal(patch.refs[1].type, "satellite")
+  assert.match(patch.refs[1].ref, /^(AO-7|FO-29)\//)
+  assert.equal(drafts[0].operationUuid, "op-1")
+  const on = await p.render(cfg, t0)
+  assert.equal((on.scene as unknown as { values: Record<string, number> }).values.fill, 1)
+  assert.ok(on.triggers!.includes("qso"), "a new contact wakes the panel")
+  await p.event(cfg, t0, "fill", "fill", { value: 0 })
+  assert.ok(!(await p.render(cfg, t0)).triggers!.includes("qso"))
 })
