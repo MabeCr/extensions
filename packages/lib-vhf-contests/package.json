@@ -19,6 +19,7 @@
     "src"
   ],
   "scripts": {
+    "test": "node --import ../../scripts/sdk-node-resolve.mjs --experimental-strip-types --test 'src/**/*.test.ts'",
     "typecheck": "tsc --noEmit"
   },
   "//dependencies": [
@@ -27,6 +28,7 @@
     "and the build rewrites to a host lookup."
   ],
   "dependencies": {
+    "@ham2k/lib-contest-exchange": "^0.1.0",
     "@ham2k/lib-format-tools": "^1.0.0"
   },
   "//peerDependencies": [

@@ -7,5 +7,9 @@
   "parkActivatedOne": "1 park activated",
   "parkActivatedMany": "{{formatted}} parks activated",
   "parkWorkedOne": "1 park worked",
-  "parkWorkedMany": "{{formatted}} parks worked"
+  "parkWorkedMany": "{{formatted}} parks worked",
+  "operatedFromHeading": "Operated from",
+  "parksWorkedHeading": "Parks worked",
+  "parkQsos": "{{park}} ({{formatted}})",
+  "parkQsosOf": "{{park}} ({{formatted}} of {{needed}})"
 }

@@ -139,6 +139,23 @@ test('the summary is titled as the operation is, over arithmetic that multiplies
   assert.equal((summary.arrlDx.longSummary as string).split('\n')[0], '3 QSOs, 9 pts × 3 mults')
 })
 
+test('each band line carries its QSOs, points and multipliers, in band order', () => {
+  // Multipliers count per band here, so a band line that leaves out its points
+  // or its mults hides what that band added to the score; and 160m worked last
+  // still reads first.
+  const { sheet } = run([qso('DL1ABC', '20m'), qso('JA1ABC', '20m'), qso('PY2ABC', '40m'), qso('DL1ABC', '40m'), qso('G3ABC', '160m')])
+  const summary = ARRLDXScorer.summarizeScore({ scoresheet: sheet, operation: usOperation, ref: cwRef, scope: 'operation' }, ctx)
+  const lines = (summary.arrlDx.longSummary as string).split('\n').filter((line) => line.startsWith('**'))
+  assert.deepEqual(lines, [
+    '**160m**: 1 QSO, 3 pts, 1 mult',
+    '**80m**: —',
+    '**40m**: 2 QSOs, 6 pts, 2 mults',
+    '**20m**: 2 QSOs, 6 pts, 2 mults',
+    '**15m**: —',
+    '**10m**: —',
+  ])
+})
+
 test('offers no per-day summary', () => {
   // Multipliers are counted across the whole contest, so a day's share of the
   // score is not a number ARRL DX defines.

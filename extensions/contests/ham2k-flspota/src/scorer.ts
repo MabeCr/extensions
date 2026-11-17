@@ -21,11 +21,12 @@
 //     occupies carries our park. An activation at two listed parks at once is a
 //     contact in both logs, and scores in both.
 //   * A STATION AT SEVERAL PARKS IS SEVERAL CONTACTS. §7.4 asks for "the
-//     recommended POTA log format", which writes one record per park hunted, and
-//     those records are what the sponsor counts. So an activator's contact is
-//     worth one per park of theirs — every POTA park, not only Florida's, since
-//     the record is written either way. A park they had not given us in a slot
-//     reopens it, which is also how a rover is worked again.
+//     recommended POTA log format"; this file carries POTA's fields as one
+//     record per park hunted, and those records are what the sponsor counts.
+//     So an activator's contact is worth one per park of theirs — every POTA
+//     park, not only Florida's, since the record is written either way. A park
+//     they had not given us in a slot reopens it, which is also how a rover is
+//     worked again.
 //
 // A hunter's contact is one the sponsor finds in an ACTIVATOR's log, so for an
 // operation in no listed park only contacts with listed parks count.
@@ -36,9 +37,11 @@
 
 import { fmtInteger } from "@ham2k/lib-format-tools"
 import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
-import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
+import type { ContestScorer, HookContext, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
+import { bandBreakdown } from "@ham2k/lib-contest-summary"
 
 import { BANDS, POINTS_PER_PARK_ACTIVATED, QSOS_TO_ACTIVATE, pointsForMode, slotMode } from "./event.ts"
+import { tFor } from "./i18n.ts"
 import { isListed, isOurRef, ourParks, theirParks } from "./parks.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
@@ -56,7 +59,12 @@ export type FlspotaScoresheet = {
   activated: Record<string, number>
   /// Listed park worked → contacts with it.
   hunted: Record<string, number>
+  /// band → contacts on it.
   bands: Record<string, number>
+  /// band → the points its contacts scored. Optional: a checkpoint cached
+  /// before it existed has none, and its band lines show no points until the
+  /// log is rescored.
+  bandPoints?: Record<string, number>
   qsos: number
   points: number
   dupes: number
@@ -72,7 +80,7 @@ export function parksActivated(sheet: FlspotaScoresheet): number {
 
 export const FlspotaScorer: ContestScorer<FlspotaScoresheet> = {
   startScoresheet(): FlspotaScoresheet {
-    return { worked: {}, activated: {}, hunted: {}, bands: {}, qsos: 0, points: 0, dupes: 0 }
+    return { worked: {}, activated: {}, hunted: {}, bands: {}, bandPoints: {}, qsos: 0, points: 0, dupes: 0 }
   },
 
   // Mutates and returns the given scoresheet — see ContestScorer.scoreQso.
@@ -136,6 +144,8 @@ export const FlspotaScorer: ContestScorer<FlspotaScoresheet> = {
     for (const park of newToSlot) if (isListed(park)) sheet.hunted[park] = (sheet.hunted[park] ?? 0) + 1
     const value = contacts * pointsForMode(mode)
     sheet.bands[band] = (sheet.bands[band] ?? 0) + contacts
+    sheet.bandPoints ??= {}
+    sheet.bandPoints[band] = (sheet.bandPoints[band] ?? 0) + value
     sheet.qsos += contacts
     sheet.points += value
 
@@ -157,29 +167,37 @@ export const FlspotaScorer: ContestScorer<FlspotaScoresheet> = {
       title: manifest.shortName,
       total: sheet.points + bonus,
       arithmetic: contestArithmetic({ qsos: sheet.qsos, points: sheet.points, bonus }, ctx),
-      detail: longSummaryFor(sheet),
+      detail: longSummaryFor(sheet, ctx),
       extra: { points: sheet.points, qsos: sheet.qsos },
     }, ctx)
   },
 }
 
-function longSummaryFor(sheet: FlspotaScoresheet): string {
+function longSummaryFor(sheet: FlspotaScoresheet, ctx: HookContext): string {
+  const t = tFor(ctx)
   const parts: string[] = []
 
   const ours = Object.entries(sheet.activated)
   if (ours.length > 0) {
-    parts.push(`### Activating\n${ours
-      .map(([park, contacts]) => `${park} (${fmtInteger(contacts)}${contacts < QSOS_TO_ACTIVATE ? ` of ${QSOS_TO_ACTIVATE}` : ''})`)
+    parts.push(`### ${t('activatingHeading')}\n${ours
+      .map(([park, contacts]) => (contacts < QSOS_TO_ACTIVATE
+        ? t('parkContactsOf', { park, formatted: fmtInteger(contacts), needed: fmtInteger(QSOS_TO_ACTIVATE) })
+        : t('parkContacts', { park, formatted: fmtInteger(contacts) })))
       .join(' • ')}`)
   }
 
   const theirs = Object.keys(sheet.hunted).sort()
-  if (theirs.length > 0) parts.push(`### ${fmtInteger(theirs.length)} Florida parks worked\n${theirs.join(' • ')}`)
-
-  const bands = Object.keys(sheet.bands).sort()
-  if (bands.length > 0) {
-    parts.push(bands.map((band) => `**${band}**: ${fmtInteger(sheet.bands[band])} QSOs`).join('\n'))
+  if (theirs.length > 0) {
+    const heading = theirs.length === 1 ? t('parksWorkedOne') : t('parksWorkedMany', { formatted: fmtInteger(theirs.length) })
+    parts.push(`### ${heading}\n${theirs.join(' • ')}`)
   }
+
+  // No multipliers on the band lines: "There are no multipliers" (§6.1).
+  const bands = bandBreakdown(
+    Object.entries(sheet.bands).map(([band, qsos]) => ({ band, qsos, points: sheet.bandPoints?.[band] })),
+    ctx,
+  )
+  if (bands) parts.push(bands)
 
   return parts.join('\n\n')
 }

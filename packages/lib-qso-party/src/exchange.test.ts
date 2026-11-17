@@ -174,7 +174,7 @@ test('an exchange nobody typed falls back to what we know of where they are', ()
   assert.equal(rows[0][5].trim(), 'NJ')
 
   // Nothing known: still nothing claimed. A contact we cannot place is one the
-  // scorer refuses (`missingExchange`), and a file may not claim what the
+  // scorer holds back (`incomplete`), and a file may not claim what the
   // scoreboard declined.
   assert.equal(defaultTheirLocation(ny, qso()), '')
   assert.deepEqual(cabrilloRowsFor(ny, qso(), operation('ALB'), 'N0DEV'), [])
@@ -534,6 +534,16 @@ test('the whole file: a header a checker can read, and one line per contact', ()
   const qsos = lines.filter((line) => line.startsWith('QSO:'))
   assert.equal(qsos.length, 1)
   assert.match(qsos[0], /^QSO: 14000 CW 2026-10-17 1430 N0DEV\s+599\s+ALB\s+K1ABC\s+599\s+ERI\s*$/)
+})
+
+test('the file names whoever logged, and the station owner after them', () => {
+  // The log is the authority on who operated: the app's own operator call
+  // alone would drop every other operator of a multi-op entry.
+  const op = { uuid: 'op', stationCall: 'N0DEV', local: { operatorCall: 'K1ABC' }, ownerCall: 'n1own', refs: [{ type: NY.refType, location: 'ALB' }] }
+  const at = (minute: number, operatorCall: string) =>
+    ({ ...qso({ location: 'ERI' }), our: { call: 'N0DEV', operatorCall }, startAtMillis: Date.UTC(2026, 9, 17, 14, minute) })
+  const lines = cabrilloFor(ny, op, [at(30, 'K1ABC'), at(31, 'W2DEF')]).split('\n')
+  assert.ok(lines.includes('OPERATORS: K1ABC W2DEF @N1OWN'))
 })
 
 test('a party that exchanges sections offers, and files, sections', () => {

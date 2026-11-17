@@ -2,7 +2,7 @@
   "key": "ham2k-custom-text",
   "name": "Custom Text Panel",
   "shortName": "Text",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "api": 1,
   "description": "A pane holding whatever you write in it — notes, a sked list, a band plan — in markdown",
   "category": "dashboard",

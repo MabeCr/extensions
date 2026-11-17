@@ -20,6 +20,7 @@
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 import { rulesNote, withRules } from "@ham2k/lib-contest-rules"
+import { cabrilloOperators } from "@ham2k/lib-contest-station"
 import { stampedExchange } from "@ham2k/lib-contest-exchange"
 import { type WeeklySession, relevanceFor, searchMatches } from "@ham2k/lib-weekly-contest"
 import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
@@ -189,8 +190,7 @@ const ActivityHook = {
     if (!refOfType(operation, TYPE)) return []
 
     const t = tFor(ctx)
-    const call = str(((qso?.their as Record<string, JSONValue>) ?? {}).call).toUpperCase()
-    const prior = await priorAgeGroup(ctx, call)
+    const prior = await priorAgeGroup(ctx, operation, qso)
 
     return [
       {
@@ -228,7 +228,7 @@ const ActivityHook = {
     // gets the age group the entry field would have suggested.
     const prior = qsoRef !== undefined && 'ageGroup' in qsoRef
       ? ''
-      : await priorAgeGroup(ctx, str(((qso.their as Record<string, JSONValue>) ?? {}).call).toUpperCase())
+      : await priorAgeGroup(ctx, operation, qso)
     const received = stampedExchange(TYPE, qsoRef, {
       // "YOUTH" becomes "Y"; anything unrecognized is kept as typed, for the
       // scorer to flag rather than for this hook to lose.
@@ -369,8 +369,9 @@ const ExportHook = {
           ...cabrilloCategories(opRef),
           ['NAME', profile.name],
           ['EMAIL', profile.email],
-          // Single operator only: the one at the microphone.
-          ['OPERATORS', str((operation.local as Record<string, JSONValue>)?.operatorCall) || ourCall],
+          // Whoever the log says operated: the rules allow one, and a guest at
+          // someone else's station names its owner after them.
+          ['OPERATORS', cabrilloOperators(operation, args.qsos)],
           ['GRID-LOCATOR', str(operation.grid)],
         ],
         // After freq, mode, date and time, the N1MM file's columns: call,

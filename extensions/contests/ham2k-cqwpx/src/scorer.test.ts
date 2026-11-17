@@ -195,13 +195,41 @@ describe('CQWPXScorer summary', () => {
   it('breaks out each band and lists the prefixes worked', () => {
     const { summary } = run([{ call: 'DL1ABC', band: '20m' }, { call: 'JA1ABC', band: '40m' }])
     const detail = summary.cqwpx.longSummary as string
-    assert.match(detail, /\*\*20m\*\*: 1 QSOs, 3 pts/)
-    assert.match(detail, /\*\*40m\*\*: 1 QSOs, 6 pts/)
+    assert.match(detail, /\*\*20m\*\*: 1 QSO, 3 pts, 1 prefix/)
+    assert.match(detail, /\*\*40m\*\*: 1 QSO, 6 pts, 1 prefix/)
     assert.match(detail, /\*\*15m\*\*: —/)
     // The prefix list is the point of WPX — it tells the operator whether the
     // station calling is worth working.
-    assert.match(detail, /2 prefixes/)
+    assert.match(detail, /\*\*2 prefixes\*\*/)
     assert.match(detail, /DL1 JA1/)
+  })
+
+  it('credits each prefix to the band it was first worked on, so the band lines add up', () => {
+    // A prefix counts once for the whole contest. Counting it on every band it
+    // turns up on would show 40m and 20m with a prefix each when the log holds
+    // one; and 40m worked after 20m still reads above it.
+    const { summary } = run([
+      { call: 'DL1ABC', band: '20m' }, { call: 'DL1XYZ', band: '40m' }, { call: 'JA1ABC', band: '40m' }, { call: 'DL1ABC', band: '40m' },
+    ])
+    const lines = (summary.cqwpx.longSummary as string).split('\n').filter((line) => /^\*\*\d+m\*\*/.test(line))
+    assert.deepEqual(lines, [
+      '**160m**: —',
+      '**80m**: —',
+      '**40m**: 3 QSOs, 18 pts, 1 prefix',
+      '**20m**: 1 QSO, 3 pts, 1 prefix',
+      '**15m**: —',
+      '**10m**: —',
+    ])
+    assert.equal(summary.cqwpx.mults, 2)
+  })
+
+  it('reads a checkpoint scored before band multipliers were kept', () => {
+    // A cached scoresheet from an older version has no per-band multiplier
+    // record; the summary must still render rather than throw.
+    const { sheet } = run([{ call: 'DL1ABC', band: '20m' }])
+    delete sheet.bandFirstMults
+    const summary = CQWPXScorer.summarizeScore({ scoresheet: sheet, operation: {}, scope: 'operation' }, { locale: 'en' } as never)
+    assert.match(summary.cqwpx.longSummary as string, /\*\*20m\*\*: 1 QSO, 3 pts, 0 prefixes/)
   })
 
   // The title must name the contest as the operation's title does, mode and

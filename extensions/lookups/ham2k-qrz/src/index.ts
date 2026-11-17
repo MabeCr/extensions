@@ -23,7 +23,6 @@ import {
 
 import manifest from "../manifest.json" with { type: "json" }
 
-const AGENT = 'polo-next-spike'
 const API = 'https://xmldata.qrz.com/xml/current/'
 
 defineExtension({
@@ -72,7 +71,7 @@ defineExtension({
             return t('noEmailLogin')
           }
           try {
-            const key = await testLogin(username, password)
+            const key = await testLogin(username, password, ctx.appName)
             const lookupUrl = `${API}?s=${key};callsign=${encodeURIComponent(username)}`
             const lookupResponse = await host.fetch(lookupUrl)
             const error = tag(lookupResponse.body, 'Error')
@@ -110,8 +109,11 @@ function utcOffset(offset: number | undefined): string | undefined {
   return offset > 0 ? `GMT+${offset}` : `GMT${offset}`
 }
 
-async function testLogin(username: string, password: string): Promise<string> {
-  const url = `${API}?username=${encodeURIComponent(username)};password=${encodeURIComponent(password)};agent=${AGENT}`
+/// QRZ asks every client to name itself in `agent`: the app the operator runs,
+/// as the extension guidelines ask, never a name of the extension's own.
+async function testLogin(username: string, password: string, appName: string | undefined): Promise<string> {
+  const agent = encodeURIComponent(appName ?? 'Ham2K Logger')
+  const url = `${API}?username=${encodeURIComponent(username)};password=${encodeURIComponent(password)};agent=${agent}`
   const response = await host.fetch(url)
   const key = tag(response.body, 'Key')
   if (!key) throw new Error(tag(response.body, 'Error') ?? `HTTP ${response.status}`)
@@ -123,7 +125,7 @@ async function login(ctx: HookContext): Promise<string> {
   const password = ctx.account?.credentials?.password
   if (!username || !password) throw new Error('QRZ credentials not configured')
 
-  const key = await testLogin(username, password)
+  const key = await testLogin(username, password, ctx.appName)
   await host.setAccountSession({ sessionKey: key })
   return key
 }

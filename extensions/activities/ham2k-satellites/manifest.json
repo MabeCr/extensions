@@ -2,7 +2,7 @@
   "key": "ham2k-satellites",
   "name": "Satellite Operations",
   "shortName": "Sats",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Log contacts through satellites",
   "category": "activity",
   "icon": "satellite-variant",

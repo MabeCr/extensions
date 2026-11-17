@@ -2,7 +2,7 @@
   "key": "ki2d-hamalert",
   "name": "KI2D’s HamAlert",
   "shortName": "HamAlert",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "api": 1,
   "description": "Your HamAlert alerts on the spots board, marked with a red bell, and a station you work is muted in HamAlert for a while",
   "category": "spots",

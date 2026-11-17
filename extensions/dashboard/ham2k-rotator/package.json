@@ -1,0 +1,24 @@
+{
+  "name": "@ham2k/ext-ham2k-rotator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Where the antenna points, on a map of the world centred on the station",
+  "author": "Sebastian Delmont <sd@ham2k.com>",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test 'src/*.test.ts'",
+    "pack": "npm run build && h2kext-pack build --force-name"
+  },
+  "devDependencies": {
+    "@ham2k/extension-sdk": "^1.23.0",
+    "@ham2k/extension-tools": "^1.23.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "esbuild": "^0.25.5"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

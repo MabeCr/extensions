@@ -1,0 +1,42 @@
+{
+  "key": "ham2k-offline-calls-all",
+  "name": "Offline Lookups: All Callsigns",
+  "version": "0.1.1",
+  "api": 22,
+  "description": "Callsign lookups with no internet connection, for every public callsign in the US, Canada, Germany and Norway. Needs about 225 MB of storage",
+  "category": "lookup",
+  "keywords": [
+    "callsign",
+    "lookup",
+    "offline",
+    "ham2k"
+  ],
+  "hooks": [
+    "dataFile",
+    "lookup"
+  ],
+  "domains": [
+    "services.ham2k.net"
+  ],
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  },
+  "translations": {
+    "es": {
+      "name": "Búsquedas sin conexión: todos los indicativos",
+      "description": "Búsquedas de indicativos sin conexión a internet, para todos los indicativos públicos de EE. UU., Canadá, Alemania y Noruega. Necesita unos 225 MB de almacenamiento",
+      "keywords": [
+        "indicativo",
+        "búsqueda",
+        "sin conexión"
+      ]
+    }
+  }
+}

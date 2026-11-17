@@ -246,11 +246,11 @@ const ExportHook = {
       filename: parkFilename(args.operation, args.qsos ?? [], park),
       selectedByDefault: true,
       // The PARK's segments, not the event's: this file claims one park, so it
-      // covers the stretch that park was being activated — the same slice
-      // POTA's own export takes.
+      // covers the stretch that park was being activated, where POTA's own
+      // export covers every park the operation activated.
       refType: POTA_ACTIVATION,
-      // Above POTA's own per-park export, which under compact file names
-      // produces this very filename. The panel generates in list order and the
+      // Above POTA's own export, which for a single park under compact file
+      // names produces this very filename. The panel generates in list order and the
       // core renames the SECOND file of a colliding pair, so being first is what
       // keeps the name the sponsor demands on the file that has to have it.
       priority: 1,

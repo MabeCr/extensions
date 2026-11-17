@@ -16,7 +16,7 @@
 // logging (parks.ts), and the rules are in scorer.ts.
 //
 // What the sponsor wants back is their web form — three counts, which the score
-// panel states under the form's own names — and an ADIF "for checking purposes",
+// panel's arithmetic states — and an ADIF "for checking purposes",
 // reading `MY_SIG_INFO` and `SIG_INFO`. Those are POTA's field names, written
 // here from the parks the score counts rather than by POTA's hook (adif.ts).
 //

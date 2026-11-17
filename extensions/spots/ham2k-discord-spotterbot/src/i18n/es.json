@@ -1,0 +1,21 @@
+{
+  "settingsTitle": "Spotterbot de Discord",
+  "accountLabel": "Cuenta de Discord",
+  "accountDescription": "Auto-spots a los servidores de Discord que usan Spotterbot",
+  "serversLabel": "Publicar mis spots en",
+  "signedInAs": "✅ Conectado a Discord como **{{name}}**",
+  "notSignedIn": "Primero conecta tu cuenta de Discord en los ajustes de Spotterbot",
+  "signInFirst": "Conecta tu cuenta de Discord para ver los servidores donde puedes publicar spots.",
+  "signInAgain": "Spotterbot ya no acepta tu sesión. Vuelve a conectar tu cuenta de Discord en los ajustes de Spotterbot",
+  "noServers": "Ninguno de tus servidores de Discord acepta tus spots todavía. Pide a los administradores de un servidor que agreguen Spotterbot y te den un rol que pueda publicar",
+  "allSkipped": "Ninguno de tus servidores de Discord acepta este spot. La mayoría solo publica spots QRV y QRT",
+  "rejected": "Spotterbot respondió HTTP {{status}}",
+  "unreachable": "No se pudo contactar a Spotterbot: {{error}}",
+  "refused": "Spotterbot rechazó el spot: {{error}}",
+  "unchecked": "Discord no indicó si puedes publicar en {{count}} servidor(es); el spot se volverá a intentar",
+  "allSwitchedOff": "Todos los servidores de Discord donde puedes publicar están desactivados",
+  "offline": "Conéctate a internet para ver los servidores donde puedes publicar spots.",
+  "serversUnchecked": "Discord no respondió por {{count}} servidor(es), que pueden faltar arriba. Vuelve a abrir esta página en un momento.",
+  "helpTitle": "Cómo funciona",
+  "helpText": "Los administradores de un servidor agregan Spotterbot desde [spotterbot.ham2k.net](https://spotterbot.ham2k.net) y ejecutan allí `/spotterbot setup` para elegir el canal de los spots y un rol a mencionar, y luego `/spotterbot allow` para cada rol cuyos miembros pueden publicar.\n\nCuando conectas tu cuenta de Discord, cada auto-spot que envías llega también a cada servidor donde tienes uno de esos roles. Los servidores que desactives arriba no lo reciben. Un servidor que empiece a usar Spotterbot más adelante queda activado.\n\nLos mismos interruptores están en [spotterbot.ham2k.net](https://spotterbot.ham2k.net/account), donde inicias sesión con Discord. Los administradores de un servidor también pueden cambiar allí su configuración.\n\nCada servidor decide qué spots acepta. La mayoría solo publica los spots cuyo comentario empieza con **QRV** o **QRT**, para que el canal sepa cuándo sales al aire y cuándo terminas, no cada re-spot."
+}

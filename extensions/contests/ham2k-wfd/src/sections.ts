@@ -25,6 +25,8 @@
 // counts Yukon inside `TER`, so YT is not a valid exchange here and is not
 // listed. 14 RAC sections, not 15.
 
+import { annotateCallAgainstCountryFile } from "@ham2k/extension-sdk"
+
 /// The 71 ARRL sections, code to full name.
 export const ARRL_SECTIONS: Record<string, string> = {
   AK: "Alaska",
@@ -349,4 +351,43 @@ export const PREFIX_TO_LOCATION: Record<string, string> = {
   VY1: "TER",
   VY2: "PE",
   XE: "MX",
+}
+
+/// The state or province a section lies in, where the two codes differ: what
+/// a contact's State is filled with. A section whose code IS its state's or
+/// province's (`CT`, `OH`, `AB`, `QC`) is absent, answered by the code itself.
+///
+/// DUPLICATED from `lib-qso-party`'s table, on purpose (see the top of this
+/// file). `PR` and `VI` are in no state, and `TER` spans three territories, so
+/// none of them is here: they fill nothing (see `stateForSection`).
+export const STATE_FOR_SECTION: Record<string, string> = {
+  EB: "CA", EMA: "MA", ENY: "NY", EPA: "PA", EWA: "WA", GH: "ON", LAX: "CA",
+  MDC: "MD", NFL: "FL", NLI: "NY", NNJ: "NJ", NNY: "NY", NTX: "TX", ONE: "ON",
+  ONN: "ON", ONS: "ON", ORG: "CA", PAC: "HI", SB: "CA", SCV: "CA", SDG: "CA",
+  SF: "CA", SFL: "FL", SJV: "CA", SNJ: "NJ", STX: "TX", SV: "CA", WCF: "FL",
+  WMA: "MA", WNY: "NY", WPA: "PA", WTX: "TX", WWA: "WA",
+}
+
+/// The sections that place a station in no one state or province: Puerto Rico
+/// and the Virgin Islands are in none, and Territories is Yukon, the Northwest
+/// Territories or Nunavut, with nothing to say which.
+const NO_STATE_SECTIONS = new Set(['PR', 'VI', 'TER'])
+
+/// The state or province a station's [section] puts them in, for the
+/// contact's State; '' where it names none, `MX` and `DX` included. [current]
+/// is the State already on the contact, kept where the section agrees with it
+/// but maps elsewhere: MDC is Maryland AND DC, so a DC station keeps DC.
+///
+/// PAC is Hawaii and the Pacific possessions, so it is Hawaii only for a call
+/// the country file doesn't place in a possession (KH0 to KH5, KH8, KH9, each
+/// its own entity). It reads Hawaii's own calls as `KH6`, or as plain `K`
+/// for some (`AH6`), so the test is "not a possession" rather than "is KH6".
+export function stateForSection(section: string, call: string, current: string): string {
+  if (!(section in ALL_SECTIONS) || NO_STATE_SECTIONS.has(section)) return ''
+  if (section === 'MDC' && current === 'DC') return 'DC'
+  if (section === 'PAC') {
+    const entity = String(annotateCallAgainstCountryFile(call).entityPrefix ?? '')
+    if (entity.startsWith('KH') && entity !== 'KH6') return ''
+  }
+  return STATE_FOR_SECTION[section] ?? section
 }

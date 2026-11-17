@@ -10,6 +10,7 @@
 // `node --test`.
 
 import type { HookContext, JSONValue } from "@ham2k/extension-sdk"
+import { priorSent } from "@ham2k/lib-contest-exchange"
 
 export const TYPE = 'wwsac'
 
@@ -56,22 +57,23 @@ export function ourAgeGroup(ref: Record<string, JSONValue> | undefined): AgeGrou
   return ageGroupOf(ref?.ourAgeGroup)
 }
 
-/// The age group [call] sent in the newest WWSAC contact that recorded one —
-/// this session's or any earlier week's. An age group belongs to the
-/// operator, not the station's location, so an earlier week still holds, and
-/// it is a SUGGESTION the operator confirms by ear.
+/// The age group [qso]'s station sent in the newest WWSAC contact that
+/// recorded one — this operation's first, else any earlier week's. An age
+/// group belongs to the operator, not the station's location, so an earlier
+/// week still holds, and it is a SUGGESTION the operator confirms by ear.
 ///
 /// A host that cannot answer costs the suggestion, never the contact.
-export async function priorAgeGroup(ctx: HookContext, call: string): Promise<AgeGroup | ''> {
-  if (!call || !ctx.getHistoryForCall) return ''
-  try {
-    const history = await ctx.getHistoryForCall(call, { refType: TYPE, limit: 10 })
-    for (const qso of history ?? []) {
-      const group = ageGroupOf(refOfType(qso, TYPE)?.ageGroup)
-      if (group) return group
-    }
-  } catch (e) {
-    console.warn(`[${TYPE}] call history unavailable, no earlier age group offered:`, e)
-  }
-  return ''
+export async function priorAgeGroup(
+  ctx: HookContext,
+  operation: Record<string, JSONValue>,
+  qso: Record<string, JSONValue> | undefined,
+): Promise<AgeGroup | ''> {
+  const { here, before } = await priorSent(ctx, {
+    call: str(((qso?.their as Record<string, JSONValue>) ?? {}).call),
+    operation,
+    qso,
+    refTypes: [TYPE],
+    read: { ageGroup: (ref) => ageGroupOf(ref.ageGroup) },
+  })
+  return (here.ageGroup || before.ageGroup) as AgeGroup | ''
 }

@@ -16,8 +16,6 @@
   "operator_CHECKLOG": "Checklog",
   "power_LOW": "Low (100 W)",
   "power_QRP": "QRP (5 W)",
-  "operatorsLabel": "Operators",
-  "operatorsPlaceholder": "e.g. K1ABC W2DEF (multi-op)",
   "rulesLink": "[Official rules](https://ncjweb.com/naqp/)",
   "nameLabel": "Name",
   "locationLabel": "Loc",

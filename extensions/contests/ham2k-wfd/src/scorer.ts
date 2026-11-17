@@ -21,6 +21,7 @@
 import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
 import type { ContestScorer, HookContext, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
 import { fmtInteger } from "@ham2k/lib-format-tools"
+import { bandBreakdown, sectionsChecklist } from "@ham2k/lib-contest-summary"
 import { superModeForMode } from "@ham2k/lib-operation-data"
 
 import { ABBREVIATED_SECTION_NAMES, ARRL_SECTIONS, RAC_SECTIONS } from "./sections.ts"
@@ -68,6 +69,9 @@ export type WFDScoresheet = {
   /// `stateparks` does it.
   multiplier: number
   byMode: Record<string, number>
+  /// band → its contacts and points. Optional: a checkpoint cached before it
+  /// existed has none, and reads as no bands until the log is rescored.
+  bands?: Record<string, { qsos: number, points: number }>
   /// Three tallies because the rules count them three ways.
   /// Sections already worked, so the notice fires on news rather than on every
   /// contact — matching how newBand/newMode behave.
@@ -139,6 +143,7 @@ export const WFDScorer: ContestScorer<WFDScoresheet> = {
       qsoCount: 0,
       multiplier: 1,
       byMode: {},
+      bands: {},
       sectionsSeen: {},
       arrlSections: {},
       racSections: {},
@@ -213,6 +218,13 @@ export const WFDScorer: ContestScorer<WFDScoresheet> = {
     sheet.qsoPoints += value
     if (section) sheet.sectionsSeen[section] = true
     sheet.byMode[superMode] = (sheet.byMode[superMode] ?? 0) + 1
+    // A contact with no band has no line to sit on; it still counts above.
+    if (band) {
+      sheet.bands ??= {}
+      const bandTally = sheet.bands[band] ??= { qsos: 0, points: 0 }
+      bandTally.qsos += 1
+      bandTally.points += value
+    }
 
     if (section) {
       if (ARRL_SECTIONS[section]) {
@@ -236,11 +248,6 @@ export const WFDScorer: ContestScorer<WFDScoresheet> = {
     const multiplier = scoresheet.multiplier
     const points = scoresheet.qsoPoints
 
-    const sections =
-      Object.keys(scoresheet.arrlSections).length +
-      Object.keys(scoresheet.racSections).length +
-      Object.keys(scoresheet.otherSections).length
-
     return contestSummary(
       {
         // Saved postcard sections are keyed by it.
@@ -250,9 +257,35 @@ export const WFDScorer: ContestScorer<WFDScoresheet> = {
         title: contestTitle(),
         total: points * multiplier,
         arithmetic: contestArithmetic({ qsos: scoresheet.qsoCount, points, mults: multiplier }, ctx),
-        detail: t('scoreSections', { sections: fmtInteger(sections) }),
+        // The checklist, then where the points came from: per band, then per
+        // mode, since a CW or digital contact is worth twice a phone one.
+        // No multipliers on the band lines — the multiplier here is the whole
+        // entry's, not something worked.
+        detail: [
+          sectionsChecklist(
+            [...Object.keys(scoresheet.arrlSections), ...Object.keys(scoresheet.racSections), ...Object.keys(scoresheet.otherSections)],
+            ctx,
+          ),
+          bandBreakdown(Object.entries(scoresheet.bands ?? {}).map(([band, { qsos, points }]) => ({ band, qsos, points })), ctx),
+          modeLine(scoresheet, t),
+        ]
+          .filter((block) => block)
+          .join('\n\n'),
+        grid: true,
       },
       ctx,
     )
   },
+}
+
+/// Field Day's modes, in the order the rules' points table lists them.
+const MODE_KEYS: [string, string][] = [['CW', 'modeCW'], ['PHONE', 'modePhone'], ['DATA', 'modeData']]
+
+/// `CW 12 · Phone 30 · Digital 4` — contacts per mode. A contact with no mode
+/// is in the totals but on no mode.
+function modeLine(sheet: WFDScoresheet, t: (key: string, args?: Record<string, string>) => string): string {
+  return MODE_KEYS
+    .filter(([mode]) => sheet.byMode[mode])
+    .map(([mode, key]) => `${t(key)} ${fmtInteger(sheet.byMode[mode])}`)
+    .join(' · ')
 }

@@ -36,10 +36,6 @@
   "power_HIGH": "Alta (1500 W)",
   "power_LOW": "Baja (100 W)",
   "power_QRP": "QRP (5 W)",
-  "operatorsLabel": "Operadores",
-  "operatorsPlaceholder": "ej. K1ABC W2DEF (multi-operador)",
-  "clubLabel": "Club",
-  "clubPlaceholder": "Nombre completo del club — en blanco usa el de tu perfil",
   "ourSectionLabel": "Nuestra sección ARRL / RAC",
   "ourSectionPlaceholder": "Solo EE. UU. y Canadá, p. ej. ENY, ONS"
 }

@@ -208,3 +208,12 @@ test('each Cabrillo row names the park its own segment was activating', async ()
   const ourParks = result.content.split('\n').filter((line) => line.startsWith('QSO:')).map((line) => line.split(/\s+/)[6])
   assert.deepEqual(ourParks, ['ADA', 'ADA', 'HOC', 'HOC'])
 })
+
+test("OPERATORS names whoever logged, then the operation's station owner", async () => {
+  // The log is the authority on who operated: without the derivation a
+  // multi-op log names only this device's operator.
+  const withOwner = { ...operation, ownerCall: 'n1own' }
+  const qsos = ([0, 1].map((i) => ({ uuid: `q${i}`, their: { call: 'W1AW' }, band: '40m', mode: 'CW', freq: 7035, startAtMillis: Date.UTC(2026, 8, 12, 14, i), refs: [{ type: TYPE, park: 'ALU' }] })) as Record<string, unknown>[]).map((qso, i) => ({ ...qso, our: { call: 'N0DEV', operatorCall: i === 0 ? 'K1ABC' : 'W2DEF' } }))
+  const { content } = (await oh.runHook('export', 'generateExport', { operation: withOwner, qsos, exportType: 'ohspota-cabrillo' })) as { content: string }
+  assert.ok(content.includes('\nOPERATORS: K1ABC W2DEF @N1OWN\n'), content)
+})

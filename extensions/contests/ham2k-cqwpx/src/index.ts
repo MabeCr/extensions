@@ -14,6 +14,7 @@
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 import { rulesNotes, withRules } from "@ham2k/lib-contest-rules"
+import { cabrilloClub, cabrilloOperators, clubField } from "@ham2k/lib-contest-station"
 import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -37,8 +38,7 @@ import {
   cabrilloCategories,
   cabrilloLocation,
   contestRules,
-  declaredClub,
-  declaredOperators,
+  transmitterColumns,
 } from "./entry.ts"
 import { tFor } from "./i18n.ts"
 import { MODES, nearestMode, nextContestDate, relevanceFor } from "./schedule.ts"
@@ -72,17 +72,17 @@ function serial(qso: Record<string, JSONValue>, field: string): string {
   return /^\d+$/.test(digits) ? String(parseInt(digits, 10)) : ''
 }
 
-/// The operator's name, email and club from their profile, for the Cabrillo
-/// header. All optional and free-form in the profile, so each may be ''. A
-/// host that cannot answer costs these lines, never the log itself.
-async function profileDetails(): Promise<{ name: string; email: string; club: string }> {
+/// The operator's name and email from their profile, for the Cabrillo header.
+/// Both optional and free-form in the profile, so each may be ''. A host that
+/// cannot answer costs these lines, never the log itself.
+async function profileDetails(): Promise<{ name: string; email: string }> {
   try {
     const settings = (await host.getSettings()) as Record<string, JSONValue> | undefined
     const line = (value: JSONValue | undefined) => str(value).replace(/\s+/g, ' ').trim()
-    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail), club: line(settings?.operatorClub) }
+    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail) }
   } catch (e) {
-    console.warn(`[cqwpx] profile settings unavailable, exporting without name, email and profile club:`, e)
-    return { name: '', email: '', club: '' }
+    console.warn(`[cqwpx] profile settings unavailable, exporting without name and email:`, e)
+    return { name: '', email: '' }
   }
 }
 
@@ -178,21 +178,7 @@ const ActivityHook = {
               // The entry we are making, for the Cabrillo header. Each starts
               // undeclared: see entry.ts.
               ...entrySelects(t),
-              {
-                type: 'field',
-                fieldType: 'text',
-                key: 'operators',
-                label: t('operatorsLabel'),
-                placeholder: t('operatorsPlaceholder'),
-                uppercase: true,
-              },
-              {
-                type: 'field',
-                fieldType: 'text',
-                key: 'club',
-                label: t('clubLabel'),
-                placeholder: t('clubPlaceholder'),
-              },
+              await clubField(ctx, 'cqwpx'),
             ],
           },
         },
@@ -407,18 +393,16 @@ const ExportHook = {
     if (args.exportType === `${TYPE}-cabrillo`) {
       const opRef = refOfType(operation, TYPE)
       const profile = await profileDetails()
+      const transmitter = transmitterColumns(opRef, args.qsos)
       const content = qsonToCabrillo(args.qsos, {
         headers: [
           ['CONTEST', mode ? `CQ-WPX-${mode}` : 'CQ-WPX'],
           ['CALLSIGN', ourCall],
           ['LOCATION', cabrilloLocation(ourCall, opRef?.location)],
           ...cabrilloCategories(opRef),
-          // The calls listed at setup — required for a multi-operator entry —
-          // else the app's own operator call.
-          ['OPERATORS', declaredOperators(opRef) || str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          ['OPERATORS', cabrilloOperators(operation, args.qsos)],
           ['GRID-LOCATOR', str(operation.grid)],
-          // The club typed at setup, else the profile's.
-          ['CLUB', declaredClub(opRef) || profile.club],
+          ['CLUB', await cabrilloClub(opRef, 'cqwpx')],
           ['NAME', profile.name],
           ['EMAIL', profile.email],
         ],
@@ -429,6 +413,7 @@ const ExportHook = {
           str(((qso.their as Record<string, JSONValue>) ?? {}).call) || '-',
           reportFor(qso, 'their'),
           serial(qso, 'theirSerial') || '0',
+          ...transmitter(qso),
         ],
       })
       return {

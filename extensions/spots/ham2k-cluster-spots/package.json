@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-cluster-spots",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "private": true,
   "description": "Ham2K Logger extension: spots read from, and posted to, the DX cluster",
   "author": "Sebastian Delmont <sd@ham2k.com>",
@@ -20,12 +20,12 @@
     "@ham2k/qso-parties": "^0.1.0"
   },
   "//devDependencies": [
-    "The cluster host calls arrived in SDK 0.12.12 (extension API 10), and",
-    "extension-tools 0.13.0 is the first packer that takes an API 10 manifest."
+    "Spots pushed onto the board (`host.spots`) and cluster subscriptions",
+    "that name the lines they want arrived in SDK 1.21 (extension API 21)."
   ],
   "devDependencies": {
-    "@ham2k/extension-sdk": "^1.12.0",
-    "@ham2k/extension-tools": "^1.12.0",
+    "@ham2k/extension-sdk": "^1.21.0",
+    "@ham2k/extension-tools": "^1.21.0",
     "esbuild": "^0.25.5"
   },
   "engines": {

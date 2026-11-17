@@ -26,6 +26,7 @@
 //     Since the contest is single-mode anyway, a duplicate here is simply the
 //     same station on the same band.
 
+import { bandBreakdown } from "@ham2k/lib-contest-summary"
 import { fmtInteger } from "@ham2k/lib-format-tools"
 import { ADIF_MODE_FOR_SUBMODE, superModeForMode } from "@ham2k/lib-operation-data"
 import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
@@ -153,7 +154,7 @@ export const NAQPScorer: ContestScorer<NAQPScoresheet> = {
     // NA entity is a multiplier, so an exchange this contest doesn't recognize
     // is a multiplier going unclaimed — and a typo the operator can still fix,
     // if they're told. polo tinted the field red for the same reason.
-    if (!location) score.alerts = ['missingExchange']
+    if (!location) score.incomplete = ['naqp/location']
     else if (!isMultiplier(location) && location !== 'DX') score.alerts = ['invalidExchange']
 
     return { scoresheet: base, score }
@@ -182,7 +183,14 @@ export const NAQPScorer: ContestScorer<NAQPScoresheet> = {
           },
           ctx,
         ),
-        detail: bandBreakdown(scoresheet),
+        // A point a QSO, so a band's points are its QSOs.
+        detail: bandBreakdown(
+          Object.entries(scoresheet.bands).map(([band, qsos]) => ({
+            band, qsos, points: qsos, mults: Object.keys(scoresheet.bandMults[band] ?? {}).length,
+          })),
+          ctx,
+          { bands: validBandsFor(str(ref?.mode)) },
+        ),
         extra: { points: scoresheet.points, mults: keys.length, qsos: scoresheet.qsos },
       },
       ctx,
@@ -194,15 +202,4 @@ export const NAQPScorer: ContestScorer<NAQPScoresheet> = {
 /// summary repeats.
 export function contestTitle(ref: Record<string, JSONValue> | undefined): string {
   return ['NAQP', str(ref?.mode)].filter((x) => x).join(' ')
-}
-
-/// The per-band table a contester actually reads while operating.
-function bandBreakdown(sheet: NAQPScoresheet): string {
-  return VALID_BANDS.map((band) => {
-    const qsos = sheet.bands[band] ?? 0
-    const mults = Object.keys(sheet.bandMults[band] ?? {}).length
-    return qsos === 0 && mults === 0
-      ? `**${band}**: —`
-      : `**${band}**: ${fmtInteger(qsos)} QSOs, ${fmtInteger(mults)} mults`
-  }).join('\n')
 }

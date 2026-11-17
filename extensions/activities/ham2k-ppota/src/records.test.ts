@@ -45,6 +45,21 @@ const CSV_ROW = {
   activation_count: "0",
 }
 
+/// The export's first line, as ppota.app serves it today: a byte-order mark,
+/// every field quoted, separated by semicolons.
+const CSV_HEADER_LINE =
+  '\uFEFF"code";"name";"country";"country_code";"region";"locality";"type";"latitude";"longitude";"grid";"activated";"activation_count"'
+
+test("the declared delimiter splits the export's header into the fields the mapper reads", () => {
+  const hook = ppota.hooks.find((h) => h.category === "dataFile" && h.key === "ham2k-ppota-all-references")
+  const delimiter = (hook?.hook.csvOptions as { delimiter?: string } | undefined)?.delimiter
+  assert.ok(delimiter, "the data file must declare its delimiter")
+  const headers = CSV_HEADER_LINE.replace(/^\uFEFF/, "").split(delimiter).map((h) => h.replace(/^"|"$/g, ""))
+  for (const field of ["code", "name", "country_code", "region", "locality", "latitude", "longitude", "grid"]) {
+    assert.ok(headers.includes(field), `"${field}" is not a column when split on ${JSON.stringify(delimiter)}`)
+  }
+})
+
 test("the list files each reference under its country, with its place and grid", () => {
   const [village] = mapCsv([CSV_ROW])
   assert.equal(village.key, "PPAR-0333")

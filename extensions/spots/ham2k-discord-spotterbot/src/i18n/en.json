@@ -1,0 +1,21 @@
+{
+  "settingsTitle": "Discord Spotterbot",
+  "accountLabel": "Discord account",
+  "accountDescription": "Self-spots to Discord servers that use Spotterbot",
+  "serversLabel": "Post my spots to",
+  "signedInAs": "✅ Signed in to Discord as **{{name}}**",
+  "notSignedIn": "Sign in to Discord in Spotterbot's settings first",
+  "signInFirst": "Sign in with Discord to see the servers you can post spots to.",
+  "signInAgain": "Spotterbot no longer accepts your sign-in. Sign in to Discord again in Spotterbot's settings",
+  "noServers": "None of your Discord servers take spots from you yet. Ask a server's admins to add Spotterbot and give you a role that may post",
+  "allSkipped": "None of your Discord servers take this spot. Most only post QRV and QRT spots",
+  "rejected": "Spotterbot answered HTTP {{status}}",
+  "unreachable": "Spotterbot could not be reached: {{error}}",
+  "refused": "Spotterbot refused the spot: {{error}}",
+  "unchecked": "Discord didn't say whether you can post in {{count}} server(s); the spot will be tried again",
+  "allSwitchedOff": "Every Discord server you can post in is switched off",
+  "offline": "Connect to the internet to see the servers you can post spots to.",
+  "serversUnchecked": "Discord didn't answer for {{count}} server(s), which may be missing above. Reopen this page in a moment.",
+  "helpTitle": "How it works",
+  "helpText": "A server's admins add Spotterbot from [spotterbot.ham2k.net](https://spotterbot.ham2k.net) and run `/spotterbot setup` there to choose the channel spots go to and a role to mention, then `/spotterbot allow` for each role whose members may post.\n\nOnce you sign in with Discord, every self-spot you send also goes to each server where you hold one of those roles. Servers you switch off above don't get it. A server that starts using Spotterbot later is switched on.\n\nThe same switches are on [spotterbot.ham2k.net](https://spotterbot.ham2k.net/account), where you sign in with Discord. A server's admins can change its setup there too.\n\nEach server decides which spots it takes. Most post only the spots whose comment starts with **QRV** or **QRT**, so the channel hears when you go on and off the air, not every respot."
+}

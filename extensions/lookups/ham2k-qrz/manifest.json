@@ -1,7 +1,7 @@
 {
   "key": "ham2k-qrz",
   "name": "QRZ.com Callsign Lookups",
-  "version": "0.2.2",
+  "version": "0.2.5",
   "api": 1,
   "description": "Looks up callsign details with a QRZ.com account",
   "category": "lookup",
@@ -15,8 +15,7 @@
     "lookup"
   ],
   "domains": [
-    "xmldata.qrz.com",
-    "logbook.qrz.com"
+    "*.qrz.com"
   ],
   "sharedDependencies": {
     "@ham2k/lib-callsigns": "^1.0.0",

@@ -1,0 +1,32 @@
+{
+  "name": "@ham2k/ext-offline-calls-all",
+  "version": "0.1.1",
+  "private": true,
+  "description": "Ham2K Logger extension: Offline Lookups, all callsigns",
+  "author": "Sebastian Delmont <sd@ham2k.com>",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "pack": "npm run build && h2kext-pack build --force-name"
+  },
+  "dependencies": {
+    "@ham2k/lib-ham2k-calls": "^0.1.0"
+  },
+  "//devDependencies": [
+    "The libraries the host carries are DECLARED in manifest.json and rewritten",
+    "to the host's instance at build time, so the bundle needs none of them",
+    "installed. This extension ships no unit tests (its library carries them),",
+    "so nothing else resolves a bare specifier here either — only the",
+    "toolchain that builds the bundle."
+  ],
+  "devDependencies": {
+    "@ham2k/extension-sdk": "^1.22.0",
+    "@ham2k/extension-tools": "^1.22.0",
+    "esbuild": "^0.25.5"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

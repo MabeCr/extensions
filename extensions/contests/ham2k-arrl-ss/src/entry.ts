@@ -100,17 +100,3 @@ export function cabrilloCategories(ref: Record<string, JSONValue> | undefined): 
     ['CATEGORY-STATION', entry === 'SCHOOL' ? 'SCHOOL' : undefined],
   ]
 }
-
-/// `OPERATORS`: the calls typed at setup, uppercased and space-separated —
-/// "Multioperator logs must include the complete list of operators" (ELOG.4).
-/// Empty when nothing was typed, so the caller can fall back to the app's
-/// operator call.
-export function declaredOperators(ref: Record<string, JSONValue> | undefined): string {
-  const typed = typeof ref?.operators === 'string' ? ref.operators : ''
-  return typed.toUpperCase().split(/[\s,;]+/).filter((call) => call).join(' ')
-}
-
-/// `CLUB`: the club name as typed, on one line.
-export function declaredClub(ref: Record<string, JSONValue> | undefined): string {
-  return typeof ref?.club === 'string' ? ref.club.replace(/\s+/g, ' ').trim() : ''
-}

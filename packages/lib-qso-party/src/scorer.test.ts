@@ -187,7 +187,9 @@ test('a log kept under the old combined extension scores the exchange its contac
 })
 
 test('an exchange that was never sent, and one that means nothing', () => {
-  assert.deepEqual(run([qso({ location: '' })]).scores[0].alerts, ['missingExchange'])
+  // Never sent: held back on the location field while the station can still
+  // be asked. Sent but meaningless: logged, and said so.
+  assert.deepEqual(run([qso({ location: '' })]).scores[0].incomplete, [`${NY.refType}/location`])
   assert.deepEqual(run([qso({ location: 'ZZZ', entityPrefix: '' })]).scores[0].alerts, ['invalidExchange'])
 })
 
@@ -747,7 +749,7 @@ test('a party may say which state a county belongs to', () => {
 test('a DX station is resolved from the callsign when nothing else knows', () => {
   // An imported or synced QSO carries no lookup at all, so without the country
   // file the entity is unknown: the exchange resolves to nothing, the contact
-  // scores `missingExchange`, and the DX multiplier the party publishes is never
+  // is held back as `incomplete`, and the DX multiplier the party publishes is never
   // claimed.
   registerEntityLookup((call) => (call?.toUpperCase().startsWith('DL') ? 'DL' : undefined))
   try {
@@ -777,10 +779,10 @@ test('the band table counts CW, phone and digital apart, per band and in total',
   // between 15m and 20m — and every mode named on every line, zeros included,
   // so an unworked mode reads as "0", not as an absence.
   assert.deepEqual(lines.filter((line) => /^\*\*(\d+m|All bands)\*\*/.test(line)), [
-    '**160m**: 1 CW, 0 SSB, 0 Digital, **1 total**',
-    '**40m**: 1 CW, 1 SSB, 0 Digital, **2 total**',
-    '**20m**: 0 CW, 0 SSB, 1 Digital, **1 total**',
-    '**All bands**: 2 CW, 1 SSB, 1 Digital, **4 total**',
+    '**160m**: 1 QSO, 2 pts, 0 mults • 1 CW, 0 SSB, 0 Digital',
+    '**40m**: 2 QSOs, 3 pts, 3 mults • 1 CW, 1 SSB, 0 Digital',
+    '**20m**: 1 QSO, 3 pts, 1 mult • 0 CW, 0 SSB, 1 Digital',
+    '**All bands**: 4 QSOs, 8 pts, 4 mults • 2 CW, 1 SSB, 1 Digital',
   ])
 })
 
@@ -788,7 +790,61 @@ test('the band table separates digital from CW even where the party scores them 
   // DE folds data into CW for multipliers and dupes; the table still tells the
   // operator which of the two they worked.
   const { summary } = run([qso({ mode: 'FT8', location: 'NJ', refType: DE.refType })], { params: DE, ourLocation: 'NDE' })
-  assert.match(summary().longSummary as string, /\*\*20m\*\*: 0 CW, 0 SSB, 1 Digital, \*\*1 total\*\*/)
+  assert.match(summary().longSummary as string, /\*\*20m\*\*: 1 QSO, 1 pt, 1 mult • 0 CW, 0 SSB, 1 Digital/)
+})
+
+// A multiplier counted on every band it was worked on would add up past the
+// multiplier in the arithmetic; counted nowhere, the bands would add up short.
+// Each sits on the band that first credited it, and a band's points are its
+// contacts' alone, so the bands add up to the totals above them.
+test('the band lines add up to the points and multipliers', () => {
+  const { sheet, summary } = run([
+    qso({ band: '40m', location: 'ERI' }),
+    qso({ call: 'K2DEF', band: '20m', location: 'ERI' }),
+    qso({ call: 'K3GHI', band: '20m', mode: 'SSB', location: 'NJ' }),
+    qso({ call: 'K4JKL', band: '80m', location: 'ERI/CHA' }),
+    qso({ call: 'K5MNO', band: '80m', location: 'ERI' }),
+  ])
+  const lines = (summary().longSummary as string).split('\n').filter((line) => /^\*\*\d+m\*\*/.test(line))
+  const total = (noun: string) => lines
+    .map((line) => Number(new RegExp(`(\\d+) ${noun}s?\\b`).exec(line)?.[1] ?? NaN))
+    .reduce((sum, n) => sum + n, 0)
+  assert.equal(lines.length, 3)
+  assert.equal(total('pt'), sheet.points)
+  assert.equal(total('mult'), multsOf({ sheet } as ReturnType<typeof run>))
+  assert.equal(summary().mults, multsOf({ sheet } as ReturnType<typeof run>))
+})
+
+// A sheet checkpointed before bands kept points and multipliers holds only
+// what was scored since; a column that cannot add up is left out, not shown short.
+test('a sheet cached without per-band points or multipliers leaves those columns out', () => {
+  const { sheet, summary } = run([qso({ location: 'ERI' }), qso({ call: 'K2DEF', band: '40m', location: 'CHA' })])
+  delete sheet.bandPoints
+  delete sheet.bandMults
+  const lines = (summary().longSummary as string).split('\n')
+  assert.ok(lines.includes('**40m**: 1 QSO • 1 CW, 0 SSB, 0 Digital'), lines.join('\n'))
+})
+
+// "1 Canadian Provinces", "1 Rare Counties", "0 of 1 Bonus Stations": a count
+// whose noun ignores it.
+test('every heading agrees with its count', () => {
+  const params: QsoPartyParams = { ...NY, rareCountyMultipliers: { ERI: 2 }, bonusStations: { K2BON: 100 } }
+  const { summary } = run([
+    qso({ location: 'ERI' }),
+    qso({ call: 'VE3ABC', location: 'ON', entityPrefix: 'VE' }),
+    qso({ call: 'K2DEF', location: 'NJ' }),
+    qso({ call: 'K2DEF', location: 'NJ' }),
+  ], { params })
+  const detail = summary().longSummary as string
+  assert.match(detail, /^### 1 Canadian Province$/m)
+  assert.match(detail, /^### 1 Rare County$/m)
+  assert.match(detail, /^### 0 of 1 Bonus Station$/m)
+  assert.match(detail, /^### 3 QSOs$/m)
+  assert.match(detail, /^1 duplicate$/m)
+  // The sponsor's own word agrees too.
+  const districts = run([qso({ location: 'ERI' })], { params: { ...params, labelForCounties: 'Districts' } })
+  assert.match(districts.summary().longSummary as string, /^### 1 Rare District$/m)
+  assert.match(districts.summary().longSummary as string, /^### 1 QSO$/m)
 })
 
 test('Arizona multiplies by county per band and mode outside, by state per mode inside', () => {
@@ -1019,7 +1075,7 @@ test('a code inside the party is refused as a copied exchange, and only as one',
 
 test('the chase list shows every code the scoresheet counted, reachable or not', () => {
   // The heading counts `sheet.states` while the list comes from the party's
-  // table, so a code the sheet holds and the table hides prints "1 US States"
+  // table, so a code the sheet holds and the table hides prints "1 US State"
   // above a line with nothing struck in it. An in-party station's own state
   // reaches the sheet exactly that way, from an exchange never copied.
   const { sheet, summary } = run([qso({ refType: MD.refType, location: 'ALLE' })], { params: MD, ourLocation: 'ANNE' })

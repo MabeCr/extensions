@@ -9,8 +9,9 @@
 // `defineExtension` at import time, so nothing in it is reachable from
 // `node --test`.
 
-import type { JSONValue } from "@ham2k/extension-sdk"
+import type { HookContext, JSONValue } from "@ham2k/extension-sdk"
 import { annotateCallAgainstCountryFile } from "@ham2k/extension-sdk"
+import { priorSent } from "@ham2k/lib-contest-exchange"
 
 /// Member number or QTH, as typed: digits for a member, letters otherwise.
 /// Anchored and matched case-insensitively by the core.
@@ -28,6 +29,27 @@ export function firstName(value: JSONValue | undefined): string {
 
 export function normalizeNumber(value: JSONValue | undefined): string {
   return String(value ?? '').trim().toUpperCase()
+}
+
+/// The name to offer [qso]'s station in [operation]: the one it sent earlier
+/// in THIS operation, else in an earlier CWT, else the lookup's — a member
+/// sends the name they go by, not the lookup's "Hiram Percy Maxim".
+///
+/// A host that cannot answer costs the log's history, never the lookup's guess.
+export async function suggestedName(
+  ctx: HookContext,
+  operation: Record<string, JSONValue>,
+  qso: Record<string, JSONValue> | undefined,
+): Promise<string> {
+  const their = (qso?.their as Record<string, JSONValue>) ?? {}
+  const { here, before } = await priorSent(ctx, {
+    call: str(their.call),
+    operation,
+    qso,
+    refTypes: ['cwt'],
+    read: { name: (ref) => firstName(ref.name) },
+  })
+  return here.name || before.name || guessedName(their)
 }
 
 /// The name to offer for this station, from whatever the lookup resolved.

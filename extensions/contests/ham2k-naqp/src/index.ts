@@ -14,7 +14,8 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
-import { stampedExchange } from "@ham2k/lib-contest-exchange"
+import { cabrilloOperators } from "@ham2k/lib-contest-station"
+import { needsGuess, stampedExchange, theirStateFields, withTheirFields } from "@ham2k/lib-contest-exchange"
 import { adifForExport, annotateCallAgainstCountryFile, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -29,19 +30,15 @@ import type {
   RefLink,
   SuggestArgs,
 } from "@ham2k/extension-sdk"
-import { LOCATION_PATTERN, VALID_LOCATIONS, firstName, guessedLocation, guessedName, normalizeLocation, ourExchange } from "@ham2k/lib-naqp-exchange"
+import { LOCATION_PATTERN, VALID_LOCATIONS, firstName, normalizeLocation, ourExchange } from "@ham2k/lib-naqp-exchange"
 
+import { type Exchange, TYPE, suggestedExchange } from "./exchange.ts"
 import { tFor } from "./i18n.ts"
-import { OPERATOR_CLASSES, POWER_CLASSES, cabrilloCategories, declaredOperators } from "./entry.ts"
+import { OPERATOR_CLASSES, POWER_CLASSES, cabrilloCategories } from "./entry.ts"
 import { MODES, nearestMode, nextContestDate, relevanceFor } from "./schedule.ts"
 import { NAQPScorer, contestTitle } from "./scorer.ts"
 
 import manifest from "../manifest.json" with { type: "json" }
-
-/// The ref type an operation stores. It is data in the operator's log, so it
-/// stays what the app's own built-in wrote there whatever this package is
-/// called: the manifest key names the package, `TYPE` names the activation.
-const TYPE = 'naqp'
 
 /// What a search has to contain to offer these contests. Matched as "does the
 /// alias contain what was typed", so "qso party" finds them among the state
@@ -166,14 +163,6 @@ const ActivityHook = {
               // The entry we are making, for the Cabrillo header. Each starts
               // undeclared: see entry.ts.
               ...entrySelects(t),
-              {
-                type: 'field',
-                fieldType: 'text',
-                key: 'operators',
-                label: t('operatorsLabel'),
-                placeholder: t('operatorsPlaceholder'),
-                uppercase: true,
-              },
               { type: 'markdown', text: t('rulesLink') },
             ],
           },
@@ -199,9 +188,7 @@ const ActivityHook = {
     if (!refOfType(args.operation, TYPE)) return []
 
     const t = tFor(ctx)
-    const their = ((args.qso?.their as Record<string, JSONValue>) ?? {})
-    const name = guessedName(their)
-    const location = guessedLocation(their)
+    const { name, location } = await suggestedExchange(ctx, args.operation, args.qso)
 
     return [
       {
@@ -243,20 +230,26 @@ const ActivityHook = {
   /// Records what was received, and mirrors it where the rest of the app can
   /// see it (docs/design/contests.md §8).
   ///
-  /// Both halves of the exchange are guessable — the name from the callsign
-  /// lookup, the location from the country file — so both are written onto the
-  /// ref as data of record rather than left for the export to re-derive. The
-  /// typed value always wins.
+  /// Both halves of the exchange are guessable (`suggestedExchange`), so both
+  /// are written onto the ref as data of record rather than left for the
+  /// export to re-derive. The typed value always wins.
   async processQsoBeforeSave(
     args: { qso: Record<string, JSONValue>; operation: Record<string, JSONValue> },
-    _ctx: HookContext,
+    ctx: HookContext,
   ): Promise<Record<string, JSONValue> | null> {
     if (!refOfType(args.operation, TYPE)) return null
-    const their = ((args.qso.their as Record<string, JSONValue>) ?? {})
-    return stampedExchange(TYPE, refOfType(args.qso, TYPE), {
-      name: { read: firstName, guess: () => guessedName(their) },
-      location: { read: normalizeLocation, guess: () => guessedLocation(their) },
-    }, ({ name, location }) => [name, location].filter((x) => x).join(' '))
+    const qsoRef = refOfType(args.qso, TYPE)
+    const guess: Exchange = needsGuess(qsoRef, ['name', 'location'])
+      ? await suggestedExchange(ctx, args.operation, args.qso)
+      : { name: '', location: '' }
+    let theirLocation = ''
+    const received = stampedExchange(TYPE, qsoRef, {
+      name: { read: firstName, guess: () => guess.name },
+      location: { read: normalizeLocation, guess: () => guess.location },
+    }, ({ name, location }) => ((theirLocation = location), [name, location].filter((x) => x).join(' ')))
+    // The location also reaches `their.state`, where ADIF's STATE, the SOTA
+    // and POTA files and Worked All States read it.
+    return withTheirFields(received, theirStateFields(args.qso.their as Record<string, JSONValue> | undefined, theirLocation))
   },
 }
 
@@ -401,8 +394,7 @@ const ExportHook = {
         headers: [
           ['CONTEST', mode ? `NAQP-${mode}` : 'NAQP'],
           ['CALLSIGN', ourCall],
-          // The calls listed at setup, else the app's own operator call.
-          ['OPERATORS', declaredOperators(opRef) || str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          ['OPERATORS', cabrilloOperators(operation, args.qsos)],
           ['LOCATION', ours.location],
           ...cabrilloCategories(opRef),
           ['GRID-LOCATOR', str(operation.grid)],

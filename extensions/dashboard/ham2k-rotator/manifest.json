@@ -1,0 +1,33 @@
+{
+  "key": "ham2k-rotator",
+  "name": "Rotator",
+  "version": "0.1.0",
+  "api": 23,
+  "description": "Where the antenna points, on a map of the world centred on the station: click the map to turn the rotator, scroll to zoom, drag the station to pan",
+  "category": "dashboard",
+  "icon": "compass-outline",
+  "accentColor": "#4C6EF5",
+  "keywords": [
+    "rotator",
+    "antenna",
+    "beam",
+    "heading",
+    "azimuth",
+    "map",
+    "panel"
+  ],
+  "hooks": [
+    "panel"
+  ],
+  "requiresRadioWrite": true,
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  }
+}

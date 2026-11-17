@@ -42,10 +42,6 @@
   "power_LOW": "Low (100 W)",
   "power_QRP": "QRP (5 W)",
   "overlay_YOUTH": "Youth (25 or younger)",
-  "operatorsLabel": "Operators",
-  "operatorsPlaceholder": "e.g. K1ABC W2DEF (multi-op)",
-  "clubLabel": "Club",
-  "clubPlaceholder": "Full club name — leave blank to use your profile's",
   "ourSectionLabel": "Our ARRL / RAC Section",
   "ourSectionPlaceholder": "US and Canada only, e.g. ENY, ONS"
 }

@@ -13,6 +13,7 @@
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 import { NO_RESTRICTIONS, rulesNote } from "@ham2k/lib-contest-rules"
+import { cabrilloClub, cabrilloOperators, clubField } from "@ham2k/lib-contest-station"
 import {
   adifForExport,
   contestScorer,
@@ -34,7 +35,7 @@ import type {
   TitleSuggestion,
 } from "@ham2k/extension-sdk"
 
-import { ALL_SECTIONS, CALL_AREA_FOR_SECTION, PREFIX_TO_LOCATION } from "./sections.ts"
+import { ALL_SECTIONS, CALL_AREA_FOR_SECTION, PREFIX_TO_LOCATION, stateForSection } from "./sections.ts"
 import { CLAIMED_BONUS_KEYS, CLASS_REGEX, FDScorer, TYPE, contestTitle, refOfType } from "./scorer.ts"
 import { fieldDayDate, nextRunningYear, relevanceFor } from "./schedule.ts"
 import { tFor } from "./i18n.ts"
@@ -126,31 +127,17 @@ async function ourSectionDefault(): Promise<string> {
   return lastKnownSection
 }
 
-/// `OPERATORS`: the calls typed at setup, uppercased and space-separated, with
-/// an `@station` kept as written. Empty when nothing was typed, so the caller
-/// can fall back to the app's operator call.
-function declaredOperators(ref: Record<string, JSONValue> | undefined): string {
-  const typed = typeof ref?.operators === 'string' ? ref.operators : ''
-  return typed.toUpperCase().split(/[\s,;]+/).filter((call) => call).join(' ')
-}
-
-/// `CLUB`: the club or group name as typed, on one line. Aggregate club
-/// scoring needs it spelled exactly as every member's entry spells it.
-function declaredClub(ref: Record<string, JSONValue> | undefined): string {
-  return typeof ref?.club === 'string' ? ref.club.replace(/\s+/g, ' ').trim() : ''
-}
-
-/// The operator's name, email and club from their profile, for the Cabrillo
-/// header. All optional and free-form in the profile, so each may be ''. A
-/// host that cannot answer costs these lines, never the log itself.
-async function profileDetails(): Promise<{ name: string; email: string; club: string }> {
+/// The operator's name and email from their profile, for the Cabrillo header.
+/// Both optional and free-form in the profile, so each may be ''. A host that
+/// cannot answer costs these lines, never the log itself.
+async function profileDetails(): Promise<{ name: string; email: string }> {
   try {
     const settings = (await host.getSettings()) as Record<string, JSONValue> | undefined
     const line = (value: JSONValue | undefined) => str(value).replace(/\s+/g, ' ').trim()
-    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail), club: line(settings?.operatorClub) }
+    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail) }
   } catch (e) {
-    console.warn(`[fd] profile settings unavailable, exporting without name, email and profile club:`, e)
-    return { name: '', email: '', club: '' }
+    console.warn(`[fd] profile settings unavailable, exporting without name and email:`, e)
+    return { name: '', email: '' }
   }
 }
 
@@ -234,21 +221,7 @@ const ActivityHook = {
                   { value: 'GENERATOR', label: t('powerGenerator') },
                 ],
               },
-              {
-                type: 'field',
-                fieldType: 'text',
-                key: 'operators',
-                label: t('operatorsLabel'),
-                placeholder: t('operatorsPlaceholder'),
-                uppercase: true,
-              },
-              {
-                type: 'field',
-                fieldType: 'text',
-                key: 'club',
-                label: t('clubLabel'),
-                placeholder: t('clubPlaceholder'),
-              },
+              await clubField(ctx, 'fd', { label: t('clubLabel'), placeholder: t('clubPlaceholder') }),
 
               { type: 'header', title: t('bonusesHeader') },
               // HaLo totals these; it does not submit them. Worth saying, because
@@ -366,7 +339,16 @@ const ActivityHook = {
     if (!exchange) return null
 
     const their = ((args.qso.their as Record<string, JSONValue>) ?? {})
-    return { their: { ...their, exchange } as unknown as JSONValue }
+    // Their State, from the section they sent: a station's own word on where
+    // it is, ahead of whatever a lookup guessed. Re-filled on every save, so
+    // fixing a mistyped section fixes the State with it. `MX`, `DX` and a
+    // section that names no single state leave the State alone.
+    const section = str(qsoRef?.location).toUpperCase()
+    const state = stateForSection(section, str(their.call), str(their.state).toUpperCase())
+    // And their ARRL Section itself, where ADIF's ARRL_SECT reads it in the
+    // files this extension does not write: a POTA activation's, a SOTA one's.
+    const arrlSection = section in ALL_SECTIONS && section !== their.arrlSection ? { arrlSection: section } : {}
+    return { their: { ...their, exchange, ...(state ? { state } : {}), ...arrlSection } as unknown as JSONValue }
   },
 
   /// Two fields per QSO, both writing to the same ref, which the core folds
@@ -528,11 +510,9 @@ const ExportHook = {
           ['CONTEST', 'ARRL-FD'],
           ['CALLSIGN', ourCall],
           ['LOCATION', ourSection],
-          // The calls listed at setup, else the app's own operator call.
-          ['OPERATORS', declaredOperators(opRef) || str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          ['OPERATORS', cabrilloOperators(operation, args.qsos)],
           ['GRID-LOCATOR', str(operation.grid)],
-          // The club typed at setup, else the profile's.
-          ['CLUB', declaredClub(opRef) || profile.club],
+          ['CLUB', await cabrilloClub(opRef, 'fd')],
           ['NAME', profile.name],
           ['EMAIL', profile.email],
         ],

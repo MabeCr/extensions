@@ -18,5 +18,7 @@
   "notConfigured": "Not configured!",
   "ourExchangeSubtitle": "Sending {{ageGroup}}",
   "adifExport": "ADIF for {{contest}}",
-  "cabrilloExport": "Cabrillo for {{contest}}"
+  "cabrilloExport": "Cabrillo for {{contest}}",
+  "prefixOne": "1 prefix",
+  "prefixMany": "{{formatted}} prefixes"
 }

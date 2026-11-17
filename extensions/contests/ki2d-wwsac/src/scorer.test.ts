@@ -80,7 +80,7 @@ test('SSB on 160 through 6m only', () => {
 test('a missing or unknown age group still counts, as an OM, and says so', () => {
   const { scores, sheet } = run([qso('K1AA', undefined), qso('K2AA', 'XX'), qso('K3AA', 'youth')])
   assert.deepEqual(scores.map((s) => s.value), [1, 1, 10])
-  assert.deepEqual(scores[0].alerts, ['missingExchange'])
+  assert.deepEqual(scores[0].incomplete, ['wwsac/ageGroup'])
   assert.deepEqual(scores[1].alerts, ['invalidExchange'])
   assert.equal(scores[2].alerts, undefined)
   assert.equal(sheet.qsos, 3)
@@ -90,9 +90,19 @@ test('a missing or unknown age group still counts, as an OM, and says so', () =>
 
 test('the summary breaks the score down by band, age group and prefix', () => {
   const { summary } = run([qso('K1AA', 'OM', '20m'), qso('VE3XX', 'YL', '40m')])
-  assert.match(summary.longSummary ?? '', /\*\*40m\*\*: 1 QSOs, 5 pts/)
+  assert.match(summary.longSummary ?? '', /\*\*40m\*\*: 1 QSO, 5 pts, 1 prefix/)
   assert.match(summary.longSummary ?? '', /OM 1 · YL 1/)
   assert.match(summary.longSummary ?? '', /K1 VE3/)
+})
+
+test('each prefix counts on the band it was first worked on, so the band lines add up', () => {
+  // A prefix counts once for the whole session. Crediting it on every band it
+  // turns up on would show more prefixes across the bands than the score
+  // multiplies by; and 40m worked after 20m still reads above it.
+  const { summary } = run([qso('K1AA', 'OM', '20m'), qso('K1BB', 'YL', '40m'), qso('VE3XX', 'Y', '40m'), qso('K1AA', 'OM', '40m')])
+  const lines = (summary.longSummary ?? '').split('\n').filter((line) => /^\*\*\d+m\*\*/.test(line))
+  assert.deepEqual(lines, ['**40m**: 3 QSOs, 16 pts, 1 prefix', '**20m**: 1 QSO, 1 pt, 1 prefix'])
+  assert.match(summary.longSummary ?? '', /\*\*2 prefixes\*\*/)
 })
 
 test('prefixes are CQ WPX\'s', () => {

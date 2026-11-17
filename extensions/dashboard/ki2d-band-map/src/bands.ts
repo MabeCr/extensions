@@ -32,11 +32,17 @@ export function radioModeFor(mode: string | undefined, khz: number, offered: str
   return wanted.find(m => offered.includes(m))
 }
 
+/** FT8 and FT4: every station on the band's one dial frequency, each somewhere in its 3 kHz. */
+const sharedWindow = ['FT8', 'FT4']
+
 /**
  * The stretch of band a spot's signal takes, in Hz either side of its frequency: phone 2.8 kHz on
  * its sideband, AM 2.8 kHz and FM 7 kHz either side, data 3 kHz above the dial, CW 250 Hz around it.
+ * None for FT8 and FT4, whose spots all share the band's window: a bar for each would paint the
+ * same 3 kHz over and over, marking no one station.
  */
 export function spotPassband(mode: string | undefined, khz: number): [number, number] | undefined {
+  if (mode && sharedWindow.includes(mode)) return undefined
   const sideband = mode === 'SSB' ? sidebandFor(khz) : mode
   if (sideband === 'USB') return [0, 2800]
   if (sideband === 'LSB') return [-2800, 0]

@@ -181,3 +181,25 @@ test("offers no per-day summary", () => {
   const { sheet } = run(filler(12), operation)
   assert.deepEqual(FlspotaScorer.summarizeScore({ scoresheet: sheet, operation, ref: OWN_REF, scope: 'day' }, ctx), {})
 })
+
+// CW is worth two here, so a band line counting only contacts would hide where
+// the points came from; and the bands must add up to the base score above them.
+test("each band line carries its points, and no multipliers", () => {
+  const { summary } = run([...filler(2, { band: '40m' }), ...filler(1, { band: '20m', mode: 'CW' }, 'W9')])
+  const text = String(summary().flspota.longSummary)
+  assert.match(text, /^\*\*40m\*\*: 2 QSOs, 2 pts\n\*\*20m\*\*: 1 QSO, 2 pts$/m)
+})
+
+// A count of one reads as one: the heading is built from the count, not a
+// fixed plural.
+test("one Florida park worked is said in the singular", () => {
+  const { summary } = run([qso({ hunting: [PARK_B] })])
+  assert.match(String(summary().flspota.longSummary), /^### 1 Florida park worked$/m)
+})
+
+// Checkpoints cached by an older version have no per-band points.
+test("a scoresheet without per-band points still summarizes its bands", () => {
+  const stale = { ours: true, worked: {}, activated: {}, hunted: {}, bands: { '20m': 2 }, qsos: 2, points: 2, dupes: 0 }
+  const tally = FlspotaScorer.summarizeScore({ scoresheet: stale, operation: operationFor(PARK_A), ref: OWN_REF, scope: 'operation' }, ctx).flspota
+  assert.match(String(tally.longSummary), /^\*\*20m\*\*: 2 QSOs$/m)
+})

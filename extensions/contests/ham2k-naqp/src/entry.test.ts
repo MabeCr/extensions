@@ -9,7 +9,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 
-import { cabrilloCategories, declaredOperators } from "./entry.ts"
+import { cabrilloCategories } from "./entry.ts"
 
 function lines(ref: Record<string, string>) {
   return Object.fromEntries(cabrilloCategories({ type: 'naqp', ...ref }).filter(([, value]) => value))
@@ -56,9 +56,4 @@ test("a value that is not one of the rules' is no claim", () => {
   // No high power, no multi-single: NAQP has neither.
   assert.deepEqual(lines({ mode: 'CW', operator: 'MULTI-ONE', power: 'HIGH' }), { 'CATEGORY-BAND': 'ALL', 'CATEGORY-MODE': 'CW' })
   assert.equal(lines({ mode: 'CW', operator: 'single-op', power: 'qrp' })['CATEGORY-POWER'], 'QRP')
-})
-
-test("operators are listed uppercased and space-separated", () => {
-  assert.equal(declaredOperators({ operators: 'k1abc, w2def;  w3ghi @w3bgn' }), 'K1ABC W2DEF W3GHI @W3BGN')
-  assert.equal(declaredOperators({}), '')
 })

@@ -105,3 +105,12 @@ test("each QSO's ADIF carries the contest and both exchanges", async () => {
     { name: 'SRX_STRING', value: '2 TIM MD' },
   ])
 })
+
+test("OPERATORS names whoever logged, then the operation's station owner", async () => {
+  // The log is the authority on who operated: without the derivation a
+  // multi-op log names only this device's operator.
+  const operation = { ...OPERATION, ownerCall: 'n1own' }
+  const qsos = ([QSOS[0], QSOS[0]] as Record<string, unknown>[]).map((qso, i) => ({ ...qso, our: { call: 'KI2D', operatorCall: i === 0 ? 'K1ABC' : 'W2DEF' } }))
+  const { content } = (await contest.runHook('export', 'generateExport', { operation, qsos, exportType: 'ssb-sprint-cabrillo' })) as { content: string }
+  assert.ok(content.includes('\nOPERATORS: K1ABC W2DEF @N1OWN\n'), content)
+})

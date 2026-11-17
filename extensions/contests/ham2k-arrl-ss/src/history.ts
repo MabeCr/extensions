@@ -14,11 +14,14 @@
 // Separate from index.ts so it can be unit-tested: index.ts calls
 // `defineExtension` at import time.
 
-import type { JSONValue } from "@ham2k/extension-sdk"
+import type { HookContext, JSONValue } from "@ham2k/extension-sdk"
 import { parseCallsign } from "@ham2k/lib-callsigns"
+import { priorSent } from "@ham2k/lib-contest-exchange"
 
+import { normalizeCheck } from "./entry.ts"
 import type { SSMode } from "./schedule.ts"
-import { normalizeSection } from "./exchange.ts"
+import { TYPE } from "./scorer.ts"
+import { lookupSection, normalizeSection } from "./exchange.ts"
 
 /// What a station sent, by call: `[section, check]`, either of them '' when
 /// the file has none that is valid. A tuple rather than an object: the host
@@ -107,4 +110,38 @@ export function historyFor(call: string, mode: JSONValue | undefined): { section
     if (entry?.[1]) return { section: '', check: entry[1] }
   }
   return undefined
+}
+
+/// The check and section to offer [qso]'s station in [operation], from the
+/// first source that has one:
+///
+///   * what it sent earlier in THIS operation — copied minutes ago;
+///   * N1MM's call history ([historyFor]);
+///   * what it sent in an earlier Sweepstakes — its section only where the
+///     lookup's state, when it is a section on its own, agrees: the station
+///     can have moved, and the lookup is the fresher word on where it is.
+///
+/// Nothing else fills either: the lookup only RANKS sections
+/// (`preferredSections`), and nothing but the station knows its check.
+export async function suggestedExchange(
+  ctx: HookContext,
+  operation: Record<string, JSONValue>,
+  qso: Record<string, JSONValue> | undefined,
+  mode: JSONValue | undefined,
+): Promise<{ check: string; section: string }> {
+  const their = (qso?.their as Record<string, JSONValue>) ?? {}
+  const call = typeof their.call === 'string' ? their.call : ''
+  const { here, before } = await priorSent(ctx, {
+    call,
+    operation,
+    qso,
+    refTypes: [TYPE],
+    read: { check: (ref) => normalizeCheck(ref.theirCheck), section: (ref) => normalizeSection(ref.theirSection) },
+  })
+  const file = historyFor(call, mode)
+  const looked = lookupSection(their)
+  return {
+    check: here.check || file?.check || before.check,
+    section: here.section || file?.section || (looked && looked !== before.section ? '' : before.section),
+  }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-simple-contest",
-  "version": "0.2.4",
+  "version": "0.2.6",
   "private": true,
   "description": "Ham2K Logger extension: Generic Simple Contest",
   "author": "Sebastian Delmont <sd@ham2k.com>",
@@ -11,6 +11,10 @@
     "test": "node --import ../../../scripts/sdk-node-resolve.mjs --experimental-strip-types --test 'src/**/*.test.ts'",
     "typecheck": "tsc --noEmit",
     "pack": "npm run build && h2kext-pack build --force-name"
+  },
+  "dependencies": {
+    "@ham2k/lib-contest-station": "^0.1.0",
+    "@ham2k/lib-contest-summary": "^0.1.0"
   },
   "//devDependencies": [
     "The libraries the host carries are DECLARED in manifest.json and rewritten",

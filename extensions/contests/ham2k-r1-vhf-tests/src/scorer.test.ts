@@ -111,7 +111,7 @@ test('a QSO with no recorded exchange grid scores zero, not a guess', () => {
   const ref = { type: 'r1-vhf-tests', ref: 'R1-VHF-145-SEPTEMBER' }
   const { scores } = run([qso('G4ABC', '2m')], operation, ref)
   assert.equal(scores[0].value, 0)
-  assert.deepEqual(scores[0].alerts, ['missingExchange'])
+  assert.deepEqual(scores[0].incomplete, ['r1-vhf-tests/grid'])
 })
 
 test('a band outside the running event is rejected', () => {
@@ -132,6 +132,29 @@ test('the summary is titled by the event, over its arithmetic', () => {
   const tally = R1VHFScorer.summarizeScore({ scoresheet: sheet, operation, ref, scope: 'operation' }, ctx)['r1-vhf-tests']
   assert.equal(tally.label, '145 MHz Test: 112 points')
   assert.equal(tally.longSummary!.split('\n')[0], '1 QSO, 112 pts, 112 km')
+})
+
+// The 6mm factor doubles each kilometre: a band line counting only contacts
+// would hide that its one QSO outscores a busier 2m, and the longest contact is
+// the band's own, not the log's.
+test('each band line carries its points and its longest contact, in band order', () => {
+  const operation = { grid: 'IO91wo' }
+  const ref = { type: 'r1-vhf-tests', ref: 'R1-VHF-SUB1-MARCH' }
+  const { sheet, scores } = run([qso('G4DEF', '6mm', 'IO92wo'), qso('G4ABC', '2m', 'IO92wo'), qso('G4GHI', '2m', 'IO91wn')], operation, ref)
+  const tally = R1VHFScorer.summarizeScore({ scoresheet: sheet, operation, ref, scope: 'operation' }, ctx)['r1-vhf-tests']
+  const twoMetre = (scores[1].value as number) + (scores[2].value as number)
+  assert.equal(
+    tally.longSummary!.split('\n\n')[1],
+    `**2m**: 2 QSOs, ${twoMetre} pts • Longest: 112 km\n**6mm**: 1 QSO, 224 pts • Longest: 112 km`,
+  )
+})
+
+// Checkpoints cached by an older version have no per-band points.
+test('a scoresheet without per-band points still summarizes its bands', () => {
+  const ref = { type: 'r1-vhf-tests', ref: 'R1-VHF-145-SEPTEMBER' }
+  const stale = { worked: {}, bands: { '2m': 1 }, qsos: 1, points: 112, distanceTotal: 112, maxDistance: 112, maxDistancePerBand: { '2m': 112 } }
+  const tally = R1VHFScorer.summarizeScore({ scoresheet: stale, operation: {}, ref, scope: 'operation' }, ctx)['r1-vhf-tests']
+  assert.equal(tally.longSummary!.split('\n\n')[1], '**2m**: 1 QSO • Longest: 112 km')
 })
 
 // The distance total belongs to the whole entry, so a day's share of the score

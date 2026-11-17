@@ -1,6 +1,6 @@
 {
   "name": "@ham2k/ext-qrz",
-  "version": "0.2.2",
+  "version": "0.2.5",
   "private": true,
   "description": "Ham2K Logger extension: QRZ.com callsign lookups",
   "author": "Sebastian Delmont <sd@ham2k.com>",

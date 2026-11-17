@@ -80,9 +80,9 @@ test('a missing or unknown location, or a missing name, still counts, and says s
   const noName = { refs: [{ type: 'pwt', location: 'CT' }] }
   const { scores, summary } = run([qso('W1AW', undefined), qso('W2AW', 'XX'), qso('W3AW', 'CT', '20m', noName)])
   assert.deepEqual(scores.map((s) => s.value), [1, 1, 1])
-  assert.deepEqual(scores[0].alerts, ['missingExchange'])
+  assert.deepEqual(scores[0].incomplete, ['pwt/location'])
   assert.deepEqual(scores[1].alerts, ['invalidExchange'])
-  assert.deepEqual(scores[2].alerts, ['missingExchange'])
+  assert.deepEqual(scores[2].incomplete, ['pwt/name'], 'only what is missing is asked for')
   assert.equal(summary.total, 3)
 })
 
@@ -101,11 +101,18 @@ test('only the half hour counts: 0230 to 0300 UTC', () => {
   assert.equal(summary.total, 9)
 })
 
-test('the summary lists every band, with its contacts and multipliers', () => {
-  const { summary } = run([qso('W1AW', 'CT', '20m'), qso('VE3XYZ', 'ON', '20m'), qso('XE1ABC', 'XE', '40m')])
-  const text = summary.longSummary ?? ''
-  assert.match(text, /\*\*20m\*\*: 2 QSOs, 2 mults/)
-  assert.match(text, /\*\*40m\*\*: 1 QSOs, 1 mults/)
-  assert.match(text, /\*\*160m\*\*: —/)
-  assert.doesNotMatch(text, /10m/)
+test('the summary lists every band, with its contacts, points and multipliers', () => {
+  // The score is posted by hand from these lines, so each band has to carry
+  // its points and multipliers, not only its QSOs; a DX contact is a point but
+  // no multiplier, so the two differ on 20m. 40m sits above 20m whatever order
+  // they were worked in, and 10m — not a band in this contest — never shows.
+  const { summary } = run([qso('W1AW', 'CT', '20m'), qso('DL1ABC', 'DX', '20m'), qso('VE3XYZ', 'ON', '20m'), qso('XE1ABC', 'XE', '40m')])
+  const lines = (summary.longSummary ?? '').split('\n').filter((line) => line.startsWith('**'))
+  assert.deepEqual(lines, [
+    '**160m**: —',
+    '**80m**: —',
+    '**40m**: 1 QSO, 1 pt, 1 mult',
+    '**20m**: 3 QSOs, 3 pts, 2 mults',
+    '**15m**: —',
+  ])
 })

@@ -12,7 +12,8 @@
 // only the manifests change.
 
 export { BAND_MULTIPLIERS } from './bands.ts'
-export { GRID_PATTERN, guessedGrid, trimmedGrid } from './exchange.ts'
+export { GRID_PATTERN, guessedGrid, isRover, suggestedGrid, trimmedGrid } from './exchange.ts'
 export { refOfType, serial, str } from './refs.ts'
+export { theirGridFields } from '@ham2k/lib-contest-exchange'
 export { REG1TEST_BAND, qsonToReg1test } from './reg1test.ts'
 export type { Reg1testOptions, Reg1testQsoFields } from './reg1test.ts'

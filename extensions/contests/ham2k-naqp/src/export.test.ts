@@ -145,9 +145,14 @@ test("the Cabrillo header carries the declared entry as the sponsor's template w
   const undeclared = { uuid: 'op-2', stationCall: 'N0DEV', refs: [{ type: 'naqp', mode: 'SSB' }] }
   assert.deepEqual(await header(undeclared), ['CONTEST: NAQP-SSB', 'CATEGORY-BAND: ALL', 'CATEGORY-MODE: SSB'])
 
-  // The operators listed at setup reach the header; with none listed, the
-  // app's operator call stands in.
-  const multi = { uuid: 'op-3', stationCall: 'N0DEV', local: { operatorCall: 'N0DEV' }, refs: [{ type: 'naqp', mode: 'RTTY', operator: 'MULTI-TWO', operators: 'k1abc, w2def' }] }
-  assert.ok((await exported(multi)).includes('\nOPERATORS: K1ABC W2DEF\n'))
-  assert.ok((await exported({ ...multi, refs: [{ type: 'naqp', mode: 'RTTY' }] })).includes('\nOPERATORS: N0DEV\n'))
+  // The operators are whoever logged, then the operation's own operator, the
+  // station owner closes the line, and a typed list from an older setup is
+  // ignored.
+  const multi = { uuid: 'op-3', stationCall: 'N0DEV', local: { operatorCall: 'N0DEV' }, ownerCall: 'n1own', refs: [{ type: 'naqp', mode: 'RTTY', operator: 'MULTI-TWO', operators: 'N0OLD' }] }
+  const byTwo = QSOS.map((qso, i) => ({ ...qso, our: { call: 'N0DEV', operatorCall: i === 1 ? 'W2DEF' : 'K1ABC' } }))
+  const content = ((await contest.runHook('export', 'generateExport', { operation: multi, qsos: byTwo, exportType: 'naqp-cabrillo' })) as { content: string }).content
+  assert.ok(content.includes('\nOPERATORS: K1ABC W2DEF N0DEV @N1OWN\n'))
+  // A log the station's own holder made names that call.
+  assert.ok((await exported({ ...multi, ownerCall: undefined, refs: [{ type: 'naqp', mode: 'RTTY' }] })).includes('\nOPERATORS: N0DEV\n'))
 })
+

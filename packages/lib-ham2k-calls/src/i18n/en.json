@@ -1,0 +1,6 @@
+{
+  "allName": "All public callsigns (offline)",
+  "allDescription": "Every callsign the US, Canada, Germany and Norway publish, about 980,000 stations. Takes about 225 MB on this device, after a 24 MB download.",
+  "hfName": "Callsigns with HF privileges (offline)",
+  "hfDescription": "Callsigns with HF privileges in the US, Canada, Germany and Norway, about 560,000 stations. Takes about 125 MB on this device, after a 14 MB download."
+}

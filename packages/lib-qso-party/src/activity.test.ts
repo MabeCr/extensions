@@ -468,8 +468,87 @@ test('the exchange is mirrored into the field the rest of the app reads', async 
     qso: { refs: [{ type: CA.refType, location: 'butt', theirSerial: '34', ourSerial: '12' }] },
     operation: operation({ location: 'ALAM' }, CA),
   }, ctx)
-  assert.deepEqual(patch!.their, { exchange: '34 BUTT' })
+  assert.deepEqual(patch!.their, { exchange: '34 BUTT', state: 'CA', county: 'CA,Butte' })
   assert.deepEqual(patch!.our, { exchange: '12 ALAM' })
+})
+
+test("their State is filled from what they sent: a county's state, a state or province, a section's state", async () => {
+  const SECTIONS: QsoPartyParams = { ...NY, sectionsForOutOfState: true }
+  registerEntityLookup((call) => {
+    const upper = call?.toUpperCase() ?? ''
+    if (upper.startsWith('KH2')) return 'KH2'
+    if (upper.startsWith('KH6')) return 'KH6'
+    if (upper.startsWith('G')) return 'G'
+    if (upper.startsWith('VE')) return 'VE'
+    return 'K'
+  })
+  try {
+    const stateFor = async (params: QsoPartyParams, call: string, location: string, state?: string) => {
+      const patch = await qsoPartyActivity(params).processQsoBeforeSave!({
+        qso: { their: { call, ...(state ? { state } : {}) }, refs: [{ type: params.refType, location, theirSerial: '1' }] },
+        operation: operation({ location: Object.keys(params.counties)[0] }, params),
+      }, ctx)
+      return (patch?.their as Record<string, string> | undefined)?.state
+    }
+
+    // A single-state party: a county is the party's state, a county line too.
+    assert.equal(await stateFor(NY, 'W2ABC', 'alb'), 'NY')
+    assert.equal(await stateFor(NY, 'W2ABC', 'ALB/REN'), 'NY')
+    // From outside: a state or province is itself, and replaces a lookup's.
+    assert.equal(await stateFor(NY, 'K6ABC', 'CA'), 'CA')
+    assert.equal(await stateFor(NY, 'K6ABC', 'CA', 'NY'), 'CA')
+    assert.equal(await stateFor(NY, 'K6ABC', 'CA', 'CA'), undefined)
+    assert.equal(await stateFor(NY, 'VE3ABC', 'ON'), 'ON')
+    // A neighbouring party's county carries its state in its first two letters.
+    assert.equal(await stateFor(NY, 'K7ABC', 'ORDES'), 'OR')
+    // The party folds DC into Maryland, but a DC station is still in DC.
+    assert.equal(await stateFor(NY, 'W3ABC', 'DC'), 'DC')
+    assert.equal(await stateFor(NY, 'W3ABC', 'MD'), 'MD')
+    // Nothing: DX, a typo, and the party's own state, which nobody sends.
+    for (const location of ['DX', 'ZZZ', 'NY']) assert.equal(await stateFor(NY, 'K1ABC', location), undefined, location)
+    assert.equal(await stateFor(NY, 'G4ABC', 'DX'), undefined)
+
+    // A party across several states: each county is its own state's, and a
+    // county line across two of them names no single one.
+    assert.equal(await stateFor(NEQP, 'W1ABC', 'MABAR'), 'MA')
+    assert.equal(await stateFor(NEQP, 'W1ABC', 'CTCAP'), 'CT')
+    assert.equal(await stateFor(NEQP, 'W1ABC', 'MAWOR/RIPRO'), undefined)
+
+    // A party that takes sections from outside (PAQP's shape).
+    assert.equal(await stateFor(SECTIONS, 'W1AW', 'CT'), 'CT')
+    assert.equal(await stateFor(SECTIONS, 'K6ABC', 'sdg'), 'CA')
+    assert.equal(await stateFor(SECTIONS, 'VE3ABC', 'GH'), 'ON')
+    assert.equal(await stateFor(SECTIONS, 'W3ABC', 'MDC'), 'MD')
+    assert.equal(await stateFor(SECTIONS, 'W3ABC', 'MDC', 'DC'), undefined)
+    assert.equal(await stateFor(SECTIONS, 'KH6ABC', 'PAC'), 'HI')
+    assert.equal(await stateFor(SECTIONS, 'KH2ABC', 'PAC'), undefined)
+    for (const location of ['PR', 'VI', 'TER']) assert.equal(await stateFor(SECTIONS, 'K1ABC', location), undefined, location)
+    // A state that isn't a section is not an exchange there.
+    assert.equal(await stateFor(SECTIONS, 'K6ABC', 'CA'), undefined)
+  } finally {
+    registerEntityLookup(() => undefined)
+  }
+})
+
+test("their County is filled from what they sent, as ADIF names it, over the lookup's", async () => {
+  const countyFor = async (params: QsoPartyParams, location: string, their: Record<string, JSONValue> = {}) => {
+    const patch = await qsoPartyActivity(params).processQsoBeforeSave!({
+      qso: { their: { call: 'W1ABC', ...their }, refs: [{ type: params.refType, location, theirSerial: '1' }] },
+      operation: operation({ location: Object.keys(params.counties)[0] }, params),
+    }, ctx)
+    return (patch?.their as Record<string, string> | undefined)?.county
+  }
+
+  // The state, then the county's name without "County".
+  assert.equal(await countyFor(CA, 'butt'), 'CA,Butte')
+  // A mobile's home county, from the lookup, gives way to the one it sent.
+  assert.equal(await countyFor(CA, 'BUTT', { guess: { state: 'CA', county: 'Alameda' } }), 'CA,Butte')
+  // Already said: nothing to write.
+  assert.equal(await countyFor(CA, 'BUTT', { county: 'CA,Butte' }), undefined)
+  // A county line names no one county, so the lookup's is cleared, not kept.
+  assert.equal(await countyFor(CA, 'BUTT/ALAM', { guess: { county: 'Alameda' } }), '')
+  // A state, a province or DX says nothing about a county.
+  for (const location of ['OR', 'ON', 'DX']) assert.equal(await countyFor(CA, location), undefined, location)
 })
 
 /// An operation logged when the parties were one extension: the party's code
@@ -497,7 +576,7 @@ test('on a log kept under the old combined extension, the exchange is mirrored f
     qso: { refs: [{ type: 'qp', location: 'butt', theirSerial: '34', ourSerial: 12 }] },
     operation: legacyOperation('ALAM'),
   }, ctx)
-  assert.deepEqual(patch!.their, { exchange: '34 BUTT' })
+  assert.deepEqual(patch!.their, { exchange: '34 BUTT', state: 'CA', county: 'CA,Butte' })
   assert.deepEqual(patch!.our, { exchange: '12 ALAM' })
 })
 
@@ -509,7 +588,7 @@ test('a contact app-polo logged keeps its serials when it is saved again here', 
     qso: { refs: [{ type: 'qp', location: 'BUTT', theirNumber: '34', ourNumber: '12' }] },
     operation: legacyOperation('ALAM'),
   }, ctx)
-  assert.deepEqual(patch!.their, { exchange: '34 BUTT' })
+  assert.deepEqual(patch!.their, { exchange: '34 BUTT', state: 'CA', county: 'CA,Butte' })
   assert.deepEqual(patch!.our, { exchange: '12 ALAM' })
 })
 

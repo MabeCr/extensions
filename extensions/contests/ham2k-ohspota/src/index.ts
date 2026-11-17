@@ -18,6 +18,7 @@
 
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 import { stampedExchange } from "@ham2k/lib-contest-exchange"
+import { cabrilloOperators } from "@ham2k/lib-contest-station"
 import { contestScorer, defineExtension, exportFilename, exportTypeDefinition, operationForQso, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -376,7 +377,7 @@ const ExportHook = {
         ['CATEGORY-TRANSMITTER', category?.transmitter],
         ['CATEGORY-POWER', cabrilloPower(ref)],
         ['CATEGORY-MODE', 'MIXED'],
-        ['OPERATORS', str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+        ['OPERATORS', cabrilloOperators(operation, args.qsos)],
         ['GRID-LOCATOR', str(operation.grid)],
       ],
       // The sponsor's own layout: no signal reports, and a location column each

@@ -115,6 +115,13 @@ export type QsoPartyScoresheet = {
   /// folds digital into CW for its rules still reports them apart. Optional
   /// because a scoresheet cached by an earlier build has none.
   bandModes?: Record<string, Record<string, number>>
+  /// Band → the points its contacts earned, bonuses apart, so the bands add up
+  /// to `points`. Optional because a scoresheet cached by an earlier build has
+  /// none.
+  bandPoints?: Record<string, number>
+  /// Band → the multiplier keys first credited there, so the bands add up to
+  /// the size of `mults`. Optional for the same reason.
+  bandMults?: Record<string, number>
   qsos: number
   points: number
   dupes: number

@@ -1,0 +1,50 @@
+{
+  "key": "ham2k-partial-calls",
+  "name": "Partial Calls",
+  "version": "0.1.1",
+  "api": 25,
+  "description": "Suggests the calls you could be typing, from your logs and Super Check Partial, under the call info as you type. Pick one with a tap or Alt-Y",
+  "category": "lookup",
+  "keywords": [
+    "super check partial",
+    "SCP",
+    "partial",
+    "callsign",
+    "contest",
+    "ham2k"
+  ],
+  "hooks": [
+    "assistant",
+    "dataFile",
+    "panel",
+    "settingsPanel"
+  ],
+  "settings": {
+    "section": "lookups"
+  },
+  "requiresDraftWrite": true,
+  "domains": [
+    "www.supercheckpartial.com"
+  ],
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  },
+  "translations": {
+    "es": {
+      "name": "Indicativos parciales",
+      "description": "Sugiere los indicativos que podrías estar escribiendo, de tus registros y de Super Check Partial, bajo la información del indicativo mientras escribes. Elige uno con un toque o con Alt-Y",
+      "keywords": [
+        "indicativo",
+        "parcial",
+        "concurso"
+      ]
+    }
+  }
+}

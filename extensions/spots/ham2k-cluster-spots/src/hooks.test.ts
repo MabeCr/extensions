@@ -18,17 +18,36 @@ let lines: Line[] = []
 let status: Record<string, unknown> = {}
 let subscribes = 0
 const sent: string[] = []
+let subscription: Record<string, unknown> | undefined
+const pushes: { method: string; params: Record<string, unknown> }[] = []
+
+/// The app's side of `match`: patterns as they cross the bridge.
+function matcher(match: unknown): (text: string) => boolean {
+  if (!Array.isArray(match)) return () => true
+  const patterns = match.map((p) => (typeof p === "string" ? new RegExp(p) : new RegExp(p.source, p.flags)))
+  return (text) => patterns.some((pattern) => pattern.test(text))
+}
 
 const ext = await loadExtension(() => import("./index.ts"), {
   hostCalls: {
     clusterStatus: () => status,
-    clusterLines: ({ after, limit }) => {
-      const picked = lines.filter((line) => line.seq > ((after as number | undefined) ?? 0))
+    clusterLines: ({ after, limit, match }) => {
+      const matches = matcher(match)
+      const picked = lines.filter((line) => line.seq > ((after as number | undefined) ?? 0) && matches(line.text))
       return limit === undefined ? picked : picked.slice(-(limit as number))
     },
-    clusterSubscribe: () => {
+    clusterSubscribe: (params) => {
       subscribes += 1
+      subscription = params
       return status
+    },
+    putSpots: (params) => {
+      pushes.push({ method: "putSpots", params })
+      return null
+    },
+    removeSpots: (params) => {
+      pushes.push({ method: "removeSpots", params })
+      return null
     },
     clusterSend: ({ command }) => {
       sent.push(command as string)
@@ -203,4 +222,35 @@ test("when the app's line numbers start over, reading starts over with them", as
   arrive(dxLine("W1NEW", 28074, "FT8"))
   status = { ...status, lastSeq: seq }
   assert.equal((await board()).some((spot) => spot.their.call === "W1NEW"), true)
+})
+
+test("the subscription, and the lines read back, are only those that can be spots", async () => {
+  const matches = matcher(subscription?.match)
+  for (const text of [dxLine("JA1ABC", 14025, "CW"), "\x07DX de K1TTT:  7010.0  ZL2XX  up  0400Z", listedLine("XE1ABC", 18100, "FT8").text, "   7041.8 K9NW         8-Nov-2026 1413Z    <AC3RA>"]) {
+    assert.ok(matches(text), text)
+  }
+  for (const text of ["KI2D de K3LR 21-Oct 1842Z arc6>", "WWV de W0MU <12>:   SFI=150, A=5, K=1", "To ALL de K1TTT: contest this weekend", "73 de K3LR"]) {
+    assert.ok(!matches(text), text)
+  }
+})
+
+test("spots go on the board as they come, each under its key, and a station's own QRT takes its spot off", async () => {
+  pushes.length = 0
+  const backfill = [listedLine("VK9XX", 14023, "CW 20 dB", 3), listedLine("VK9XX", 14024, "CW 22 dB", 2), listedLine("T6LL", 14048, "CW", 4)]
+  await ext.runHook("cluster", "onLines", { lines: backfill.map(({ text, at }) => ({ seq: ++seq, at, text })) })
+  assert.equal(pushes.length, 1, "one push for the batch")
+  const put = pushes[0].params.spots as Spot[]
+  assert.deepEqual(put.map((spot) => [spot.key, spot.freq]), [["VK9XX|20m|CW", 14024], ["T6LL|20m|CW", 14048]], "the newest spot of each, keyed")
+
+  pushes.length = 0
+  await ext.runHook("cluster", "onLines", { lines: [{ seq: ++seq, at: Date.now(), text: selfLine("VK9XX", "VK9XX", 14024, "CW QRT tnx") }] })
+  assert.deepEqual(pushes.map(({ method, params }) => [method, params.keys]), [["removeSpots", ["VK9XX|20m|CW"]]])
+
+  pushes.length = 0
+  await ext.runHook("cluster", "onLines", { lines: [{ seq: ++seq, at: Date.now(), text: "WWV de W0MU <12>:   SFI=150" }] })
+  assert.deepEqual(pushes, [], "a batch with no spots pushes nothing")
+
+  const stale = listedLine("ZS6OLD", 21030, "CW", 90)
+  await ext.runHook("cluster", "onLines", { lines: [{ seq: ++seq, at: stale.at, text: stale.text }] })
+  assert.deepEqual(pushes, [], "the older end of a backfill, past what the board shows, is not pushed")
 })

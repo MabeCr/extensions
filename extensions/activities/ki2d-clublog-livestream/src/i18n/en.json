@@ -1,0 +1,19 @@
+{
+  "activityLabel": "Club Log Livestream",
+  "activityShortLabel": "Club Log Live",
+  "activityDescription": "Each contact goes to Club Log as you log it",
+  "noTokenShort": "Connect your Club Log account to start streaming",
+  "accountDescription": "Sends the contacts of an operation with the Club Log Livestream activity to your Club Log log as you make them",
+  "tokenLabel": "API Token",
+  "tokenPostface": "Make one on clublog.org under Settings → API, and paste it here. It starts with cl_. Club Log shows it only once.",
+  "tokenMissing": "Enter your Club Log API token",
+  "tokenAccepted": "Connected to Club Log",
+  "connectedAs": "Connected as {{call}}",
+  "callNotHeld": "Club Log accepted the token, but its account does not hold {{call}}, so contacts logged as {{call}} will be refused. Add {{call}} to your Club Log account, or use a token from the account that holds it.",
+  "checkFailed": "Could not reach Club Log ({{status}})",
+  "noticeTitle": "Club Log Livestream",
+  "noToken": "This operation streams to Club Log, but there is no Club Log account yet. Add your API token under Settings → Accounts → Club Log.",
+  "tokenRefused": "Club Log did not accept your API token, so nothing is being sent. Make a new one on clublog.org under Settings → API and enter it under Settings → Accounts → Club Log.",
+  "callRefused": "Club Log will not take contacts for {{call}} with this token: {{message}}. Add {{call}} to your Club Log account, or use a token from the account that holds it.",
+  "rejected": "Club Log refused the contact with {{theirCall}}: {{message}}"
+}

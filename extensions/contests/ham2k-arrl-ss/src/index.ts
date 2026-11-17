@@ -13,6 +13,7 @@
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
 import { rulesNotes, withRules } from "@ham2k/lib-contest-rules"
+import { cabrilloClub, cabrilloOperators, clubField } from "@ham2k/lib-contest-station"
 import { adifForExport, contestScorer, defineExtension, exportFilename, host, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ActivitySuggestion,
@@ -34,16 +35,14 @@ import { MODES, nearestMode, nextContestDate, relevanceFor } from "./schedule.ts
 import type { SSMode } from "./schedule.ts"
 import { SSScorer, TYPE, contestTitle } from "./scorer.ts"
 import { ALL_SECTIONS } from "./sections.ts"
-import { normalizeSection, preferredSections } from "./exchange.ts"
-import { HISTORY_STEMS, historyFor, loadHistory, parseHistory, removeHistory } from "./history.ts"
+import { normalizeSection, preferredSections, stateForSection } from "./exchange.ts"
+import { HISTORY_STEMS, loadHistory, parseHistory, removeHistory, suggestedExchange } from "./history.ts"
 import {
   CHECK_PATTERN,
   ENTRY_CLASSES,
   PRECEDENCE_PATTERN,
   cabrilloCategories,
   contestRules,
-  declaredClub,
-  declaredOperators,
   normalizeCheck,
   normalizePrecedence,
   ourPrecedence,
@@ -81,6 +80,28 @@ function serial(qso: Record<string, JSONValue>, field: string): string {
   if (typeof value === 'number') return String(value)
   const digits = str(value).trim()
   return /^\d+$/.test(digits) ? String(parseInt(digits, 10)) : ''
+}
+
+/// How wide our serial's field is: as many characters as the next number
+/// has, never under 3 and growing to 5 — a 3-digit field for the first 999
+/// contacts gives the row's room to the fields still to be copied.
+async function ourSerialChars(ctx: HookContext, operation: Record<string, JSONValue>): Promise<{ min: number; ideal: number; max: number }> {
+  const uuid = str(operation.uuid)
+  let qsos: Record<string, JSONValue>[] = []
+  try {
+    qsos = (uuid && (await ctx.getQsos?.(uuid))) || []
+  } catch (e) {
+    // Only the field's width rides on this: a failed read must not take the
+    // whole exchange row with it.
+    console.warn(`[arrl-ss] log unavailable, sizing our serial for 3 digits:`, e)
+  }
+  let highest = 0
+  for (const qso of qsos) {
+    const sent = parseInt(serial(qso, 'ourSerial') || '0', 10)
+    if (sent > highest) highest = sent
+  }
+  const digits = Math.min(5, Math.max(3, String(highest + 1).length))
+  return { min: digits, ideal: digits, max: 5 }
 }
 
 /// A part of an exchange as it should be shown and exported: the valid value,
@@ -132,17 +153,17 @@ async function ourSectionDefault(): Promise<string> {
   return lastKnownSection
 }
 
-/// The operator's name, email and club from their profile, for the Cabrillo
-/// header. All optional and free-form in the profile, so each may be ''. A
-/// host that cannot answer costs these lines, never the log itself.
-async function profileDetails(): Promise<{ name: string; email: string; club: string }> {
+/// The operator's name and email from their profile, for the Cabrillo header.
+/// Both optional and free-form in the profile, so each may be ''. A host that
+/// cannot answer costs these lines, never the log itself.
+async function profileDetails(): Promise<{ name: string; email: string }> {
   try {
     const settings = (await host.getSettings()) as Record<string, JSONValue> | undefined
     const line = (value: JSONValue | undefined) => str(value).replace(/\s+/g, ' ').trim()
-    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail), club: line(settings?.operatorClub) }
+    return { name: line(settings?.operatorName), email: line(settings?.operatorEmail) }
   } catch (e) {
-    console.warn(`[arrl-ss] profile settings unavailable, exporting without name, email and profile club:`, e)
-    return { name: '', email: '', club: '' }
+    console.warn(`[arrl-ss] profile settings unavailable, exporting without name and email:`, e)
+    return { name: '', email: '' }
   }
 }
 
@@ -233,21 +254,7 @@ const ActivityHook = {
               },
               // What the rules allow, following the entry above.
               ...rulesNotes(ctx, 'entry', ENTRY_CLASSES, contestRules),
-              {
-                type: 'field',
-                fieldType: 'text',
-                key: 'operators',
-                label: t('operatorsLabel'),
-                placeholder: t('operatorsPlaceholder'),
-                uppercase: true,
-              },
-              {
-                type: 'field',
-                fieldType: 'text',
-                key: 'club',
-                label: t('clubLabel'),
-                placeholder: t('clubPlaceholder'),
-              },
+              await clubField(ctx, 'arrl-ss'),
             ],
           },
         },
@@ -271,45 +278,90 @@ const ActivityHook = {
 
     const t = tFor(ctx)
     const their = (args.qso?.their as Record<string, JSONValue>) ?? {}
-    // The check and section this station sent before, from N1MM's call
-    // history, written in as a guess: the core fills a field with it only while
-    // the field is empty or still holds an earlier guess, so what the operator
-    // copies always stands.
-    const history = historyFor(str(their.call), opRef.mode)
-    const historySection = history?.section ?? ''
-    const historyCheck = history?.check ?? ''
+    // The check and section this station sent before, written in as a guess:
+    // the core fills a field with it only while the field is empty or still
+    // holds an earlier guess, so what the operator copies always stands.
+    const { check: historyCheck, section: historySection } = await suggestedExchange(ctx, args.operation, args.qso, opRef.mode)
     const preferred = preferredSections(their)
+    const serialChars = await ourSerialChars(ctx, args.operation)
+    // What we send after the serial, as it goes out on the air: precedence,
+    // our call, check and section — "A KI2D 79 ENY".
+    const sentExchange = [ourPrecedence(opRef), str(args.operation.stationCall).toUpperCase(), ourCheck(opRef), ourSection(opRef)]
+      .filter((part) => part)
+      .join(' ')
     const control = (key: string, label: string, order: number) => ({
       key: `arrl-ss/${key}`,
       label: t(label),
+      // What the row shows when it squeezes the field below its full label.
+      shortLabel: t(`${label}Short`),
       icon: manifest.icon,
       color: manifest.accentColor,
       order,
     })
 
     return [
-      { ...control('ourSerial', 'ourSerialLabel', 10), input: { kind: 'serial', refType: TYPE, field: 'ourSerial', sequence: { key: 'serial' } } },
+      // The rest of what we send rides in the serial's field, after the
+      // number, while the operator includes it: the whole exchange on screen
+      // to read off, and the number alone to edit. The host widens the field
+      // for it.
+      {
+        ...control('ourSerial', 'ourSerialLabel', 10),
+        skipFocus: true,
+        input: {
+          kind: 'serial',
+          refType: TYPE,
+          field: 'ourSerial',
+          sequence: { key: 'serial' },
+          // Seen only while no number is held: with peers or a second SO2R
+          // set, until the first edit claims one.
+          placeholder: '#',
+          ourExchange: sentExchange,
+          chars: serialChars,
+        },
+      },
+      // Their exchange is one pill, typed straight through as it is copied —
+      // "4A20ENY" fills all four: a letter ends the serial, a valid
+      // precedence and two check digits each move on by themselves.
+      //
       // No guesses for their serial or precedence: there is nothing to go on
       // for a number or an entry class another station is about to send.
-      { ...control('theirSerial', 'theirSerialLabel', 20), input: { kind: 'text', refType: TYPE, field: 'theirSerial', numeric: true, maxLength: 5 } },
+      {
+        ...control('theirSerial', 'theirSerialLabel', 20),
+        group: 'their',
+        input: { kind: 'text', refType: TYPE, field: 'theirSerial', numeric: true, maxLength: 5, autoadvanceBefore: '[0-9]*[A-Z]' },
+      },
       {
         ...control('theirPrecedence', 'precedenceLabel', 30),
-        input: { kind: 'text', refType: TYPE, field: 'theirPrecedence', maxLength: 1, uppercase: true, pattern: PRECEDENCE_PATTERN },
+        group: 'their',
+        input: {
+          kind: 'text',
+          refType: TYPE,
+          field: 'theirPrecedence',
+          maxLength: 1,
+          chars: { min: 2, ideal: 4, max: 5 },
+          uppercase: true,
+          pattern: PRECEDENCE_PATTERN,
+          autoadvanceWhen: PRECEDENCE_PATTERN,
+        },
       },
       {
         ...control('theirCheck', 'checkLabel', 40),
+        group: 'their',
         input: {
           kind: 'text',
           refType: TYPE,
           field: 'theirCheck',
           numeric: true,
           maxLength: 2,
+          chars: { min: 2, ideal: 4, max: 5 },
           pattern: CHECK_PATTERN,
+          autoadvanceWhen: CHECK_PATTERN,
           ...(historyCheck ? { suggestedValue: historyCheck } : {}),
         },
       },
       {
         ...control('theirSection', 'sectionLabel', 50),
+        group: 'their',
         input: {
           kind: 'options',
           refType: TYPE,
@@ -318,21 +370,26 @@ const ActivityHook = {
           preferredCodes: historySection ? [historySection, ...preferred.filter((code) => code !== historySection)] : preferred,
           uppercase: true,
           minCharsForSuggestions: 1,
+          chars: { min: 3, ideal: 4, max: 4 },
           ...(historySection ? { suggestedValue: historySection } : {}),
         },
       },
     ] as LoggingControlDescriptor[]
   },
 
-  /// Mirrors the exchange this contest keeps on its own ref into the generic
-  /// `our.exchange`/`their.exchange`. Nothing outside this extension knows to
+  /// Mirrors their exchange, which this contest keeps on its own ref, into
+  /// the generic `their.exchange`. Nothing outside this extension knows to
   /// look inside a contest ref, so without this the QSO row's exchange column
-  /// and a plain (non-contest) ADIF export both come up empty.
+  /// comes up empty.
   ///
-  /// Only ever a projection: the ref stays the source of truth. Ours is
-  /// projected on every save, as in `cqwpx` — a serial is never kept as ''.
-  /// Theirs projects whenever any of its four fields is present, blank
-  /// included, so clearing them on an edit clears the row too.
+  /// Ours is deliberately NOT projected: all but the serial is the same on
+  /// every row, and the row shows `our.exchange` beside theirs whenever it is
+  /// set. The ADIF export takes ours from the ref (`adifFields`), as it does
+  /// for every contact on an operation running this contest.
+  ///
+  /// Only ever a projection: the ref stays the source of truth. Theirs
+  /// projects whenever any of its four fields is present, blank included, so
+  /// clearing them on an edit clears the row too.
   async processQsoBeforeSave(
     args: { qso: Record<string, JSONValue>; operation: Record<string, JSONValue> },
     _ctx: HookContext,
@@ -340,11 +397,26 @@ const ActivityHook = {
     const opRef = refOfType(args.operation, TYPE)
     if (!opRef) return null
     const qsoRef = refOfType(args.qso, TYPE)
-    const ours = [serial(args.qso, 'ourSerial'), ourExchange(opRef)].filter((part) => part).join(' ')
-    const patch: Record<string, JSONValue> = { our: { exchange: ours } }
     const decided = qsoRef && ['theirSerial', 'theirPrecedence', 'theirCheck', 'theirSection'].some((key) => key in qsoRef)
+    const patch: Record<string, JSONValue> = {}
     if (decided) patch.their = { exchange: theirExchange(args.qso) }
-    return patch
+    // Their State, from the section they sent: a station's own word on where
+    // it is, ahead of whatever a lookup guessed. Re-filled on every save, so
+    // fixing a mistyped section fixes the State with it. A section that names
+    // no single state leaves the State alone.
+    const their = (args.qso.their as Record<string, JSONValue> | undefined) ?? {}
+    const currentState = str(their.state).toUpperCase()
+    const section = normalizeSection(qsoRef?.theirSection)
+    const state = stateForSection(section, str(their.call), currentState)
+    if (state && state !== str(their.state)) patch.their = { ...(patch.their as Record<string, JSONValue> | undefined), state }
+    // And their ARRL Section itself, where ADIF's ARRL_SECT reads it: nothing
+    // else in a Sweepstakes log carries it, the contest's own files included.
+    if (section && section !== their.arrlSection) patch.their = { ...(patch.their as Record<string, JSONValue> | undefined), arrlSection: section }
+    // A stored copy of ours doesn't follow the serial: an edit clears it
+    // rather than leave the row showing a number the exports don't carry.
+    const our = args.qso.our as Record<string, JSONValue> | undefined
+    if (our?.exchange) patch.our = { exchange: '' }
+    return Object.keys(patch).length ? patch : null
   },
 }
 
@@ -472,14 +544,12 @@ const ExportHook = {
         headers: [
           ['CONTEST', contestId(operation)],
           ['CALLSIGN', ourCall],
-          // The calls listed at setup — required for a multioperator entry —
-          // else the app's own operator call.
-          ['OPERATORS', declaredOperators(opRef) || str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          ['OPERATORS', cabrilloOperators(operation, args.qsos)],
           // For an ARRL contest, LOCATION is the section.
           ['LOCATION', section],
           ...cabrilloCategories(opRef),
           ['GRID-LOCATOR', str(operation.grid)],
-          ['CLUB', declaredClub(opRef) || profile.club],
+          ['CLUB', await cabrilloClub(opRef, 'arrl-ss')],
           ['NAME', profile.name],
           ['EMAIL', profile.email],
         ],

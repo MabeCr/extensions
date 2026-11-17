@@ -1,0 +1,19 @@
+{
+  "activityLabel": "Club Log Livestream",
+  "activityShortLabel": "Club Log Live",
+  "activityDescription": "Cada contacto va a Club Log en cuanto lo registras",
+  "noTokenShort": "Conecta tu cuenta de Club Log para empezar a transmitir",
+  "accountDescription": "Envía a tu log de Club Log los contactos de una operación con la actividad Club Log Livestream, a medida que los haces",
+  "tokenLabel": "Token de API",
+  "tokenPostface": "Créalo en clublog.org en Settings → API y pégalo aquí. Empieza con cl_. Club Log lo muestra una sola vez.",
+  "tokenMissing": "Ingresa tu token de API de Club Log",
+  "tokenAccepted": "Conectado a Club Log",
+  "connectedAs": "Conectado como {{call}}",
+  "callNotHeld": "Club Log aceptó el token, pero su cuenta no tiene {{call}}, así que rechazará los contactos registrados como {{call}}. Agrega {{call}} a tu cuenta de Club Log, o usa un token de la cuenta que lo tiene.",
+  "checkFailed": "No se pudo contactar a Club Log ({{status}})",
+  "noticeTitle": "Club Log Livestream",
+  "noToken": "Esta operación transmite a Club Log, pero todavía no hay una cuenta de Club Log. Agrega tu token de API en Ajustes → Cuentas → Club Log.",
+  "tokenRefused": "Club Log no aceptó tu token de API, así que no se está enviando nada. Crea uno nuevo en clublog.org en Settings → API e ingrésalo en Ajustes → Cuentas → Club Log.",
+  "callRefused": "Club Log no acepta contactos de {{call}} con este token: {{message}}. Agrega {{call}} a tu cuenta de Club Log, o usa un token de la cuenta que lo tiene.",
+  "rejected": "Club Log rechazó el contacto con {{theirCall}}: {{message}}"
+}

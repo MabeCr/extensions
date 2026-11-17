@@ -14,14 +14,14 @@ import { exchangeText, suggestedExchange } from "./exchange.ts"
 
 /// A host whose log holds [log], newest first, answering the `refType` filter
 /// the guess uses — or, as a host older than the filters does, ignoring it.
-function hostWith(log: { at: number; refs: Record<string, JSONValue>[] }[], asked: Record<string, unknown>[] = [], { filters = true } = {}) {
+function hostWith(log: { uuid?: string; at: number; refs: Record<string, JSONValue>[] }[], asked: Record<string, unknown>[] = [], { filters = true } = {}) {
   return {
     getHistoryForCall: async (_call: string, options: Record<string, unknown>) => {
       asked.push(options)
       const types = filters ? ([] as unknown[]).concat(options.refType ?? []) : []
       return log
         .filter((q) => types.length === 0 || q.refs.some((r) => types.includes(r.type)))
-        .map((q) => ({ their: { call: 'K1ABC' }, startAtMillis: q.at, refs: q.refs }) as Record<string, JSONValue>)
+        .map((q) => ({ uuid: q.uuid ?? null, their: { call: 'K1ABC' }, startAtMillis: q.at, refs: q.refs }) as Record<string, JSONValue>)
     },
   } as unknown as HookContext
 }
@@ -41,7 +41,7 @@ test('the name sent last week beats the lookup; the lookup has the fresher locat
   // The lookup knows no state: last week's location fills in.
   assert.deepEqual(await suggestedExchange(ctx, operation, { call: 'K1ABC' }), { name: 'BOB', location: 'NH' })
   // One read of the log per guess.
-  assert.deepEqual(asked, [{ limit: 10, refType: ['pwt', 'naqp'] }, { limit: 10, refType: ['pwt', 'naqp'] }])
+  assert.deepEqual(asked, [{ limit: 10, refType: ['pwt', 'naqp', 'ssb-sprint'] }, { limit: 10, refType: ['pwt', 'naqp', 'ssb-sprint'] }])
 })
 
 test('what they sent earlier this session, on another band, stands', async () => {
@@ -50,6 +50,15 @@ test('what they sent earlier this session, on another band, stands', async () =>
     { at: LAST_WEEK, refs: [{ type: 'pwt', name: 'BOB', location: 'NH' }] },
   ])
   assert.deepEqual(await suggestedExchange(ctx, operation, { call: 'K1ABC', state: 'CT' }), { name: 'ROB', location: 'RI' })
+})
+
+test('the contact being edited is not its own history', async () => {
+  // Retyping a misheard name must not be offered the misheard name back.
+  const ctx = hostWith([
+    { uuid: 'edited', at: THIS_SESSION, refs: [{ type: 'pwt', name: 'TYPO', location: 'RI' }] },
+    { uuid: 'earlier', at: LAST_WEEK, refs: [{ type: 'pwt', name: 'BOB', location: 'NH' }] },
+  ])
+  assert.deepEqual(await suggestedExchange(ctx, operation, { call: 'K1ABC', state: 'CT' }, { uuid: 'edited' }), { name: 'BOB', location: 'CT' })
 })
 
 test('this session is told by the time of each contact, whatever the host filters', async () => {
@@ -66,13 +75,16 @@ test('this session is told by the time of each contact, whatever the host filter
   assert.deepEqual(await suggestedExchange(naqp, operation, { call: 'K1ABC', state: 'CT' }), { name: 'AL', location: 'CT' })
 })
 
-test('an NAQP contact counts, an unrelated one does not, and a bad location is skipped', async () => {
+test('an NAQP or SSB Sprint contact counts, an unrelated one does not, and a bad location is skipped', async () => {
   const ctx = hostWith([
     { at: LAST_WEEK, refs: [{ type: 'pota', name: 'NOPE', location: 'US-1234' }] },
     { at: LAST_WEEK, refs: [{ type: 'naqp', name: 'Al', location: 'XX' }] },
     { at: LAST_WEEK, refs: [{ type: 'naqp', location: 'ME' }] },
   ])
   assert.deepEqual(await suggestedExchange(ctx, operation, { call: 'K1ABC' }), { name: 'AL', location: 'ME' })
+  // The Sprint sends the same name and location, so its copy is as good.
+  const sprint = hostWith([{ at: LAST_WEEK, refs: [{ type: 'ssb-sprint', name: 'Al', location: 'VT' }] }])
+  assert.deepEqual(await suggestedExchange(sprint, operation, { call: 'K1ABC' }), { name: 'AL', location: 'VT' })
 })
 
 test('a host without history, or one that fails, leaves the lookup guess', async () => {

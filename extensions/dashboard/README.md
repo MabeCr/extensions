@@ -1,6 +1,12 @@
 # Dashboard extensions
 
-`ham2k-custom-text` provides the text panel. The `ki2d-` panels live here
+`ham2k-custom-text` provides the text panel, and `ham2k-rotator` the Rotator
+panel: the station's rotators on a map of the world centred on it, turned with
+a click, which the app ships pre-loaded and updates from the catalog. Needs
+extension API 23. `ham2k-band-scope` is the Band Scope panel, a radio's
+spectrum and waterfall with the band plan and the spots on the band, also
+pre-loaded; it draws the plan `ham2k-band-plan` (under `spots/`) gives as band
+annotations. Band Scope needs extension API 23, Band Plan 20. The `ki2d-` panels live here
 rather than being bundled into HaLo — three SVG reference panels, and a rate
 chart and a band map drawn as the app's native panel scenes:
 
@@ -15,10 +21,12 @@ chart and a band map drawn as the app's native panel scenes:
 - `ki2d-rate-chart`: QSO rates over the trailing 10 and 60 minutes and the
   last 10 contacts, with peaks, lows, a rate goal, and a chart per operator
   for multi-operator stations.
-- `ki2d-band-map`: the spots on a band along a scale of its frequencies, over
-  the radio's panadapter where its scope is on the band, zoomed and scrolled
-  natively; a click puts the station into the logging fields. Needs extension
-  API 12 (Ham2K Logger with scrolling scenes and `host.suggestQso`).
+- `ki2d-band-map`: the spots on a band along a scale of its frequencies, with
+  what is marked on the band among them (the operator's band tags, other
+  extensions' notes), over the radio's band scope where it is on the band,
+  zoomed and scrolled natively; a click puts the station into the logging
+  fields, and a click on the scope tunes the radio at the app's own step.
+  Needs extension API 20 (Ham2K Logger with band annotations).
 
 The weather, solar and rate panels each offer a theme per placement —
 Automatic, Light, Dark or Teal — from `packages/lib-panel-themes`.

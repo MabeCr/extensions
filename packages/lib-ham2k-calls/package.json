@@ -1,0 +1,48 @@
+{
+  "name": "@ham2k/lib-ham2k-calls",
+  "version": "0.1.0",
+  "description": "Ham2K's callsign records as lookup answers: online from services.ham2k.net, or offline from one of its sets kept on the device",
+  "author": "Sebastian Delmont <sd@ham2k.com>",
+  "license": "MIT",
+  "type": "module",
+  "//exports": [
+    "Consumed as TypeScript source: the only consumers are extensions, which",
+    "esbuild bundles, so there is no build step and no dist/ to point at."
+  ],
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./offline": "./src/offline.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "node --import ../../scripts/sdk-node-resolve.mjs --experimental-strip-types --test 'src/**/*.test.ts'",
+    "typecheck": "tsc --noEmit"
+  },
+  "//peerDependencies": [
+    "The SDK and the geo library are provided by the extension that consumes",
+    "this package: the host carries one copy of each, which the bundle is",
+    "rewritten to use at build time."
+  ],
+  "peerDependencies": {
+    "@ham2k/extension-sdk": "^1.22.0",
+    "@ham2k/lib-geo-tools": "^1.0.0"
+  },
+  "devDependencies": {
+    "@ham2k/extension-sdk": "^1.22.0",
+    "@ham2k/lib-callsigns": "^1.0.2",
+    "@ham2k/lib-country-files": "^1.0.202605301",
+    "@ham2k/lib-dxcc-data": "^1.0.1",
+    "@ham2k/lib-geo-tools": "^1.1.1",
+    "@ham2k/lib-operation-data": "^1.1.3",
+    "i18next": "^23.11.5",
+    "liquidjs": "^10.28.0"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

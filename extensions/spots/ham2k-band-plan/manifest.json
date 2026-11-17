@@ -1,0 +1,28 @@
+{
+  "key": "ham2k-band-plan",
+  "name": "Band Plan",
+  "version": "0.1.0",
+  "api": 20,
+  "description": "The band plan where the station is, as band annotations: the bands' edges, their modes, the license levels' privileges, the FT8 and FT4 windows, and the frequencies known for something",
+  "category": "spots",
+  "icon": "ruler",
+  "keywords": [
+    "band plan",
+    "band edges",
+    "license",
+    "modes"
+  ],
+  "hooks": [
+    "bandAnnotations"
+  ],
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  }
+}

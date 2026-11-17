@@ -122,3 +122,12 @@ test("the Cabrillo file comes out of the export hook", async () => {
   assert.equal(result.content.split('\n')[0].trim(), 'START-OF-LOG: 3.0')
   assert.equal(delegated.length, 0, 'a Cabrillo file is written here, not delegated')
 })
+
+test("OPERATORS names whoever logged, then the operation's station owner", async () => {
+  // The log is the authority on who operated: without the derivation a
+  // multi-op log names only this device's operator.
+  const operation = { ...OPERATION, ownerCall: 'n1own' }
+  const qsos = (QSOS as Record<string, unknown>[]).map((qso, i) => ({ ...qso, our: { call: 'N0DEV', operatorCall: i === 0 ? 'K1ABC' : 'W2DEF' } }))
+  const { content } = (await contest.runHook('export', 'generateExport', { operation, qsos, exportType: 'simple-contest-cabrillo' })) as { content: string }
+  assert.ok(content.includes('\nOPERATORS: K1ABC W2DEF @N1OWN\n'), content)
+})

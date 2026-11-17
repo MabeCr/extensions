@@ -15,7 +15,7 @@
 // has the same question and none of them answers it, so it belongs in one
 // place for all of them rather than in this one scorer.
 
-import { fmtInteger } from "@ham2k/lib-format-tools"
+import { bandBreakdown } from "@ham2k/lib-contest-summary"
 import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
 import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
 
@@ -30,6 +30,9 @@ export type CwtScoresheet = {
   /// values are the once-per-band rule.
   workedByCall: Record<string, string[]>
   bands: Record<string, number>
+  /// Band → callsigns first worked on it, so the band lines add up to the
+  /// multiplier. Missing from a checkpoint scored before it existed.
+  bandFirstMults?: Record<string, number>
   qsos: number
   points: number
 }
@@ -40,7 +43,7 @@ function str(value: JSONValue | undefined): string {
 
 export const CWTScorer: ContestScorer<CwtScoresheet> = {
   startScoresheet(): CwtScoresheet {
-    return { workedByCall: {}, bands: {}, qsos: 0, points: 0 }
+    return { workedByCall: {}, bands: {}, bandFirstMults: {}, qsos: 0, points: 0 }
   },
 
   // Mutates and returns the given scoresheet — see ContestScorer.scoreQso.
@@ -75,6 +78,7 @@ export const CWTScorer: ContestScorer<CwtScoresheet> = {
       notices.push('newBand')
     } else {
       base.workedByCall[call] = [band]
+      ;(base.bandFirstMults ??= {})[band] = (base.bandFirstMults[band] ?? 0) + 1
       notices.push('newMult')
     }
 
@@ -97,7 +101,14 @@ export const CWTScorer: ContestScorer<CwtScoresheet> = {
         title: contestTitle(ref),
         total: scoresheet.points * mults,
         arithmetic: contestArithmetic({ qsos: scoresheet.qsos, points: scoresheet.points, mults }, ctx),
-        detail: bandBreakdown(scoresheet),
+        // A point a QSO, so a band's points are its QSOs.
+        detail: bandBreakdown(
+          Object.entries(scoresheet.bands).map(([band, qsos]) => ({
+            band, qsos, points: qsos, mults: scoresheet.bandFirstMults?.[band] ?? 0,
+          })),
+          ctx,
+          { bands: VALID_BANDS },
+        ),
         extra: { points: scoresheet.points, mults, qsos: scoresheet.qsos },
       },
       ctx,
@@ -110,15 +121,4 @@ export const CWTScorer: ContestScorer<CwtScoresheet> = {
 export function contestTitle(ref: Record<string, JSONValue> | undefined): string {
   const session = sessionFor(str(ref?.ref))
   return session ? sessionShortLabel(session) : manifest.shortName
-}
-
-/// QSOs per band — the multiplier is a single whole-log number, so unlike CQ
-/// WW there is nothing per-band to break out of it.
-function bandBreakdown(sheet: CwtScoresheet): string {
-  return VALID_BANDS
-    .map((band) => {
-      const qsos = sheet.bands[band] ?? 0
-      return qsos === 0 ? `**${band}**: —` : `**${band}**: ${fmtInteger(qsos)} QSOs`
-    })
-    .join('\n')
 }

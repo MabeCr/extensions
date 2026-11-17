@@ -1,0 +1,55 @@
+{
+  "key": "ham2k-tiles",
+  "name": "Tiles on the Air (Beta)",
+  "shortName": "Tiles",
+  "version": "0.1.2",
+  "description": "Activate and chase Maidenhead grid tiles, the 6-character subsquares; spots on tilesontheair.com",
+  "category": "activity",
+  "icon": "grid",
+  "accentColor": "#059669",
+  "api": 1,
+  "keywords": [
+    "tiles",
+    "grid squares",
+    "maidenhead",
+    "subsquares",
+    "activation",
+    "hunting",
+    "tota"
+  ],
+  "hooks": [
+    "account",
+    "activity",
+    "adifFields",
+    "adifImport",
+    "export",
+    "ref:tiles",
+    "ref:tilesActivation",
+    "scoring",
+    "spots"
+  ],
+  "domains": [
+    "icneuzxitdqtofutxbla.supabase.co"
+  ],
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  },
+  "translations": {
+    "es": {
+      "name": "Tiles on the Air (Beta)",
+      "description": "Activa y caza cuadrículas Maidenhead de 6 caracteres; spots en tilesontheair.com",
+      "keywords": [
+        "cuadrículas",
+        "maidenhead",
+        "activación"
+      ]
+    }
+  }
+}

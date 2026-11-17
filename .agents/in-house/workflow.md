@@ -146,10 +146,28 @@ done
   version with different bytes is refused, so every fix that will be
   published needs a new version — in BOTH `manifest.json` and `package.json`,
   then `npm install --package-lock-only` to carry it into the lockfile.
-- **the pre-loaded set** — `ham2k-pota`, `ham2k-sota`, `ham2k-wwff`,
-  `ham2k-dxcc` and the five lookups — also ships packaged inside the app
-  (`app/assets/preloaded-extensions/`). Publishing one of those is only half
-  the release; the app's copy needs re-packing, which is app-repo work.
+- **the pre-loaded set** also ships packaged inside the app. The list is
+  halo-dist's `app/assets/preloaded-extensions/index.json`, read from its
+  current `main` (`git -C ~/Work/ham2k/halo-dist show
+  origin/main:app/assets/preloaded-extensions/index.json` after a fetch, or the
+  public `ham2k/halo` mirror) rather than from a copy here or a stale checkout,
+  either of which drifts. Publishing one of those is only half the release: in
+  a halo-dist worktree off `main`, `node scripts/preloaded-extensions.mjs
+  update` replaces each with what the catalog offers the app, and
+  `update <key>` adds one not shipped yet. What it offers is the stable
+  channel at the app's own extension API level (`kExtensionApiVersion`), so:
+  - a release still `pending review`, or published to `unstable` or
+    `bleeding`, changes nothing, and `check` still passes, as it compares with
+    the same listing; run `update` once the release is approved on stable;
+  - a release needing a higher API than the app speaks is not offered either:
+    the app keeps the older one until its API moves up;
+  - `update` brings EVERY pre-loaded extension up to that listing, not only
+    the one just published, so read the diff for unrelated bumps before
+    committing; and it stops without writing anything when any pre-loaded key
+    is missing from the listing (`<key>: the catalog's stable channel does not
+    list it`), which has to be resolved first.
+
+  That commit merges to halo-dist `main` under its own rules.
 - **merge-time hazards**: generated files. `packages/qso-parties/src/parties/*.ts`
   and `identities.ts` are written by `node scripts/convert-parties.mjs`, and
   the 49 `extensions/contests/ham2k-*` events by

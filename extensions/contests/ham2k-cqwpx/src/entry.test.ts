@@ -8,8 +8,9 @@
 
 import { test } from "node:test"
 import assert from "node:assert/strict"
+import type { JSONValue } from "@ham2k/extension-sdk"
 
-import { cabrilloCategories } from "./entry.ts"
+import { cabrilloCategories, transmitterColumns } from "./entry.ts"
 
 function lines(ref: Record<string, string>) {
   return Object.fromEntries(cabrilloCategories({ type: 'cqwpx', ...ref }).filter(([, value]) => value))
@@ -71,13 +72,6 @@ test("a value that is not one of the rules' is no claim", () => {
   assert.deepEqual(lines({ mode: 'CW', operator: 'SINGLE-OP-QRP', power: '1500' }), { 'CATEGORY-MODE': 'CW' })
 })
 
-test("operators are listed as the sponsor asks, and the club on one line", async () => {
-  const { declaredClub, declaredOperators } = await import("./entry.ts")
-  assert.equal(declaredOperators({ operators: 'k1abc, w2def;  w3ghi @w3bgn' }), 'K1ABC W2DEF W3GHI @W3BGN')
-  assert.equal(declaredOperators({}), '')
-  assert.equal(declaredClub({ club: '  Yankee  Clipper\nContest Club ' }), 'Yankee Clipper Contest Club')
-})
-
 test("LOCATION is what was typed, a Canadian call area, or DX outside the US and Canada", async () => {
   const { cabrilloLocation } = await import("./entry.ts")
   assert.equal(cabrilloLocation('N0DEV', 'wma'), 'WMA')
@@ -87,4 +81,44 @@ test("LOCATION is what was typed, a Canadian call area, or DX outside the US and
   assert.equal(cabrilloLocation('N0DEV', undefined), '')
   assert.equal(cabrilloLocation('KH6ABC', ''), '')
   assert.equal(cabrilloLocation('NP3U', 'PR'), 'PR')
+})
+
+type Our = Record<string, string | number>
+
+/// The transmitter column [operator]'s log writes for each of [ours].
+function columns(operator: string, ours: Our[], extra: Record<string, JSONValue>[] = []) {
+  const qsos = ours.map((our) => ({ our: { call: 'N0DEV', ...our } }))
+  const column = transmitterColumns({ type: 'cqwpx', operator }, [...qsos, ...extra])
+  return qsos.map((qso) => column(qso).join(' '))
+}
+
+test("each distinct operating position in the log is a transmitter, numbered from 0 in sorted order", () => {
+  for (const operator of ['MULTI-TWO']) {
+    assert.deepEqual(columns(operator, [{ multiIdentifier: '2' }, { multiIdentifier: '1' }, { multiIdentifier: '2' }]), ['1', '0', '1'])
+    // Any numbers, in numeric order rather than as text.
+    assert.deepEqual(columns(operator, [{ multiIdentifier: '10' }, { multiIdentifier: '9' }]), ['1', '0'])
+    // Any labels, numbers first.
+    assert.deepEqual(columns(operator, [{ multiIdentifier: 'RUN' }, { multiIdentifier: 'MULT' }, { multiIdentifier: '3' }]), ['2', '1', '0'])
+    // A number is one position however it is stored or written.
+    assert.deepEqual(columns(operator, [{ multiIdentifier: 4 }, { multiIdentifier: '4' }, { multiIdentifier: '04' }, { multiIdentifier: '7' }]), ['0', '0', '0', '1'])
+    // `operatingPosition` when there is no `multiIdentifier`.
+    assert.deepEqual(columns(operator, [{ operatingPosition: 'B' }, { operatingPosition: 'A', multiIdentifier: 'C' }, { operatingPosition: 'A' }]), ['1', '2', '0'])
+    // No position is the first position's transmitter, or the one transmitter there was.
+    assert.deepEqual(columns(operator, [{}, {}]), ['0', '0'])
+    assert.deepEqual(columns(operator, [{ multiIdentifier: '3' }, {}, { multiIdentifier: '2' }, { multiIdentifier: ' ' }]), ['1', '0', '0', '0'])
+    // More positions than transmitters are written as counted, for the checker to flag.
+    assert.deepEqual(columns(operator, [{ multiIdentifier: '1' }, { multiIdentifier: '2' }, { multiIdentifier: '3' }]), ['0', '1', '2'])
+  }
+})
+
+test("an event row or a deleted contact takes up no transmitter", () => {
+  const extra: Record<string, JSONValue>[] = [
+    { band: 'event', our: { multiIdentifier: '1' } },
+    { deleted: true, our: { multiIdentifier: '2' } },
+  ]
+  assert.deepEqual(columns('MULTI-TWO', [{ multiIdentifier: '5' }, { multiIdentifier: '3' }], extra), ['1', '0'])
+})
+
+test("a log with no transmitter column writes none", () => {
+  for (const operator of ['SINGLE-OP', 'MULTI-ONE', 'MULTI-UNLIMITED', '']) assert.deepEqual(columns(operator, [{ multiIdentifier: '1' }, { multiIdentifier: '2' }]), ['', ''])
 })

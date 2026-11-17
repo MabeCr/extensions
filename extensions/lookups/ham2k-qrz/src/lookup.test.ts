@@ -11,9 +11,15 @@ import assert from "node:assert/strict"
 import { loadExtension } from "./sdkGapTesting.ts"
 
 let answer = ""
+let fetched: string[] = []
 
 const qrz = await loadExtension(() => import("./index.ts"), {
-  hostCalls: { fetch: () => ({ status: 200, body: answer }) },
+  hostCalls: {
+    fetch: (params) => {
+      fetched.push(String(params.url))
+      return { status: 200, body: answer }
+    },
+  },
   ctx: { online: true, account: { session: { sessionKey: "test-session" } } } as never,
 })
 
@@ -63,4 +69,17 @@ test("a record without them — a free-tier answer, or a profile that hides them
   for (const field of ["email", "street", "postal", "county", "cqZone", "ituZone", "tz", "qslVia", "url"]) {
     assert.equal(result[field], undefined, field)
   }
+})
+
+// QRZ identifies the client by `agent`; a name the operator never sees (a
+// codename, the extension's own) tells QRZ nothing about which app is asking.
+test("signing in names the app the operator runs", async () => {
+  answer = record("")
+  fetched = []
+  await qrz.runHook("lookup", "lookupCall", { callInfo: { call: "W1AW" }, qso: {}, operation: {} }, {
+    ctx: { appName: "Ham2K Portable Logger", account: { credentials: { username: "N0CALL", password: "pw" } } } as never,
+  })
+  const signIn = fetched.find((url) => url.includes("username="))
+  assert.ok(signIn, `no sign-in among ${JSON.stringify(fetched)}`)
+  assert.match(signIn, /;agent=Ham2K%20Portable%20Logger$/)
 })

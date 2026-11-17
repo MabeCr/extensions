@@ -6,6 +6,7 @@
 //   activity                       — declarative logging + operation controls
 //   adifFields                     — SIG/POTA_REF contributions for exports
 //   adifImport                     — the same fields read back on import
+//   export                         — one ADIF for every activated park, and a hunter log
 //   spots                          — POTA.app spots source
 //   dataFile                       — CSV database download and offline caching
 // Ref types follow app-polo's QSON convention: 'pota' for hunting,
@@ -14,7 +15,8 @@
 import { DXCC_BY_CODE } from "@ham2k/lib-dxcc-data"
 import { bandForFrequency } from "@ham2k/lib-operation-data"
 import { locationToGrid6, distanceOnEarth } from "@ham2k/lib-geo-tools"
-import { activityAdifImport, activityExportHook, activityScorer, applyLatLonFromApiFields, contestScorer, defineExtension, host, huntingExportHook, isTestOperation, LOCATION_ACCURACY, nearbyLookupRows } from "@ham2k/extension-sdk"
+import { activityAdifImport, activityScorer, applyLatLonFromApiFields, contestScorer, defineExtension, host, huntingExportHook, isTestOperation, LOCATION_ACCURACY, nearbyLookupRows } from "@ham2k/extension-sdk"
+import { potaExportHook, withSigFieldsChoice, writesSigFields } from "./export.ts"
 import type {
   AnnotatedCallInfo,
   HookContext,
@@ -528,55 +530,48 @@ function stateOfPark(reference: string, locationDesc: string | undefined): strin
 
 const AdifFieldsHook = {
   async fieldsForOneQSO(
-    { qso, operation }: { qso: Record<string, unknown>; operation: Record<string, unknown> },
+    args: { qso: Record<string, unknown>; operation: Record<string, unknown>; mainHandler?: boolean; exportSettings?: { choices?: Record<string, string> } },
     _ctx: HookContext,
   ): Promise<{ name: string; value: string }[]> {
     const fields: { name: string; value: string }[] = []
-    const huntingRefs = refsOfType(qso, HUNTING_TYPE)
-    const activationRefs = refsOfType(operation, ACTIVATION_TYPE)
+    const huntingRefs = refsOfType(args.qso, HUNTING_TYPE)
+    const activationRefs = refsOfType(args.operation, ACTIVATION_TYPE)
+    const sig = writesSigFields(args)
 
     // A park-to-park boundary activation logs several Ref entries of the
     // same type — SIG_INFO/MY_SIG_INFO take only the primary (first) one,
     // POTA_REF/MY_POTA_REF list them all.
     if (huntingRefs.length > 0) {
-      fields.push({ name: 'SIG', value: 'POTA' })
-      fields.push({ name: 'SIG_INFO', value: huntingRefs[0].ref! })
+      if (sig) {
+        fields.push({ name: 'SIG', value: 'POTA' })
+        fields.push({ name: 'SIG_INFO', value: huntingRefs[0].ref! })
+      }
       fields.push({ name: 'POTA_REF', value: huntingRefs.map((r) => r.ref).join(',') })
     }
     if (activationRefs.length > 0) {
-      fields.push({ name: 'MY_SIG', value: 'POTA' })
-      fields.push({ name: 'MY_SIG_INFO', value: activationRefs[0].ref! })
+      if (sig) {
+        fields.push({ name: 'MY_SIG', value: 'POTA' })
+        fields.push({ name: 'MY_SIG_INFO', value: activationRefs[0].ref! })
+      }
       fields.push({ name: 'MY_POTA_REF', value: activationRefs.map((r) => r.ref).join(',') })
     }
     return fields
   },
 
-  /// A park-to-park contact with a station at several parks is submitted as one
-  /// record PER hunted park — which is why it also counts once per park toward
-  /// an activation (docs/design/activities.md §4). Each record names a single
-  /// hunted park rather than the comma-joined list `fieldsForOneQSO` writes.
-  ///
-  /// The ACTIVATION side stays joined for now. app-polo names one park here
-  /// because its POTA export offers one file per activated park and each file
-  /// sees only its own ref; HaLo has no per-reference export slicing yet
-  /// (§3.2/A4), so naming only the first would silently drop the others from
-  /// an n-fer activation's export.
+  /// Another program's file that includes POTA's fields — the Texas, Florida
+  /// and Georgia state-park logs — lists a contact with a station at several
+  /// parks as one record PER hunted park, each naming its park in SIG_INFO:
+  /// those sponsors read SIG_INFO, and count a record per park. POTA's own
+  /// files (`mainHandler`) list every park in one record, so they take
+  /// `fieldsForOneQSO` alone, as does a contact hunting a single park.
   async fieldCombinationsForOneQSO(
-    { qso, operation }: { qso: Record<string, unknown>; operation: Record<string, unknown> },
-    _ctx: HookContext,
+    args: { qso: Record<string, unknown>; operation: Record<string, unknown>; mainHandler?: boolean },
+    ctx: HookContext,
   ): Promise<{ name: string; value: string }[][]> {
-    const huntingRefs = refsOfType(qso, HUNTING_TYPE)
-    const activationRefs = refsOfType(operation, ACTIVATION_TYPE)
-
-    const activationFields: { name: string; value: string }[] = []
-    if (activationRefs.length > 0) {
-      activationFields.push({ name: 'MY_SIG', value: 'POTA' })
-      activationFields.push({ name: 'MY_SIG_INFO', value: activationRefs[0].ref! })
-      activationFields.push({ name: 'MY_POTA_REF', value: activationRefs.map((r) => r.ref).join(',') })
-    }
-
-    if (huntingRefs.length === 0) return [activationFields]
-
+    const huntingRefs = refsOfType(args.qso, HUNTING_TYPE)
+    if (args.mainHandler || huntingRefs.length < 2) return []
+    const fields = await AdifFieldsHook.fieldsForOneQSO({ qso: args.qso, operation: args.operation }, ctx)
+    const activationFields = fields.filter((f) => f.name.startsWith('MY_'))
     return huntingRefs.map((ref) => [
       ...activationFields,
       { name: 'SIG', value: 'POTA' },
@@ -926,37 +921,30 @@ defineExtension({
       }),
       key: manifest.key,
     })
-    // One submittable ADIF per activated park — an n-fer owes the program a log
-    // for each (docs/design/activities.md §3.2).
     registerHook('export', {
-      hook: activityExportHook({
-        key: manifest.key,
-        label: 'POTA',
-        activationType: ACTIVATION_TYPE,
-        templateSample: { log: { ref: 'US-1234', refName: 'Example Park' }, operation: { refs: [{ type: ACTIVATION_TYPE, ref: 'US-1234' }] } },
-        icon: 'pine-tree',
-        // A park worked through a bird is still a park activation, and POTA's
-        // uploader reads PROP_MODE/SAT_NAME — so the satellite's fields ride
-        // along in this file even though it is POTA's log. This names another
-        // EXTENSION's key, so it must be the catalog one: the app's own
-        // `satellites` registers its adifFields under a key this bundle can no
-        // longer name, and an unmatched key contributes nothing, silently.
-        includeFieldsFrom: ['ham2k-satellites'],
-      }),
+      // A park worked through a bird is still a park activation, and POTA's
+      // uploader reads PROP_MODE/SAT_NAME — so the satellite's fields ride
+      // along in this file even though it is POTA's log. This names another
+      // EXTENSION's key, so it must be the catalog one: the app's own
+      // `satellites` registers its adifFields under a key this bundle can no
+      // longer name, and an unmatched key contributes nothing, silently.
+      hook: potaExportHook({ key: manifest.key, includeFieldsFrom: ['ham2k-satellites'] }),
       key: manifest.key,
     })
     // The chaser side: every park hunted, across the whole log — a different
     // key so it doesn't collide with the activator registration above.
     registerHook('export', {
-      hook: huntingExportHook({
-        key: manifest.key,
-        label: 'POTA',
-        huntingType: HUNTING_TYPE,
-        activationType: ACTIVATION_TYPE,
-        icon: 'pine-tree',
-        color: manifest.accentColor,
-        includeFieldsFrom: ['ham2k-satellites'],
-      }),
+      hook: withSigFieldsChoice(
+        huntingExportHook({
+          key: manifest.key,
+          label: 'POTA',
+          huntingType: HUNTING_TYPE,
+          activationType: ACTIVATION_TYPE,
+          icon: 'pine-tree',
+          color: manifest.accentColor,
+          includeFieldsFrom: ['ham2k-satellites'],
+        }),
+      ),
       key: `${manifest.key}-hunter`,
     })
   },

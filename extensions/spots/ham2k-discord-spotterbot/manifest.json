@@ -1,0 +1,56 @@
+{
+  "key": "ham2k-discord-spotterbot",
+  "name": "Discord Spotterbot",
+  "shortName": "Spotterbot",
+  "version": "0.2.1",
+  "api": 1,
+  "description": "Self-spots go to every Discord server that added Ham2K's Spotterbot and lets you post",
+  "category": "spots",
+  "icon": "robot-happy-outline",
+  "accentColor": "#5865F2",
+  "keywords": [
+    "spots",
+    "spotting",
+    "self-spot",
+    "discord",
+    "bot",
+    "club",
+    "chat"
+  ],
+  "hooks": [
+    "account",
+    "settingsPanel",
+    "spots"
+  ],
+  "settings": {
+    "section": "spotting"
+  },
+  "domains": [
+    "spotterbot.ham2k.net"
+  ],
+  "sharedDependencies": {
+    "@ham2k/lib-callsigns": "^1.0.0",
+    "@ham2k/lib-country-files": "^1.0.0",
+    "@ham2k/lib-dxcc-data": "^1.0.0",
+    "@ham2k/lib-format-tools": "^1.0.0",
+    "@ham2k/lib-geo-tools": "^1.0.0",
+    "@ham2k/lib-operation-data": "^1.0.0",
+    "i18next": "^23.0.0",
+    "liquidjs": "^10.0.0"
+  },
+  "translations": {
+    "es": {
+      "name": "Spotterbot de Discord",
+      "description": "Tus auto-spots llegan a cada servidor de Discord que agregó el Spotterbot de Ham2K y te deja publicar",
+      "keywords": [
+        "spots",
+        "spotting",
+        "auto-spot",
+        "discord",
+        "bot",
+        "club",
+        "chat"
+      ]
+    }
+  }
+}

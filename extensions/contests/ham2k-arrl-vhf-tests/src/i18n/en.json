@@ -6,5 +6,16 @@
   "unconfigured": "ARRL VHF (not set up)",
   "adifExport": "ADIF for {{contest}}",
   "cabrilloExport": "Cabrillo for {{contest}}",
-  "ourExchangeSubtitle": "Sending {{grid}}"
+  "ourExchangeSubtitle": "Sending {{grid}}",
+  "longest": "Longest: {{formatted}} km",
+  "distancePointOne": "1 distance point",
+  "distancePointMany": "{{formatted}} distance points",
+  "qsoPointOne": "1 QSO point",
+  "qsoPointMany": "{{formatted}} QSO points",
+  "gridOne": "1 grid",
+  "gridMany": "{{formatted}} grids",
+  "gridWorkedOne": "1 grid worked",
+  "gridWorkedMany": "{{formatted}} grids worked",
+  "gridActivatedOne": "1 grid operated from",
+  "gridActivatedMany": "{{formatted}} grids operated from"
 }

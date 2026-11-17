@@ -197,3 +197,30 @@ test("offers no per-day summary", () => {
   const { sheet } = run([qso()], operation)
   assert.deepEqual(TxspotaScorer.summarizeScore({ scoresheet: sheet, operation, ref: { type: 'txspota' }, scope: 'day' }, ctx), {})
 })
+
+// The arithmetic already names every multiplier term; a second line restating
+// them would be one more place for the two to disagree.
+test("the detail does not restate the multipliers", () => {
+  const { summary } = run([qso({ call: 'K5AAA', hunting: [PARK_B] })], operationFor(PARK_A), { type: 'txspota', ourPower: 'QRP' })
+  assert.doesNotMatch(String(summary().txspota.longSummary), /Multipliers/)
+})
+
+// Only the parks-worked term belongs to a band, so the lines name it: each park
+// on the band it was first worked, once, adding up to that term, and CW's two
+// points showing in the band's points.
+test("each band line carries its points and the parks first worked there", () => {
+  const { summary } = run([
+    qso({ call: 'K5AAA', band: '40m', mode: 'CW', hunting: [PARK_B] }),
+    qso({ call: 'K5AAA', band: '20m', hunting: [PARK_B] }),
+    qso({ call: 'K5BBB', band: '20m', hunting: [PARK_C] }),
+    qso({ call: 'K5CCC', band: '20m' }),
+  ])
+  assert.match(String(summary().txspota.longSummary), /^\*\*40m\*\*: 1 QSO, 2 pts, 1 park worked\n\*\*20m\*\*: 3 QSOs, 3 pts, 1 park worked$/m)
+})
+
+// Checkpoints cached by an older version have no per-band points or parks.
+test("a scoresheet without per-band points still summarizes its bands", () => {
+  const stale = { ours: true, worked: {}, activated: {}, hunted: {}, parksByCall: {}, bands: { '20m': 2 }, qsos: 2, points: 2, dupes: 0 }
+  const tally = TxspotaScorer.summarizeScore({ scoresheet: stale, operation: operationFor(PARK_A), ref: { type: 'txspota' }, scope: 'operation' }, ctx).txspota
+  assert.match(String(tally.longSummary), /^\*\*20m\*\*: 2 QSOs$/m)
+})

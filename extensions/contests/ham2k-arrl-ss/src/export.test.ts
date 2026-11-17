@@ -30,7 +30,7 @@ const OPERATION = {
   uuid: 'op-1',
   stationCall: 'N0DEV',
   grid: 'FN31',
-  refs: [{ type: 'arrl-ss', mode: 'CW', entry: 'SO-HIGH', check: '72', section: 'CT', operators: 'n0dev' }],
+  refs: [{ type: 'arrl-ss', mode: 'CW', entry: 'SO-HIGH', check: '72', section: 'CT' }],
 }
 
 const QSOS = [
@@ -118,3 +118,4 @@ test("only the two export types it offers are answered", async () => {
   const other = await exportAs('pota-adif')
   assert.equal(other.content, '')
 })
+

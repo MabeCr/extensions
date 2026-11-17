@@ -13,11 +13,12 @@
 //
 // Not judged: the QSY rule (11). Whether a contact answered our solicitation
 // or theirs is not in the log, so no frequency pattern proves a violation
-// short of three contacts in a row on one frequency — and HaLo has no words
-// for such an alert yet.
+// short of three contacts in a row on one frequency. It is kept live instead,
+// on the FYI line, as the dial turns (qsy.ts).
 
+import { bandBreakdown, counted } from "@ham2k/lib-contest-summary"
 import { fmtInteger } from "@ham2k/lib-format-tools"
-import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
+import type { ContestScorer, HookContext, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
 import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
 
 import { TYPE, ourExchange, refOfType, str } from "./exchange.ts"
@@ -25,8 +26,8 @@ import { firstName } from "./history.ts"
 import { tFor } from "./i18n.ts"
 import { CANADIAN_PROVINCES, US_STATES, isMultiplier, isNorthAmerican, isValidLocation, locationKind, normalizeLocation } from "./locations.ts"
 
-/// "20, 40 and 80 meters only", in the order the summary lists them.
-export const VALID_BANDS = ['20m', '40m', '80m']
+/// "20, 40 and 80 meters only".
+export const VALID_BANDS = ['80m', '40m', '20m']
 
 /// "SSB only": the radio may report the sideband.
 const PHONE_MODES = ['SSB', 'USB', 'LSB']
@@ -37,6 +38,9 @@ export type SprintScoresheet = {
   /// Contacts per multiplier — once for the whole contest.
   mults: Record<string, number>
   bands: Record<string, number>
+  /// Band → multipliers first worked on it, so the band lines add up to the
+  /// multiplier. Missing from a checkpoint scored before it existed.
+  bandFirstMults?: Record<string, number>
   qsos: number
 }
 
@@ -56,7 +60,7 @@ export function weAreNorthAmerican(operation: Record<string, JSONValue> | undefi
 
 export const SprintScorer: ContestScorer<SprintScoresheet> = {
   startScoresheet(): SprintScoresheet {
-    return { workedByCall: {}, mults: {}, bands: {}, qsos: 0 }
+    return { workedByCall: {}, mults: {}, bands: {}, bandFirstMults: {}, qsos: 0 }
   },
 
   // Mutates and returns the given scoresheet — see ContestScorer.scoreQso.
@@ -95,23 +99,36 @@ export const SprintScorer: ContestScorer<SprintScoresheet> = {
     const score: QsoScoreVerdict = { value: 1, band, dupe: false }
     const notices: string[] = []
     if (isMultiplier(location)) {
-      if (sheet.mults[location] === undefined) notices.push('newMult')
+      if (sheet.mults[location] === undefined) {
+        notices.push('newMult')
+        ;(sheet.bandFirstMults ??= {})[band] = (sheet.bandFirstMults[band] ?? 0) + 1
+      }
       sheet.mults[location] = (sheet.mults[location] ?? 0) + 1
     }
     if (heardBefore) notices.push('newBand')
     if (notices.length > 0) score.notices = notices
 
-    // The contact still counts, but an exchange that is incomplete, or a
-    // location the Sprint doesn't know, is a contact the log checker will
-    // remove (16) or a multiplier going unclaimed — and a typo the operator
-    // can still fix, if told.
-    const parts = [qsoRef?.theirSerial, qsoRef?.name, qsoRef?.location]
-    if (parts.some((part) => String(part ?? '').trim() === '')) score.alerts = ['missingExchange']
+    // A part not yet copied holds the contact back, named by its field, while
+    // the station is still there to ask. One the Sprint doesn't know still
+    // counts, but is a contact the log checker will remove (16) or a
+    // multiplier going unclaimed — and a typo the operator can still fix, if
+    // told.
+    const parts = { theirSerial: qsoRef?.theirSerial, name: qsoRef?.name, location: qsoRef?.location }
+    const missing = Object.entries(parts).filter(([, part]) => String(part ?? '').trim() === '')
+    if (missing.length > 0) score.incomplete = missing.map(([key]) => `${TYPE}/${key}`)
     else if (!/^\d+$/.test(String(qsoRef?.theirSerial).trim()) || !firstName(qsoRef?.name) || !isValidLocation(location)) score.alerts = ['invalidExchange']
 
     return { scoresheet: sheet, score }
   },
 
+  /// The contest's tally for the operation — and, unlike other contests', for
+  /// the DAY too, so the log's date header carries the score. A contest
+  /// usually answers the day with nothing (`contestSummary`), because its
+  /// multipliers span the whole event and a day's share of the score is a
+  /// number no sponsor defines. The Sprint's four hours fall inside one UTC
+  /// day, 0000Z to 0400Z, so the day's score IS the contest's. The day's
+  /// tally is the badge alone, with no detail: the information panel lists
+  /// day tallies a line each, and the checklist belongs to the operation's.
   summarizeScore({ scoresheet, scope }, ctx) {
     const t = tFor(ctx)
     const keys = Object.keys(scoresheet.mults)
@@ -119,10 +136,10 @@ export const SprintScorer: ContestScorer<SprintScoresheet> = {
     for (const key of keys) kinds[locationKind(key)] += 1
     const part = (count: number, kind: 'state' | 'province' | 'country') =>
       count === 1 ? t(`${kind}One`) : count > 1 ? t(`${kind}Many`, { formatted: fmtInteger(count) }) : ''
-    return contestSummary(
+    const tallies = contestSummary(
       {
         key: TYPE,
-        scope,
+        scope: 'operation',
         icon: 'run-fast',
         title: CONTEST_TITLE,
         total: scoresheet.qsos * keys.length,
@@ -135,35 +152,51 @@ export const SprintScorer: ContestScorer<SprintScoresheet> = {
           },
           ctx,
         ),
-        detail: [multsLines(scoresheet, t), bandBreakdown(scoresheet)].join('\n\n'),
+        detail: [...multsChecklist(scoresheet, t), ...bands(scoresheet, ctx)].join('\n\n'),
+        grid: true,
         extra: { points: scoresheet.qsos, mults: keys.length, qsos: scoresheet.qsos },
       },
       ctx,
     )
+    if (scope === 'operation') return tallies
+    const { longSummary: _detail, grid: _grid, ...badge } = tallies[TYPE]
+    return { [TYPE]: { ...badge, for: 'day' } }
   },
 }
 
 export const CONTEST_TITLE = 'SSB Sprint'
 
-/// Once few enough are left to chase, which ones.
-const MISSING_SHOWN_FROM = 15
-
-/// States and provinces worked out of how many there are, and the missing
-/// ones when the list is short enough to read.
-function multsLines(sheet: SprintScoresheet, t: ReturnType<typeof tFor>): string {
-  const line = (label: string, all: string[]) => {
-    const missing = all.filter((code) => !sheet.mults[code])
-    const counted = t('multsWorked', { label, worked: fmtInteger(all.length - missing.length), total: fmtInteger(all.length) })
-    if (missing.length === 0) return `${counted} ✓`
-    return missing.length <= MISSING_SHOWN_FROM ? `${counted} — ${t('missing', { list: missing.join(' ') })}` : counted
+/// The states and provinces as a checklist, every one of them, those worked
+/// struck through — the core's checklist convention (`grid: true`), as the
+/// QSO parties draw theirs — then the countries worked, which are too many to
+/// list unworked.
+function multsChecklist(sheet: SprintScoresheet, t: ReturnType<typeof tFor>): string[] {
+  const worked = (code: string) => (sheet.mults[code] !== undefined ? `**~~${code}~~**` : code)
+  const count = (codes: string[]) => fmtInteger(codes.filter((code) => sheet.mults[code] !== undefined).length)
+  const parts = [
+    `### ${t('statesHeading', { worked: count(US_STATES), total: fmtInteger(US_STATES.length) })}`,
+    US_STATES.map(worked).join(' '),
+    `### ${t('provincesHeading', { worked: count(CANADIAN_PROVINCES), total: fmtInteger(CANADIAN_PROVINCES.length) })}`,
+    CANADIAN_PROVINCES.map(worked).join(' '),
+  ]
+  const countries = Object.keys(sheet.mults).filter((code) => locationKind(code) === 'country').sort()
+  if (countries.length > 0) {
+    parts.push(`### ${countries.length === 1 ? t('countriesHeadingOne') : t('countriesHeadingMany', { formatted: fmtInteger(countries.length) })}`)
+    parts.push(countries.map(worked).join(' '))
   }
-  return [line(t('statesLabel'), US_STATES), line(t('provincesLabel'), CANADIAN_PROVINCES)].join('\n')
+  return parts
 }
 
-/// QSOs per band, in band order.
-function bandBreakdown(sheet: SprintScoresheet): string {
-  return VALID_BANDS.map((band) => {
-    const qsos = sheet.bands[band] ?? 0
-    return qsos === 0 ? `**${band}**: —` : `**${band}**: ${fmtInteger(qsos)} QSOs`
-  }).join('\n')
+/// The band lines under the QSO count. A point a QSO, so a band's points are
+/// its QSOs.
+function bands(sheet: SprintScoresheet, ctx: Pick<HookContext, 'locale'>): string[] {
+  if (sheet.qsos === 0) return []
+  return [
+    `### ${counted(sheet.qsos, 'qso', ctx)}`,
+    bandBreakdown(
+      Object.entries(sheet.bands).map(([band, qsos]) => ({ band, qsos, points: qsos, mults: sheet.bandFirstMults?.[band] ?? 0 })),
+      ctx,
+      { bands: VALID_BANDS },
+    ),
+  ]
 }

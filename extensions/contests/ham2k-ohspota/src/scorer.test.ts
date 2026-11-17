@@ -124,14 +124,17 @@ test("in no park, only a station in one may be worked", () => {
   const { scores, summary } = run([qso({ call: 'W8AAA', park: 'ADA' }), qso({ call: 'W8BBB', park: 'NOT' }), qso({ call: 'W8CCC' })], operationFor())
   assert.deepEqual(scores.map((s) => s.value), [1, 0, 0])
   assert.deepEqual(scores[1].alerts, ['invalidExchange'])
-  assert.deepEqual(scores[2].alerts, ['missingExchange'])
+  assert.deepEqual(scores[2].incomplete, ['ohspota/park'], 'their park is the whole contact, so it is asked for')
   assert.equal(summary().total, 1)
 })
 
-test("in a park everyone counts, and a missing or unknown park says so", () => {
+// From a park, a station in none has no park to send. Asking for one would
+// hold back every such contact at Enter, though each is worth its point.
+test("in a park everyone counts: a station in no park is a contact, and an unknown park says so", () => {
   const { scores } = run([qso({ call: 'W8AAA' }), qso({ call: 'KD4BF', park: 'GA' })])
   assert.deepEqual(scores.map((s) => s.value), [1, 1])
-  assert.deepEqual(scores[0].alerts, ['missingExchange'])
+  assert.equal(scores[0].alerts, undefined)
+  assert.equal(scores[0].incomplete, undefined)
   assert.deepEqual(scores[1].alerts, ['invalidExchange'])
 })
 
@@ -161,7 +164,7 @@ test("each park we operate from is its own entry, and a station counts again at 
   assert.equal(summary().total, 8)
   assert.equal(summary().label, 'OSPOTA: 8 points')
   // Each entry's product, never one product over the pooled contacts (5 × 2).
-  assert.equal(String(summary().longSummary).split('\n')[0], '5 QSOs, 6 + 2')
+  assert.equal(String(summary().longSummary).split('\n')[0], '5 QSOs, 2 entries: 6 + 2')
   assert.match(String(summary().longSummary), /\*\*PUN:\*\* 3 × 2 = 6/)
 })
 
@@ -204,4 +207,11 @@ test("offers no per-day summary", () => {
   const operation = operationFor('PUN')
   const { sheet } = run(contacts(3, 1), operation)
   assert.deepEqual(OhspotaScorer.summarizeScore({ scoresheet: sheet, operation, ref: OWN_REF, scope: 'day' }, ctx), {})
+})
+
+// Every contact is a point, so a band's points are its contacts; and with two
+// entries a park is a multiplier in each, so no band could hold it once.
+test("each band line carries its points, and no multipliers", () => {
+  const { summary } = run([qso({ call: 'W8AAA', band: '40m', park: 'ADA' }), qso({ call: 'W8BBB', band: '20m' }), qso({ call: 'W8CCC', band: '20m' })])
+  assert.match(String(summary().longSummary), /^\*\*40m\*\*: 1 QSO, 1 pt\n\*\*20m\*\*: 2 QSOs, 2 pts$/m)
 })

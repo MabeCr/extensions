@@ -1,0 +1,24 @@
+{
+  "name": "@ham2k/ext-ham2k-band-plan",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The band plan where the station is, as band annotations",
+  "author": "Sebastian Delmont <sd@ham2k.com>",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import ../../../scripts/sdk-node-resolve.mjs --experimental-strip-types --test 'src/*.test.ts'",
+    "pack": "npm run build && h2kext-pack build --force-name"
+  },
+  "devDependencies": {
+    "@ham2k/extension-sdk": "^1.23.0",
+    "@ham2k/extension-tools": "^1.23.0",
+    "@ham2k/lib-operation-data": "^1.2.1",
+    "esbuild": "^0.25.5"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

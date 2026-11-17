@@ -20,12 +20,10 @@
 // every entrant is portable by definition (all stations sign /P, and
 // "nettspenning fra det offentlige el-nett må ikke brukes").
 
-// The breakdown below stays in language-neutral numbers, as `cqwpx` and
-// `r1-fd` do: the rules encoded here are worth testing more than the band
-// table is worth translating.
 import { contestArithmetic, contestSummary } from "@ham2k/extension-sdk"
-import type { ContestScorer, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
+import type { ContestScorer, HookContext, JSONValue, QsoScoreVerdict } from "@ham2k/extension-sdk"
 import { fmtInteger } from "@ham2k/lib-format-tools"
+import { bandBreakdown } from "@ham2k/lib-contest-summary"
 import { superModeForMode } from "@ham2k/lib-operation-data"
 
 import { parseCallsign } from "@ham2k/lib-callsigns"
@@ -254,7 +252,7 @@ export const NFDScorer: ContestScorer<NFDScoresheet> = {
           { qsos: scoresheet.qsos, points: scoresheet.points, mults, bonus: scoresheet.bonus },
           ctx,
         ),
-        detail: breakdown(scoresheet),
+        detail: breakdown(scoresheet, ctx),
         extra: { points: scoresheet.points, mults, qsos: scoresheet.qsos },
       },
       ctx,
@@ -265,23 +263,19 @@ export const NFDScorer: ContestScorer<NFDScoresheet> = {
 /// The per-band table and the per-mode split — with multipliers counted per
 /// band AND mode, what tells an operator where the score is left is which
 /// combinations are thin.
-function breakdown(sheet: NFDScoresheet): string {
-  const lines: string[] = []
-  lines.push(...VALID_BANDS.map((band) => {
-    const bandQsos = sheet.bands[band] ?? 0
-    const bandPoints = sheet.bandPoints[band] ?? 0
-    const bandMults = Object.keys(sheet.mults).filter((key) => key.startsWith(`${band}|`)).length
-    return bandQsos === 0
-      ? `**${band}**: —`
-      : `**${band}**: ${fmtInteger(bandQsos)} QSOs, ${fmtInteger(bandPoints)} pts, ${fmtInteger(bandMults)} mults`
+function breakdown(sheet: NFDScoresheet, ctx: Pick<HookContext, 'locale'>): string {
+  const rows = Object.entries(sheet.bands).map(([band, qsos]) => ({
+    band,
+    qsos,
+    points: sheet.bandPoints[band] ?? 0,
+    mults: Object.keys(sheet.mults).filter((key) => key.startsWith(`${band}|`)).length,
   }))
+  const lines = [bandBreakdown(rows, ctx, { bands: VALID_BANDS })]
 
+  // The mode names are the rules' own (CW / SSB / DIGIMODE), not translated.
   const modes = ['CW', 'SSB', 'DIGI']
     .filter((mode) => sheet.byMode[mode])
     .map((mode) => `${mode} ${fmtInteger(sheet.byMode[mode])}`)
-  if (modes.length > 0) {
-    lines.push('')
-    lines.push(modes.join(' · '))
-  }
-  return lines.join('\n')
+  if (modes.length > 0) lines.push(modes.join(' · '))
+  return lines.join('\n\n')
 }

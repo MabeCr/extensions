@@ -218,8 +218,8 @@ test('the entity comes from the lookup when the operator has not typed one', () 
 
 test('a QSO with no lookup at all still reaches the country file', () => {
   // An imported or synced QSO carries no `guess`, so without the country file
-  // the entity is unknown: the exchange resolves to nothing, the contact scores
-  // `missingExchange`, and the DX multiplier the party publishes is never
+  // the entity is unknown: the exchange resolves to nothing, the contact is held
+  // back as `incomplete`, and the DX multiplier the party publishes is never
   // claimed.
   assert.equal(entityPrefixOf({ their: { call: 'DL1ABC' } }), '')
   registerEntityLookup((call) => (call?.startsWith('DL') ? 'dl' : undefined))

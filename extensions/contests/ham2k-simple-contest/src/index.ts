@@ -19,6 +19,7 @@
 
 import { exportTypeDefinition } from "@ham2k/extension-sdk"
 import { qsonToCabrillo } from "@ham2k/lib-qson-cabrillo"
+import { cabrilloOperators } from "@ham2k/lib-contest-station"
 import { adifForExport, contestScorer, defineExtension, exportFilename, startMillisOf } from "@ham2k/extension-sdk"
 import type {
   ExportOption,
@@ -300,7 +301,7 @@ const ExportHook = {
         headers: [
           ['CONTEST', id],
           ['CALLSIGN', ourCall],
-          ['OPERATORS', str((operation.local as Record<string, JSONValue>)?.operatorCall)],
+          ['OPERATORS', cabrilloOperators(operation, args.qsos)],
           ['GRID-LOCATOR', str(operation.grid)],
         ],
         qsoParts: (qso) => [
