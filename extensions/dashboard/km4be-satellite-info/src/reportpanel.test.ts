@@ -273,10 +273,11 @@ test("the other pages have the Report tab too, and nothing is sent just by looki
   const sky = await p.render(t0)
   assert.deepEqual(sky.controls.filter((c) => c.id.startsWith("tab_")).map((c) => [c.id, c.kind, c.label]), [
     ["tab_sky", "nativeChip", "Sky"],
+    ["tab_map", "nativeChip", "Map"],
     ["tab_radio", "nativeChip", "Radio"],
     ["tab_report", "nativeChip", "Report"],
   ])
-  assert.deepEqual([sky.values.tab_sky, sky.values.tab_radio, sky.values.tab_report], [1, 0, 0], "the page shown is lit")
+  assert.deepEqual([sky.values.tab_sky, sky.values.tab_map, sky.values.tab_radio, sky.values.tab_report], [1, 0, 0, 0], "the page shown is lit")
   assert.equal(p.fetched.includes(CATALOG_URL), false, "the catalog is only read when the Report page is opened")
   await p.event(t0, "tab", "tab", { text: "report" })
   await p.render(t0)

@@ -5,7 +5,7 @@
 // sky, and what to tune to. Two tabs of a small screen, since a scene cannot
 // scroll: the Sky (plot and times) and the Radio (frequencies and Doppler).
 
-import type { PanelSceneLayer } from "@ham2k/extension-sdk"
+import type { PanelSceneControl, PanelSceneLayer } from "@ham2k/extension-sdk"
 
 import type { Satellite } from "./data.ts"
 import { compass, findPasses, lookAt, satrecFromOmm } from "./orbit.ts"
@@ -14,14 +14,16 @@ import { clock, countdown } from "./passes.ts"
 import { liveDoppler, RADIO_LINES, radioLines, shiftText } from "./radio.ts"
 import type { LiveShift } from "./radio.ts"
 import { placeLabels } from "./labels.ts"
+import { passMap } from "./map.ts"
 import type { Box, Disc } from "./labels.ts"
-import { arrowSpot, compassLayers, DEFAULT_SKY_COLORS, DOT_RADIUS, ELEVATION_BOX, elevationText, HEADING_BOX, headingText, liveSpot, READOUT_BOXES, SCRUB_BOX, SKY_SIZE, skySvg, skyTrack, skyXY } from "./sky.ts"
+import { arrowSpot, compassLayers, DEFAULT_SKY_COLORS, DOT_RADIUS, ELEVATION_BOX, elevationText, HEADING_BOX, headingText, liveSpot, READOUT_BOXES, satelliteLayer, SCRUB_BOX, SKY_SIZE, skySvg, skyTrack, skyXY } from "./sky.ts"
 import { buildScrub, hideWhileScrubbing } from "./scrub.ts"
 import type { Scrub } from "./scrub.ts"
 import type { SkyLook } from "./sky.ts"
 import type { SkyColors } from "./sky.ts"
+import type { TrackingView } from "./tracking.ts"
 
-export type Tab = "sky" | "radio" | "report"
+export type Tab = "sky" | "map" | "radio" | "report"
 
 export interface DetailModel {
   title: string
@@ -43,10 +45,16 @@ export interface DetailModel {
   skyPercent?: number
   /// The slider over the plot that scrubs along the pass, and what it draws; null with no orbit to work from.
   scrub: Scrub | null
+  /// The pass on a map of the world, on the Map tab; absent on the others, or with no orbit.
+  map?: PanelSceneControl
+  /// Doppler tracking, as the page shows it; absent where the panel has not looked.
+  tracking?: TrackingView
   /// The sky plot, with the compass letters, the times of rise, peak and set, and, while it is
   /// under way, the satellite's elevation and heading in the bottom left corner and the Doppler shift at the top.
   sky: {
     svg: string
+    /// The satellite where it is now, over the plot, while it is up.
+    satellite?: PanelSceneLayer
     compass: ReturnType<typeof compassLayers>
     labels: ReturnType<typeof placeLabels>
     readout: PanelSceneLayer[]
@@ -163,6 +171,11 @@ export function completePass(satellite: Satellite, observer: Observer, pass: Pas
 
 const deg = (n: number): string => `${Math.round(n)}°`
 
+const satelliteOf = (track: ReturnType<typeof skyTrack>, pass: Pass, colors: SkyColors, now: number, here?: SkyLook): { satellite?: PanelSceneLayer } => {
+  const spot = liveSpot(track, pass, now, here)
+  return spot ? { satellite: satelliteLayer(spot, colors) } : {}
+}
+
 export function buildDetail(
   satellite: Satellite,
   observer: Observer,
@@ -208,8 +221,11 @@ export function buildDetail(
     ...(options.pane ? { pane: options.pane } : {}),
     ...(options.skyPercent !== undefined ? { skyPercent: options.skyPercent } : {}),
     scrub,
+    ...(tab === "map" && satrec ? { map: passMap(satrec, observer, pass, now, theme.sky, theme.text) } : {}),
     sky: {
-      svg: skySvg(track, pass, theme.sky, now, here ?? undefined),
+      // The plot holds still; the satellite moving across it is a layer of its own, which live.ts moves between draws.
+      svg: skySvg(track, pass, theme.sky),
+      ...satelliteOf(track, pass, theme.sky, now, here ?? undefined),
       compass: compassLetters,
       // Written on the plot, so the plot says the key times itself and the lines under it can be few.
       labels: plotLabels(

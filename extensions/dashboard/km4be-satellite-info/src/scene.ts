@@ -13,6 +13,7 @@
 
 import type { PanelScene, PanelSceneControl, PanelSceneLayoutNode } from "@ham2k/extension-sdk"
 
+import { MAP_KEY } from "./map.ts"
 import type { DetailModel } from "./detail.ts"
 import type { Report } from "./report.ts"
 import type { Kind } from "./status.ts"
@@ -444,21 +445,32 @@ export const statusKey = (i: number): string => `status${i}`
 export function detailStrings(d: DetailModel): Record<string, string> {
   const strings: Record<string, string> = { title: d.title, tab: d.tab }
   if (d.tab === "sky") d.times.forEach((line, i) => (strings[timeKey(i)] = line))
+  else if (d.tab === "map") strings.mapKey = d.map ? MAP_KEY : "There is no orbit for this satellite, so its track cannot be drawn."
   else {
     d.status.forEach((line, i) => (strings[statusKey(i)] = line))
     d.radio.forEach((line, i) => (strings[radioKey(i)] = line))
+    strings.trackLine = trackLineOf(d)
+    strings.uplinkRadio = d.tracking?.uplink ?? ""
+    strings.rotorLine = d.tracking?.rotorLine || "Points the station's rotator at the satellite: where it will rise, then along the pass."
+    strings.rotator = d.tracking?.rotator ?? ""
+    strings.fillLine = d.tracking?.fillLine ?? ""
   }
   return strings
 }
 
+/// What the Radio page says of Doppler tracking: what it is doing, or, off, what the switch would do.
+export const trackLineOf = (d: DetailModel): string =>
+  d.tracking?.on ? d.tracking.line : d.tracking?.line || "Keeps the logging radio on the downlink as the satellite moves. Tune across the transponder and it follows you."
+
 /// The line under the plot that says how to use the slider over it.
 export const SCRUB_HINT = "Scrub across the sky chart for details, then tap Reset to clear it."
 
-export const detailValues = (d: DetailModel): Record<string, number> => ({ utc: d.utc ? 1 : 0, ...tabValues(d.tab) })
+export const detailValues = (d: DetailModel): Record<string, number> => ({ utc: d.utc ? 1 : 0, track: d.tracking?.on ? 1 : 0, rotate: d.tracking?.rotorOn ? 1 : 0, fill: d.tracking?.fillOn ? 1 : 0, ...tabValues(d.tab) })
 
 /// The pages of a pass, in the order of their tabs.
 export const TABS = [
   { label: "Sky", value: "sky" },
+  { label: "Map", value: "map" },
   { label: "Radio", value: "radio" },
   { label: "Report", value: "report" },
 ] as const
@@ -508,6 +520,10 @@ export function buildDetailScene(d: DetailModel): PanelScene {
   if (d.tab === "sky") {
     const side = plotSide(d, dense)
     if (d.scrub) controls.push({ id: "scrubHint", kind: "nativeText", label: SCRUB_HINT, style: "label", align: "center" })
+    // While the radio is being kept on the satellite, the Sky page says where, so the plot can stay in front.
+    const lines = [d.tracking?.on ? d.tracking.line : "", d.tracking?.rotorOn ? (d.tracking.rotorLine ?? "") : ""].filter(Boolean)
+    const tracking = lines.length > 0
+    if (tracking) controls.push({ id: "trackSky", kind: "nativeText", label: lines.join("\n"), style: "mono", align: "center" })
     d.times.forEach((_, i) => controls.push({ id: timeKey(i), kind: "nativeText", label: ["Rise", "Peak", "Set"][i] ?? "Time", value: timeKey(i), style: "mono" }))
     return {
       version: 1,
@@ -516,10 +532,30 @@ export function buildDetailScene(d: DetailModel): PanelScene {
       // The slider rests one past the pass's last moment, where the plot shows what it always did.
       values: { ...detailValues(d), ...(d.scrub ? { scrub: d.scrub.rest } : {}) },
       strings: detailStrings(d),
-      layers: [{ id: "sky", x: 0, y: 0, width: 360, height: 360, svg: d.sky.svg }, ...d.sky.compass, ...d.sky.labels, ...d.sky.readout, ...(d.scrub?.layers ?? [])],
+      layers: [{ id: "sky", x: 0, y: 0, width: 360, height: 360, svg: d.sky.svg }, ...(d.sky.satellite ? [d.sky.satellite] : []), ...d.sky.compass, ...d.sky.labels, ...d.sky.readout, ...(d.scrub?.layers ?? [])],
       controls: d.scrub ? [...controls, d.scrub.control, d.scrub.reset] : controls,
       layout: {
-        column: [...head, side ? { scene: true, height: side } : { scene: true, flex: 1 }, ...(d.scrub ? [{ control: "scrubHint" }] : []), ...d.times.map((_, i): PanelSceneLayoutNode => ({ control: timeKey(i) }))],
+        column: [...head, side ? { scene: true, height: side } : { scene: true, flex: 1 }, ...(tracking ? [{ control: "trackSky" }] : []), ...(d.scrub ? [{ control: "scrubHint" }] : []), ...d.times.map((_, i): PanelSceneLayoutNode => ({ control: timeKey(i) }))],
+        padding: dense.padding,
+        spacing: dense.gap,
+        crossAxisAlignment: "stretch",
+      },
+    }
+  }
+
+  if (d.tab === "map") {
+    if (d.map) controls.push(d.map)
+    controls.push({ id: "mapKey", kind: "nativeText", label: "What the map shows", value: "mapKey", style: "label" })
+    return {
+      version: 1,
+      width: 360,
+      height: 480,
+      values: detailValues(d),
+      strings: detailStrings(d),
+      layers: [],
+      controls,
+      layout: {
+        column: [...head, ...(d.map ? [{ control: "passMap", flex: 1 }] : [{ spacer: 1 }]), { control: "mapKey" }],
         padding: dense.padding,
         spacing: dense.gap,
         crossAxisAlignment: "stretch",
@@ -528,6 +564,20 @@ export function buildDetailScene(d: DetailModel): PanelScene {
   }
 
   d.status.forEach((_, i) => controls.push({ id: statusKey(i), kind: "nativeText", label: i ? "Latest AMSAT report" : "AMSAT status reports", value: statusKey(i) }))
+  const uplinks = d.tracking?.uplinkOptions.length ? d.tracking.uplinkOptions : [{ label: "No uplink radio", value: "" }]
+  controls.push(
+    { id: "track", kind: "nativeSwitch", label: "Track Doppler", value: "track", event: "track" },
+    { id: "uplinkRadio", kind: "nativeDropdown", label: "Uplink on", value: "uplinkRadio", event: "uplinkRadio", options: uplinks, disabled: uplinks.length < 2 },
+    { id: "trackLine", kind: "nativeText", label: "Doppler tracking", value: "trackLine", style: "label" },
+  )
+  const rotators = d.tracking?.rotatorOptions?.length ? d.tracking.rotatorOptions : [{ label: "No rotator", value: "" }]
+  controls.push(
+    { id: "rotate", kind: "nativeSwitch", label: "Point rotator", value: "rotate", event: "rotate" },
+    { id: "rotator", kind: "nativeDropdown", label: "Rotator", value: "rotator", event: "rotator", options: rotators, disabled: rotators.length < 2 },
+    { id: "rotorLine", kind: "nativeText", label: "Rotator", value: "rotorLine", style: "label" },
+    { id: "fill", kind: "nativeSwitch", label: "Log contacts via this satellite", value: "fill", event: "fill" },
+    { id: "fillLine", kind: "nativeText", label: "Contacts", value: "fillLine", style: "label" },
+  )
   d.radio.forEach((_, i) => controls.push({ id: radioKey(i), kind: "nativeText", label: `Radio line ${i + 1}`, value: radioKey(i), style: "mono" }))
   controls.push({ id: "links", kind: "nativeButton", label: "Links", icon: "open-in-new", variant: "tonal", event: "links" })
   return {
@@ -542,6 +592,12 @@ export function buildDetailScene(d: DetailModel): PanelScene {
       column: [
         ...head,
         ...d.status.map((_, i): PanelSceneLayoutNode => ({ control: statusKey(i) })),
+        { row: [{ control: "track" }, { control: "uplinkRadio", flex: 1 }], spacing: dense.gap, crossAxisAlignment: "center" },
+        { control: "trackLine" },
+        { row: [{ control: "rotate" }, { control: "rotator", flex: 1 }], spacing: dense.gap, crossAxisAlignment: "center" },
+        { control: "rotorLine" },
+        { control: "fill" },
+        { control: "fillLine" },
         ...d.radio.map((_, i): PanelSceneLayoutNode => ({ control: radioKey(i) })),
         { spacer: 1 },
         { control: "links" },

@@ -92,7 +92,7 @@ test("the panel is a scene of controls, with its settings and a minute's tick", 
   const p = await panel()
   const d = await p.descriptor()
   assert.deepEqual(d.on, ["tick:60"])
-  assert.deepEqual(d.form.map((f) => f.key), ["minElevation", "grid", "statusHours", "utc", "density", "listSeconds", "skySize", "countdown"])
+  assert.deepEqual(d.form.map((f) => f.key), ["minElevation", "grid", "statusHours", "utc", "density", "listSeconds", "skySize", "countdown", "alerts", "bandLabels", "alertsFavorites", "alertLead"])
   const { kind, scene } = await p.render(cfg, t0)
   assert.equal(kind, "scene")
   // The list is drawn as text in one monospaced face: the titles and the five rows, each with a hit area over it.
