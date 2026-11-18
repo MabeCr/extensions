@@ -1,14 +1,16 @@
-# KM4BE Satellite Info 0.11.9
+# KM4BE Satellite Info 0.11.10
 
 A quicker map, long text that wraps, and Radio and Report pages that scroll.
 
-This replaces 0.11.1 to 0.11.8.
-
-## New
-
-- **The track shows only for a near pass.** On the Map tab the dashed track runs from the satellite's ringed dot to where the pass begins, but only when the pass is within about two hours. For a later pass, which would only be a long scribble across the map, it is left out. Nothing is drawn after the red end dot.
+This replaces 0.11.1 to 0.11.9.
 
 ## Fixed
+
+- **A long pass that was already up showed the wrong rise.** Opening a pass that had been under way for more than half an hour, such as an IO-117 pass, showed its "Rise" as the moment the list was worked out, with the satellite already at 44° and the peak a second later. The pass is now traced back to where the satellite really rose, however long ago, so the rise time and bearing, the whole path on the sky chart and the true peak are shown.
+
+## Earlier in this series
+
+- **The track shows only for a near pass.** On the Map tab the dashed track runs from the satellite's ringed dot to where the pass begins, but only when the pass is within about two hours. For a later pass, which would only be a long scribble across the map, it is left out. Nothing is drawn after the red end dot.
 
 - **A quicker map.** The Map tab was slow to pan and zoom on a phone. It now leaves off the state and province lines, the grid and the night shading, and the satellite's dot moves every 5 seconds instead of every second, so the app redraws the map less while you move it. A new **Map detail** setting, Fast or Full, puts the state lines, grid and night shading back.
 

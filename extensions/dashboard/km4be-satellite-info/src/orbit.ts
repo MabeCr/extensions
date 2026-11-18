@@ -171,6 +171,19 @@ function makePass(satrec: SatRec, observer: Observer, aos: number, los: number, 
   }
 }
 
+/// A pass that was found already under way begins where the search began, not where the satellite rose. Walks back from its
+/// start, a half minute at a time, to where the satellite was last below the horizon, and finds the rise and the true peak
+/// from there. A pass that really begins at its start, or one that has gone on for longer than `LOOK_BACK_MS`, is as it was.
+const LOOK_BACK_MS = 6 * 3_600_000
+export function wholePass(satrec: SatRec, observer: Observer, pass: Pass): Pass {
+  const up = (t: number) => (lookAt(satrec, observer, t)?.elevation ?? -90) > 0
+  if (!up(pass.aos - 1000)) return pass
+  let t = pass.aos
+  while (t > pass.aos - LOOK_BACK_MS && up(t - SEARCH_STEP_MS)) t -= SEARCH_STEP_MS
+  if (up(t - SEARCH_STEP_MS)) return pass
+  return makePass(satrec, observer, crossing(satrec, observer, t - SEARCH_STEP_MS, t), pass.los, false)
+}
+
 const COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"] as const
 
 const COMPASS_8 = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const

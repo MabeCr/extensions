@@ -176,6 +176,11 @@ test("a pass already under way is traced back to where it really rose", () => {
   const full = completePass(ao7, miami, clipped, mid)
   assert.ok(Math.abs(full.aos - best.aos) < 2_000)
   assert.ok(Math.abs(full.los - best.los) < 2_000)
+  assert.equal(full.inProgress, false)
+  assert.ok(full.maxElevation >= clipped.maxElevation - 0.01, "the peak is the whole pass's")
+  // Clipped well into a long pass, the walk back still finds the rise.
+  const late = findPasses(satrec, miami, best.los - 60_000, 1, 0)[0]
+  assert.ok(Math.abs(completePass(ao7, miami, late, late.aos + 1000).aos - best.aos) < 2_000)
   // A pass that has not begun is left as it is.
   assert.equal(completePass(ao7, miami, best, best.aos - 60_000), best)
 })

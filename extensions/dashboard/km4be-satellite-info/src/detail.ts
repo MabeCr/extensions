@@ -9,7 +9,7 @@ import type { Room } from "./wrap.ts"
 import type { PanelSceneControl, PanelSceneLayer } from "@ham2k/extension-sdk"
 
 import type { Satellite } from "./data.ts"
-import { compass, findPasses, lookAt, satrecFromOmm } from "./orbit.ts"
+import { compass, lookAt, satrecFromOmm, wholePass } from "./orbit.ts"
 import type { Observer, Pass } from "./orbit.ts"
 import { clock, countdown } from "./passes.ts"
 import { liveDoppler, RADIO_LINES, radioLines, shiftText } from "./radio.ts"
@@ -165,12 +165,11 @@ export function themeOf(colors: Record<string, string> | undefined): Theme {
   }
 }
 
-/// A pass that was already under way when the list was worked out begins there, not where
-/// the satellite really rose. Looking back a half hour finds the real edges.
+/// A pass that was already under way when the list was worked out begins there, not where the satellite really rose: one of
+/// IO-117's, an hour long, may have begun long before. Walking back finds the real rise and the real peak.
 export function completePass(satellite: Satellite, observer: Observer, pass: Pass, now: number): Pass {
   if (!satellite.omm || pass.aos > now) return pass
-  const found = findPasses(satrecFromOmm(satellite.omm), observer, now - 30 * 60_000, 1, 0)
-  return found.find((p) => Math.abs(p.los - pass.los) < 120_000) ?? pass
+  return wholePass(satrecFromOmm(satellite.omm), observer, pass)
 }
 
 const deg = (n: number): string => `${Math.round(n)}°`
