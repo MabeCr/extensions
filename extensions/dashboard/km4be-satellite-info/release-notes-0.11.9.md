@@ -1,0 +1,24 @@
+# KM4BE Satellite Info 0.11.9
+
+A quicker map, long text that wraps, and Radio and Report pages that scroll.
+
+This replaces 0.11.1 to 0.11.8.
+
+## New
+
+- **The track shows only for a near pass.** On the Map tab the dashed track runs from the satellite's ringed dot to where the pass begins, but only when the pass is within about two hours. For a later pass, which would only be a long scribble across the map, it is left out. Nothing is drawn after the red end dot.
+
+## Fixed
+
+- **A quicker map.** The Map tab was slow to pan and zoom on a phone. It now leaves off the state and province lines, the grid and the night shading, and the satellite's dot moves every 5 seconds instead of every second, so the app redraws the map less while you move it. A new **Map detail** setting, Fast or Full, puts the state lines, grid and night shading back.
+
+- **The app breaks the lines.** A text that might be too long for the pane is now laid out as words that the app itself wraps where they reach the edge, so lines fill the width and none is cut off, whatever the font and text size.
+- **Text no longer runs off the side.** On a pass's Radio page, a line too long for the pane, such as the transponder's notes (SO-50's "Arm first…" line), the Doppler, rotator and contact lines or an AMSAT report, now goes onto the next line instead of being cut off with "...". The caption under the map and the lines on the Report page do the same. A narrow pane, like a phone, breaks lines sooner.
+- **Scrolling in landscape.** The Radio and Report pages now scroll, so a phone held on its side can reach everything on them.
+
+## Still true from 0.11.0
+
+- Band Scope labels, pass alerts, logging contacts via the satellite, rotator tracking, Doppler tracking, the Map tab and smoother live updates.
+- Needs a Ham2K Logger that speaks extension API 25 or later.
+
+Feedback and corrections are welcome. Please reach out to KM4BE with suggestions!

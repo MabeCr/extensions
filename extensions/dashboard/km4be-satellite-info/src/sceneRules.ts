@@ -32,6 +32,10 @@ interface LayoutNode {
   row?: LayoutNode[]
   column?: LayoutNode[]
   wrap?: LayoutNode[]
+  grid?: LayoutNode[]
+  span?: [number, number]
+  unit?: [number, number]
+  columns?: number
   scene?: boolean
 }
 export interface SceneLike {
@@ -39,14 +43,14 @@ export interface SceneLike {
   strings?: Record<string, string>
   layers?: Layer[]
   controls?: Control[]
-  layout?: { column?: LayoutNode[] }
+  layout?: LayoutNode
 }
 
 const CHOICES = new Set(["nativeDropdown", "nativeRadio", "nativeSegmented"])
 const NO_VALUE = new Set(["nativeButton", "button", "zoom", "nativeText"])
 
 const controlsOf = (nodes: LayoutNode[] | undefined): string[] =>
-  (nodes ?? []).flatMap((n) => [...(n.control ? [n.control] : []), ...controlsOf(n.row), ...controlsOf(n.column), ...controlsOf(n.wrap)])
+  (nodes ?? []).flatMap((n) => [...(n.control ? [n.control] : []), ...controlsOf(n.row), ...controlsOf(n.column), ...controlsOf(n.wrap), ...controlsOf(n.grid)])
 
 /// What is wrong with a scene, one sentence each; none when it is as the app wants it.
 export function violations(scene: SceneLike): string[] {
@@ -94,7 +98,21 @@ export function violations(scene: SceneLike): string[] {
 
   // In a laid-out scene, every control that has no rect is in the layout exactly once, and none that is not there has none.
   if (scene.layout) {
-    const placed = controlsOf(scene.layout.column)
+    const placed = controlsOf([scene.layout])
+    // A grid needs its slot size, and every child fits its columns and takes no more slots than the app allows a scene's grids.
+    const grid = scene.layout.grid
+    if (grid) {
+      const [w, h] = scene.layout.unit ?? [0, 0]
+      if (!(w > 0 && h > 0)) out.push("the outermost grid has no unit")
+      let slots = 0
+      for (const child of grid) {
+        const [across, down] = child.span ?? [1, 1]
+        if (scene.layout.columns !== undefined && across > scene.layout.columns) out.push(`a grid child spans ${across} columns of ${scene.layout.columns}`)
+        if (across > 256 || down > 256) out.push(`a grid child spans ${across} by ${down}, at most 256`)
+        slots += across * down
+      }
+      if (slots > 16_384) out.push(`${slots} slots in a grid, at most 16,384`)
+    }
     for (const c of controls) {
       const rect = c.x !== undefined && c.y !== undefined && c.width !== undefined && c.height !== undefined
       const times = placed.filter((id) => id === c.id).length

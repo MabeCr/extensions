@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //
 // A pass on a map of the world (extension API 25): the ground track, the line on the Earth straight
-// under the satellite, solid while it is above your horizon and dashed for a quarter hour either side;
+// under the satellite, solid while it is above your horizon, and dashed from where the satellite is now to where the pass begins;
 // where it rises and sets for you; where it is now, with the circle of ground it can be heard from;
 // and you. The app draws the map, and zooms and pans it, with no call back to the extension.
 
@@ -13,8 +13,9 @@ import { footprintKm, subPoint } from "./orbit.ts"
 import type { SkyColors } from "./sky.ts"
 import type { SatRec } from "./vendor/satellite.js/index.js"
 
-/// How much of the track either side of the pass is drawn, and how finely.
-export const TRACK_MARGIN_MS = 15 * 60_000
+/// The furthest ahead of a pass that the dashed track is drawn, a bit over an orbit: for a later pass it would only be a long
+/// scribble across the map, so it is left out until the pass is near. A point of the line is 15 seconds.
+export const TRACK_REACH_MS = 2 * 3_600_000
 const STEP_MS = 15_000
 /// Close enough in to see a footprint a few thousand kilometres across with you in it.
 export const MAP_ZOOM = 2
@@ -37,16 +38,26 @@ export function groundTrack(satrec: SatRec, from: number, to: number, step = STE
 export const faded = (color: string, alpha = "33"): string => (/^#[0-9a-f]{6}$/i.test(color) ? `#${alpha}${color.slice(1)}` : color)
 
 /// The map control for a pass. `now` places the satellite, wherever it is, up or not.
-export function passMap(satrec: SatRec, observer: Observer, pass: Pass, now: number, colors: SkyColors, text: string): PanelSceneControl {
+/// What the app draws under the pass. Every pan and zoom redraws it all on a phone, and the state and province lines, the
+/// grid of latitude and longitude and the night shading are what make that slow, so by default they are left out: the
+/// coast and the country borders show the way. `full` puts them back.
+export const MAP_UNDER_FAST = { grayline: false, divisions: "#00000000", graticule: "#00000000" }
+export const MAP_UNDER_FULL = { grayline: true }
+
+export function passMap(satrec: SatRec, observer: Observer, pass: Pass, now: number, colors: SkyColors, text: string, full = false): PanelSceneControl {
   const during = groundTrack(satrec, pass.aos, pass.los)
-  const before = groundTrack(satrec, pass.aos - TRACK_MARGIN_MS, pass.aos)
-  const after = groundTrack(satrec, pass.los, pass.los + TRACK_MARGIN_MS)
+  // The dashed track is how the satellite gets to the pass: from where it is now, so that its dot is the line's start, to
+  // where the pass begins, as far back as it reaches. Under way, or after, there is none; and none runs on past the pass.
+  // Its start is where the satellite was at the last full draw, which is behind the dot, so the dot stays on the line as it
+  // moves between draws.
+  const from = Math.max(now, pass.aos - TRACK_REACH_MS)
+  const reaches = pass.aos - now <= TRACK_REACH_MS
+  const before = reaches && from < pass.aos ? groundTrack(satrec, from, pass.aos) : []
   const here = subPoint(satrec, now)
   const home = { lat: +observer.lat.toFixed(3), lon: +observer.lon.toFixed(3) }
 
   const lines = [
     ...(before.length > 1 ? [{ id: "before", points: before, style: "nearby" }] : []),
-    ...(after.length > 1 ? [{ id: "after", points: after, style: "nearby" }] : []),
     ...(during.length > 1 ? [{ id: "pass", points: during, style: "pass" }] : []),
   ]
   const markers = [
@@ -63,7 +74,7 @@ export function passMap(satrec: SatRec, observer: Observer, pass: Pass, now: num
     projection: "mercator",
     home,
     zoom: { min: 0, max: 8, initial: MAP_ZOOM },
-    map: { grayline: true },
+    map: full ? MAP_UNDER_FULL : MAP_UNDER_FAST,
     styles: {
       pass: { color: colors.path, width: [[0, 2.5], [6, 4]], casing: "#80000000" },
       nearby: { color: colors.grid, width: 1.5, dashed: true },

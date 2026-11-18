@@ -17,6 +17,8 @@ import { MAP_KEY } from "./map.ts"
 import type { DetailModel } from "./detail.ts"
 import type { Report } from "./report.ts"
 import type { Kind } from "./status.ts"
+import { proseOf } from "./wrap.ts"
+import type { Room } from "./wrap.ts"
 
 /// The most passes the list holds. Each row is two controls (the star, and the hit area over the line) and three layers
 /// (its text, the mark, the chevron), and a scene holds 256 controls and 512 layers: so many rows is as many as fit, with
@@ -444,19 +446,25 @@ export const statusKey = (i: number): string => `status${i}`
 /// tab have different lines, so only the shown tab's are named.
 export function detailStrings(d: DetailModel): Record<string, string> {
   const strings: Record<string, string> = { title: d.title, tab: d.tab }
+  const put = (key: string, text: string): void => {
+    strings[key] = text
+  }
   if (d.tab === "sky") d.times.forEach((line, i) => (strings[timeKey(i)] = line))
-  else if (d.tab === "map") strings.mapKey = d.map ? MAP_KEY : "There is no orbit for this satellite, so its track cannot be drawn."
+  else if (d.tab === "map") put("mapKey", mapKeyText(d))
   else {
-    d.status.forEach((line, i) => (strings[statusKey(i)] = line))
-    d.radio.forEach((line, i) => (strings[radioKey(i)] = line))
-    strings.trackLine = trackLineOf(d)
+    d.status.forEach((line, i) => put(statusKey(i), line))
+    d.radio.forEach((line, i) => put(radioKey(i), line))
+    put("trackLine", trackLineOf(d))
     strings.uplinkRadio = d.tracking?.uplink ?? ""
-    strings.rotorLine = d.tracking?.rotorLine || "Points the station's rotator at the satellite: where it will rise, then along the pass."
+    put("rotorLine", d.tracking?.rotorLine || "Points the station's rotator at the satellite: where it will rise, then along the pass.")
     strings.rotator = d.tracking?.rotator ?? ""
-    strings.fillLine = d.tracking?.fillLine ?? ""
+    put("fillLine", d.tracking?.fillLine ?? "")
   }
   return strings
 }
+
+/// The line under the map that says what is on it, or why there is no map.
+const mapKeyText = (d: DetailModel): string => (d.map ? MAP_KEY : "There is no orbit for this satellite, so its track cannot be drawn.")
 
 /// What the Radio page says of Doppler tracking: what it is doing, or, off, what the switch would do.
 export const trackLineOf = (d: DetailModel): string =>
@@ -513,6 +521,42 @@ export function plotSide(d: DetailModel, dense: Density): number | undefined {
   return Math.floor((most * (d.skyPercent ?? DEFAULT_SKY_PERCENT)) / 100)
 }
 
+/// One line of a page, and the height it takes.
+interface Child {
+  node: PanelSceneLayoutNode
+  height: number
+}
+
+const ROTOR_HINT = "Points the station's rotator at the satellite: where it will rise, then along the pass."
+
+/// The slot a scrolling page is built of, in logical pixels tall; a line spans as many as its height takes.
+const SLOT = 8
+/// The most columns of slots across, which with the lines of a page keeps within what the app allows a scene's grids.
+const MAX_SLOT_COLUMNS = 48
+const MAX_SLOTS = 12_000
+
+/// A page of lines as a grid whose slots are one line's width across, which the app scrolls itself when the page is longer
+/// than the pane, as a column is not (a phone on its side shows the top of it and no more). Undefined where the pane's size
+/// is not known, or the page would be too many slots, and then the page is a column.
+function scrolling(children: Child[], d: { pane?: { width: number; height: number }; compact: boolean }, dense: Density): PanelSceneLayoutNode | undefined {
+  if (!d.pane) return undefined
+  const room = d.pane.width - 2 * dense.padding
+  const unitW = Math.max(SLOT, Math.ceil(room / MAX_SLOT_COLUMNS))
+  // A column short of the room, so that a pane's padding counted another way never refuses the scene.
+  const columns = Math.floor(room / unitW) - 1
+  if (columns < 4) return undefined
+  const gap = d.compact ? dense.rowGap : 4
+  const sized = children.map((c) => ({ node: c.node, rows: Math.max(1, Math.ceil((c.height + gap) / SLOT)) }))
+  if (sized.reduce((n, c) => n + c.rows * columns, 0) > MAX_SLOTS) return undefined
+  return {
+    grid: sized.map((c) => ({ ...c.node, span: [columns, c.rows] })),
+    unit: [unitW, SLOT],
+    gap: 0,
+    columns,
+    padding: dense.padding,
+  }
+}
+
 export function buildDetailScene(d: DetailModel): PanelScene {
   const { controls, head } = detailHead(d.compact)
   const dense = densityOf(d.compact)
@@ -545,7 +589,9 @@ export function buildDetailScene(d: DetailModel): PanelScene {
 
   if (d.tab === "map") {
     if (d.map) controls.push(d.map)
-    controls.push({ id: "mapKey", kind: "nativeText", label: "What the map shows", value: "mapKey", style: "label" })
+    // The caption is a text control a line long, so a long one is a run of words the app wraps.
+    const caption = proseOf("mapKey", mapKeyText(d), "What the map shows", "label", d.columns)
+    controls.push(...caption.controls)
     return {
       version: 1,
       width: 360,
@@ -555,7 +601,7 @@ export function buildDetailScene(d: DetailModel): PanelScene {
       layers: [],
       controls,
       layout: {
-        column: [...head, ...(d.map ? [{ control: "passMap", flex: 1 }] : [{ spacer: 1 }]), { control: "mapKey" }],
+        column: [...head, ...(d.map ? [{ control: "passMap", flex: 1 }] : [{ spacer: 1 }]), caption.node],
         padding: dense.padding,
         spacing: dense.gap,
         crossAxisAlignment: "stretch",
@@ -563,23 +609,37 @@ export function buildDetailScene(d: DetailModel): PanelScene {
     }
   }
 
-  d.status.forEach((_, i) => controls.push({ id: statusKey(i), kind: "nativeText", label: i ? "Latest AMSAT report" : "AMSAT status reports", value: statusKey(i) }))
+  // The app sets a text control on one line, so a long text is a run of words in a `wrap`, which the app breaks itself.
+  const texts = (key: string, text: string, label: string, style: "label" | "mono" | undefined): Child[] => {
+    const p = proseOf(key, text, label, style, d.columns)
+    controls.push(...p.controls)
+    return [{ node: p.node, height: p.height }]
+  }
   const uplinks = d.tracking?.uplinkOptions.length ? d.tracking.uplinkOptions : [{ label: "No uplink radio", value: "" }]
+  const rotators = d.tracking?.rotatorOptions?.length ? d.tracking.rotatorOptions : [{ label: "No rotator", value: "" }]
+  const rowH = dense.rowHeight ?? 48
+  const children: Child[] = [
+    ...head.map((node): Child => ({ node, height: dense.headRow })),
+    ...d.status.flatMap((line, i) => texts(statusKey(i), line, i ? "Latest AMSAT report" : "AMSAT status reports", undefined)),
+  ]
   controls.push(
     { id: "track", kind: "nativeSwitch", label: "Track Doppler", value: "track", event: "track" },
     { id: "uplinkRadio", kind: "nativeDropdown", label: "Uplink on", value: "uplinkRadio", event: "uplinkRadio", options: uplinks, disabled: uplinks.length < 2 },
-    { id: "trackLine", kind: "nativeText", label: "Doppler tracking", value: "trackLine", style: "label" },
-  )
-  const rotators = d.tracking?.rotatorOptions?.length ? d.tracking.rotatorOptions : [{ label: "No rotator", value: "" }]
-  controls.push(
     { id: "rotate", kind: "nativeSwitch", label: "Point rotator", value: "rotate", event: "rotate" },
     { id: "rotator", kind: "nativeDropdown", label: "Rotator", value: "rotator", event: "rotator", options: rotators, disabled: rotators.length < 2 },
-    { id: "rotorLine", kind: "nativeText", label: "Rotator", value: "rotorLine", style: "label" },
     { id: "fill", kind: "nativeSwitch", label: "Log contacts via this satellite", value: "fill", event: "fill" },
-    { id: "fillLine", kind: "nativeText", label: "Contacts", value: "fillLine", style: "label" },
+    { id: "links", kind: "nativeButton", label: "Links", icon: "open-in-new", variant: "tonal", event: "links" },
   )
-  d.radio.forEach((_, i) => controls.push({ id: radioKey(i), kind: "nativeText", label: `Radio line ${i + 1}`, value: radioKey(i), style: "mono" }))
-  controls.push({ id: "links", kind: "nativeButton", label: "Links", icon: "open-in-new", variant: "tonal", event: "links" })
+  children.push(
+    { node: { row: [{ control: "track" }, { control: "uplinkRadio", flex: 1 }], spacing: dense.gap, crossAxisAlignment: "center" }, height: rowH },
+    ...texts("trackLine", trackLineOf(d), "Doppler tracking", "label"),
+    { node: { row: [{ control: "rotate" }, { control: "rotator", flex: 1 }], spacing: dense.gap, crossAxisAlignment: "center" }, height: rowH },
+    ...texts("rotorLine", d.tracking?.rotorLine || ROTOR_HINT, "Rotator", "label"),
+    { node: { control: "fill" }, height: rowH },
+    ...texts("fillLine", d.tracking?.fillLine ?? "", "Contacts", "label"),
+    ...d.radio.flatMap((line, i) => texts(radioKey(i), line, `Radio line ${i + 1}`, "mono")),
+    { node: { control: "links" }, height: rowH },
+  )
   return {
     version: 1,
     width: 360,
@@ -588,20 +648,8 @@ export function buildDetailScene(d: DetailModel): PanelScene {
     strings: detailStrings(d),
     layers: [],
     controls,
-    layout: {
-      column: [
-        ...head,
-        ...d.status.map((_, i): PanelSceneLayoutNode => ({ control: statusKey(i) })),
-        { row: [{ control: "track" }, { control: "uplinkRadio", flex: 1 }], spacing: dense.gap, crossAxisAlignment: "center" },
-        { control: "trackLine" },
-        { row: [{ control: "rotate" }, { control: "rotator", flex: 1 }], spacing: dense.gap, crossAxisAlignment: "center" },
-        { control: "rotorLine" },
-        { control: "fill" },
-        { control: "fillLine" },
-        ...d.radio.map((_, i): PanelSceneLayoutNode => ({ control: radioKey(i) })),
-        { spacer: 1 },
-        { control: "links" },
-      ],
+    layout: scrolling(children, d, dense) ?? {
+      column: children.map((c) => c.node),
       padding: dense.padding,
       spacing: d.compact ? dense.rowGap : 4,
       crossAxisAlignment: "stretch",
@@ -632,18 +680,18 @@ export interface ReportModel {
   confirming: boolean
   /// What would be sent, when it can be.
   report: Report | null
+  /// The pane's size and what fits across it, as on the pass's other pages (wrap.ts), when the host says.
+  pane?: { width: number; height: number }
+  columns?: Room
 }
 
-export const reportStrings = (r: ReportModel): Record<string, string> => ({
-  title: r.title,
-  tab: "report",
-  variant: r.variant,
-  kind: r.kind,
-  call: r.call,
-  grid: r.grid,
-  summary: r.summary,
-  message: r.message,
-})
+export function reportStrings(r: ReportModel): Record<string, string> {
+  const strings: Record<string, string> = { title: r.title, tab: "report", variant: r.variant, kind: r.kind, call: r.call, grid: r.grid }
+  // What will be sent and what came of it are text a line long, so a long one is several.
+  strings.summary = r.summary
+  strings.message = r.message
+  return strings
+}
 
 export const reportValues = (r: ReportModel): Record<string, number> => ({ utc: r.utc ? 1 : 0, ...tabValues("report") })
 
@@ -676,9 +724,10 @@ export function buildReportScene(r: ReportModel): PanelScene {
     },
     { id: "call", kind: "nativeTextField", label: "Your callsign", value: "call", event: "call", placeholder: "Callsign" },
     { id: "grid", kind: "nativeTextField", label: "Your grid square (optional)", value: "grid", event: "grid", placeholder: "Grid square, optional" },
-    { id: "summary", kind: "nativeText", label: "What will be sent", value: "summary" },
-    { id: "message", kind: "nativeText", label: "Result", value: "message" },
   )
+  const summary = proseOf("summary", r.summary, "What will be sent", undefined, r.columns)
+  const message = proseOf("message", r.message, "Result", undefined, r.columns)
+  controls.push(...summary.controls, ...message.controls)
   const buttons: PanelSceneLayoutNode[] = r.confirming
     ? (controls.push(
         { id: "confirm", kind: "nativeButton", label: "Yes, send it", icon: "send", variant: "filled", event: "confirm" },
@@ -686,6 +735,16 @@ export function buildReportScene(r: ReportModel): PanelScene {
       ),
       [{ row: [{ control: "cancel", flex: 1 }, { control: "confirm", flex: 1 }], spacing: dense.gap, crossAxisAlignment: "center" }])
     : (controls.push({ id: "send", kind: "nativeButton", label: "Send to AMSAT", icon: "send", variant: "filled", event: "send", disabled: !r.ready }), [{ control: "send" }])
+  const children: Child[] = [
+    ...head.map((node): Child => ({ node, height: dense.headRow })),
+    { node: { control: "variant" }, height: 56 },
+    { node: { control: "kind" }, height: 48 },
+    { node: { control: "call" }, height: 56 },
+    { node: { control: "grid" }, height: 56 },
+    { node: summary.node, height: summary.height },
+    { node: message.node, height: message.height },
+    ...buttons.map((node): Child => ({ node, height: 48 })),
+  ]
   return {
     version: 1,
     width: 360,
@@ -694,8 +753,8 @@ export function buildReportScene(r: ReportModel): PanelScene {
     strings: reportStrings(r),
     layers: [],
     controls,
-    layout: {
-      column: [...head, { control: "variant" }, { control: "kind" }, { control: "call" }, { control: "grid" }, { control: "summary" }, { control: "message" }, { spacer: 1 }, ...buttons],
+    layout: scrolling(children, r, dense) ?? {
+      column: [...head, { control: "variant" }, { control: "kind" }, { control: "call" }, { control: "grid" }, summary.node, message.node, { spacer: 1 }, ...buttons],
       padding: dense.padding,
       spacing: dense.gap,
       crossAxisAlignment: "stretch",
