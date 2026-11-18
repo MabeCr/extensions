@@ -7,7 +7,7 @@ import { test } from "node:test"
 import { buildCatalog, parseElements, parseList } from "./data.ts"
 import { buildDetail } from "./detail.ts"
 import { ELEMENTS, LIST } from "./fixtures.ts"
-import { faded, groundTrack, MAP_ZOOM, passMap, TRACK_MARGIN_MS } from "./map.ts"
+import { faded, groundTrack, MAP_ZOOM, passMap, TRACK_REACH_MS } from "./map.ts"
 import { findPasses, footprintKm, lookAt, satrecFromOmm, subPoint } from "./orbit.ts"
 import { DEFAULT_SKY_COLORS } from "./sky.ts"
 
@@ -36,18 +36,18 @@ test("the point under the satellite is where it is overhead: straight up from th
   assert.ok(Math.abs(footprintKm(p.altKm) - 3900) < 300, String(footprintKm(p.altKm)))
 })
 
-test("the map shows the pass solid, a quarter hour either side dashed, and you in the middle", () => {
+test("the map shows the pass solid, the way to it dashed, and you in the middle", () => {
   const map = control(mid)
   assert.equal(map.kind, "map")
   assert.deepEqual(map.home, { lat: 25.76, lon: -80.19 })
   assert.equal(map.zoom.initial, MAP_ZOOM)
-  assert.deepEqual(map.lines.map((l) => [l.id, l.style]), [["before", "nearby"], ["after", "nearby"], ["pass", "pass"]])
+  // Under way there is no way still to go, and none is drawn after the pass.
+  assert.deepEqual(map.lines.map((l) => [l.id, l.style]), [["pass", "pass"]])
+  assert.deepEqual(control(pass.aos - 40 * 60_000).lines.map((l) => [l.id, l.style]), [["before", "nearby"], ["pass", "pass"]])
   const solid = map.lines.find((l) => l.id === "pass")!.points
   // Every point of the solid part is somewhere the satellite is above your horizon.
   const t = (i: number) => Math.min(pass.los, pass.aos + i * 15_000)
   solid.forEach((p, i) => assert.ok(lookAt(satrec, miami, t(i))!.elevation > -0.5, `${i}`))
-  const before = map.lines.find((l) => l.id === "before")!.points
-  assert.equal(before.length, TRACK_MARGIN_MS / 15_000 + 1)
   // The rise and set dots are the ends of the solid part.
   const byId = Object.fromEntries(map.markers.map((m) => [m.id, m]))
   assert.deepEqual([byId.rise.lat, byId.rise.lon], [solid[0].lat, solid[0].lon])
@@ -82,4 +82,32 @@ test("the Map tab has the map and a line saying what is on it; another tab has n
   assert.equal(buildDetail(ao7, miami, pass, mid, true, "sky").map, undefined)
   const none = buildDetail(catalog.find((s) => s.name === "CAS-4A")!, miami, pass, mid, true, "map")
   assert.equal(none.map, undefined)
+})
+
+test("the map under the pass is light by default, and full when asked: state lines, grid and night shading are what slow a phone", () => {
+  const under = (full: boolean) => (passMap(satrec, miami, pass, mid, DEFAULT_SKY_COLORS, "#ffffff", full) as unknown as { map: Record<string, unknown> }).map
+  assert.deepEqual(under(false), { grayline: false, divisions: "#00000000", graticule: "#00000000" })
+  assert.deepEqual(under(true), { grayline: true })
+  assert.deepEqual((control(mid) as unknown as { map: Record<string, unknown> }).map, under(false))
+})
+
+test("the dashed track runs on from the pass to where the satellite is now, so that its dot is on the line", () => {
+  const near = control(pass.aos - 40 * 60_000)
+  const before = (m: MapControl) => m.lines.find((l) => l.id === "before")?.points as { lat: number; lon: number }[]
+  const sat = (m: MapControl) => m.markers.find((mk) => mk.id === "sat")!
+  const first = before(near)[0]
+  const here = sat(near)
+  assert.ok(Math.abs(first.lat - here.lat) < 0.01 && Math.abs(first.lon - here.lon) < 0.01, "it starts at the dot")
+  assert.equal(before(near).length, (40 * 60_000) / 15_000 + 1)
+  // Close to the pass, it starts exactly at the dot, not a quarter hour back behind it.
+  const close = control(pass.aos - 5 * 60_000)
+  assert.equal(before(close).length, (5 * 60_000) / 15_000 + 1)
+  assert.ok(Math.abs(before(close)[0].lat - sat(close).lat) < 0.01 && Math.abs(before(close)[0].lon - sat(close).lon) < 0.01)
+  // And once the pass has begun there is no line left to draw.
+  assert.equal(before(control(pass.aos + 60_000)), undefined)
+  // Just within its reach it starts at the dot, and a later pass than that has no dashed line at all.
+  const edge = control(pass.aos - TRACK_REACH_MS)
+  assert.equal(before(edge).length, TRACK_REACH_MS / 15_000 + 1)
+  assert.equal(before(control(pass.aos - TRACK_REACH_MS - 60_000)), undefined)
+  assert.equal(before(control(pass.aos - 6 * 3_600_000)), undefined)
 })

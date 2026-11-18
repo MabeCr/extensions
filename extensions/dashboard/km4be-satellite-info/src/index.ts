@@ -45,6 +45,8 @@ import { skyTrack } from "./sky.ts"
 import { satrecFromOmm } from "./orbit.ts"
 import type { TrackingView } from "./tracking.ts"
 import { PREVIEW_SVG } from "./preview.ts"
+import { roomOf } from "./wrap.ts"
+import type { Room } from "./wrap.ts"
 import { buildNow, buildNowScene, upNow, upNowHint } from "./upnow.ts"
 import type { NowModel } from "./upnow.ts"
 import { statusFor, statusHours, statusLines } from "./status.ts"
@@ -263,6 +265,10 @@ const live = new Map<string, LiveTarget>()
 let liveTimer: number | null = null
 let liveWorks = true
 const LIVE_EVERY_MS = 1000
+/// The map's satellite moves a few kilometres a second, which a map at this scale does not show; and each step makes the app
+/// redraw the map, which on a phone is what a pan or zoom is competing with.
+const MAP_EVERY_MS = 5000
+const mapSentAt = new Map<string, number>()
 
 async function moveLive(): Promise<void> {
   const now = Date.now() + clockSkew
@@ -271,7 +277,9 @@ async function moveLive(): Promise<void> {
       live.delete(id)
       continue
     }
+    if (target.tab === "map" && now - (mapSentAt.get(id) ?? 0) < MAP_EVERY_MS) continue
     const steps = liveFrame(target, now)
+    if (target.tab === "map" && steps.length) mapSentAt.set(id, now)
     if (target.tab === "sky" && target.layers.has("trackSky")) {
       const [name, los] = [target.satellite.name, target.pass.los]
       const lines = [tracker.isTracking(name, los) ? tracker.status().line : "", rotor.isTracking(name, los) ? rotor.status().line : ""].filter(Boolean)
@@ -498,6 +506,15 @@ async function reportModel(args: PanelRenderArgs, ctx: HookContext, state: PaneS
   }
 }
 
+/// How many characters of a line fit across the Radio page, for wrap.ts: from the pane's width and the faces the app reports.
+/// Without a report, nothing is wrapped.
+function wrapColumns(args: PanelRenderArgs, compact: boolean): Room | undefined {
+  const e = args.environment
+  if (!e || !(e.width > 0)) return undefined
+  const look = listLook(e, compact)
+  return roomOf(look.width, { size: look.size, os: look.os }, e.typography?.label?.scaledFontSize || 13, e.typography?.body?.scaledFontSize || 14, { label: look.lineLabel, body: look.lineBody })
+}
+
 /// What the pane shows now, given its state, the favorites and the clock.
 async function snapshot(args: PanelRenderArgs, ctx: HookContext): Promise<View> {
   const state = paneState(args)
@@ -525,11 +542,14 @@ async function snapshot(args: PanelRenderArgs, ctx: HookContext): Promise<View> 
         tab === "report" ? "radio" : tab,
         themeOf(args.environment?.colors),
         statusLines(statusFor(ready.reports, pass.satellite), ready.hours, now, state.utc),
-        { countdown: countdownOn(args.config), compact, pane: paneOf(args), skyPercent: skyPercent(args.config) },
+        { countdown: countdownOn(args.config), compact, pane: paneOf(args), skyPercent: skyPercent(args.config), mapFull: args.config?.mapDetail === "full" },
       )
       detail.tracking = await trackingView(name, los, tab === "radio")
+      detail.columns = wrapColumns(args, compact)
       if (tab !== "report") return { kind: "detail", model: detail, source: { satellite: pass.satellite, place: ready.place, pass } }
-      return { kind: "report", model: await reportModel(args, ctx, state, pass.satellite, ready.place, detail.title, compact, now) }
+      const report = await reportModel(args, ctx, state, pass.satellite, ready.place, detail.title, compact, now)
+      const pane = paneOf(args)
+      return { kind: "report", model: { ...report, ...(pane ? { pane } : {}), ...(detail.columns ? { columns: detail.columns } : {}) } }
     }
     state.view = "list" // it has ended, or the settings no longer list it
   }
@@ -648,6 +668,17 @@ export const PassesPanel: PanelHook = {
             fieldType: "checkbox",
             label: "Count down to rise, peak and set",
             description: "On a pass's page, shows the time to or since each event, such as −4:12 before it and +2:05 after, and redraws every second while that page is open.",
+          },
+          {
+            type: "field",
+            key: "mapDetail",
+            fieldType: "select",
+            label: "Map detail",
+            description: "Fast leaves off the state lines, the grid and the night shading, which makes the map quicker to move on a phone. Full draws them.",
+            options: [
+              { label: "Fast", value: "fast" },
+              { label: "Full", value: "full" },
+            ],
           },
           {
             type: "field",

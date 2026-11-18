@@ -5,6 +5,7 @@
 // sky, and what to tune to. Two tabs of a small screen, since a scene cannot
 // scroll: the Sky (plot and times) and the Radio (frequencies and Doppler).
 
+import type { Room } from "./wrap.ts"
 import type { PanelSceneControl, PanelSceneLayer } from "@ham2k/extension-sdk"
 
 import type { Satellite } from "./data.ts"
@@ -35,6 +36,9 @@ export interface DetailModel {
   status: string[]
   /// The radio page, padded to `RADIO_LINES`.
   radio: string[]
+  /// How many characters of a line fit across the Radio page, monospaced and not; absent, nothing is wrapped (wrap.ts).
+  /// And how tall a line of each is, with the operator's text scaling, for laying the page out so that it scrolls.
+  columns?: Room
   /// Whether the satellite is above the horizon right now, and so on the plot as well as in its path.
   underWay: boolean
   /// Whether the scene is laid out tightly, for a small pane.
@@ -185,7 +189,7 @@ export function buildDetail(
   tab: Tab,
   theme: Theme = DEFAULT_THEME,
   status: string[] = ["", ""],
-  options: { countdown?: boolean; compact?: boolean; pane?: { width: number; height: number }; skyPercent?: number } = {},
+  options: { countdown?: boolean; compact?: boolean; pane?: { width: number; height: number }; skyPercent?: number; mapFull?: boolean } = {},
 ): DetailModel {
   const pass = completePass(satellite, observer, listed, now)
   const at = (t: number) => clock(t, pass.aos, utc)
@@ -221,7 +225,7 @@ export function buildDetail(
     ...(options.pane ? { pane: options.pane } : {}),
     ...(options.skyPercent !== undefined ? { skyPercent: options.skyPercent } : {}),
     scrub,
-    ...(tab === "map" && satrec ? { map: passMap(satrec, observer, pass, now, theme.sky, theme.text) } : {}),
+    ...(tab === "map" && satrec ? { map: passMap(satrec, observer, pass, now, theme.sky, theme.text, options.mapFull === true) } : {}),
     sky: {
       // The plot holds still; the satellite moving across it is a layer of its own, which live.ts moves between draws.
       svg: skySvg(track, pass, theme.sky),

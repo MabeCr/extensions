@@ -193,9 +193,9 @@ test("open controls name their pass, whatever the satellite is called", () => {
 const ctx = { online: true }
 let panes = 0
 interface Control { id: string; opacity?: number; label?: string }
-interface SceneOf { controls: Control[]; layers: { id: string }[]; strings: Record<string, string>; values: Record<string, number> }
+interface SceneOf { layout?: unknown; controls: Control[]; layers: { id: string }[]; strings: Record<string, string>; values: Record<string, number> }
 
-async function panel(shown: unknown[] = []) {
+async function panel(shown: unknown[] = [], environment?: Record<string, unknown>) {
   forgetAll()
   const id = ++panes
   const ext = await loadExtension(() => import("./index.ts"), {
@@ -226,6 +226,7 @@ async function panel(shown: unknown[] = []) {
     reason: "",
     config: cfg,
     clock: { nowMillis: at, realNowMillis: at },
+    ...(environment ? { environment } : {}),
   })
   return {
     render: async (at: number) => ((await ext.runHook("panel", "render", args(at), { ctx })) as { scene: SceneOf }).scene,
@@ -387,4 +388,70 @@ test("ARISS is the ISS for AMSAT's status, and IO-117 is GreenCube's number", ()
   assert.deepEqual(curatedInfo.ARISS.amsat, ["ISS"])
   assert.equal(curatedInfo["IO-117"].norad, 53109)
   assert.equal(curatedInfo["FO-29"].norad, 24278)
+})
+
+test("in a narrow pane the Radio page's long lines go onto new lines, not off the side", async () => {
+  const face = { fontFamily: null, fontSize: 13, scaledFontSize: 13 }
+  const p = await panel([], { width: 220, height: 500, typography: { mono: face, label: face, body: face } })
+  const list = await p.render(t0)
+  await p.event(t0, list.controls.find((c) => c.id.startsWith("open:") && c.opacity !== 0)!.id, "open")
+  await p.event(t0, "tab", "tab", { text: "radio" })
+  const radio = (await p.render(t0)) as unknown as { controls: { id: string }[]; layout: unknown; strings: Record<string, string> }
+  // A long text is a run of words in a `wrap`, which the app breaks where they reach the edge; a short one is a control as ever.
+  const ids = radio.controls.map((c) => c.id)
+  assert.ok(ids.some((id) => /^radio\d+_\d+$/.test(id)), "a long radio line is words")
+  assert.ok(ids.some((id) => /^status\d+_\d+$/.test(id)), "so is a long report")
+  assert.ok(ids.includes("radio0") || ids.includes("radio0_0"))
+  assert.ok(JSON.stringify(radio.layout).includes('"wrap"'))
+  for (const [key, value] of Object.entries(radio.strings)) assert.ok(!value.includes("_0"), key)
+  assert.ok(radio.strings.status0.length > 20 && /^AMSAT, last 24 h:/.test(radio.strings.status0), "the strings are the whole texts")
+})
+
+test("the Radio page is a grid the app scrolls, so a phone on its side can reach all of it, and a column where the pane's size is not known", async () => {
+  const face = { fontFamily: null, fontSize: 13, scaledFontSize: 13 }
+  const open = async (environment?: Record<string, unknown>) => {
+    const p = await panel([], environment)
+    const list = await p.render(t0)
+    await p.event(t0, list.controls.find((c) => c.id.startsWith("open:") && c.opacity !== 0)!.id, "open")
+    await p.event(t0, "tab", "tab", { text: "radio" })
+    return (await p.render(t0)) as unknown as { layout: { grid?: { span?: [number, number] }[]; column?: unknown[]; unit?: number[]; columns?: number }; controls: { id: string }[] }
+  }
+  const landscape = await open({ width: 800, height: 360, typography: { mono: face, label: face, body: face } })
+  assert.ok(landscape.layout.grid && landscape.layout.unit && landscape.layout.columns, "a grid, which scrolls the pane")
+  assert.ok(landscape.layout.grid.every((c) => c.span && c.span[0] === landscape.layout.columns && c.span[1] >= 1))
+  assert.ok(landscape.layout.grid.reduce((n, c) => n + c.span![0] * c.span![1], 0) * landscape.layout.unit![0] * landscape.layout.unit![1] > 800 * 360, "more page than pane, which is why it must scroll")
+  assert.ok(landscape.controls.every((c) => JSON.stringify(landscape.layout).includes(`"${c.id}"`)), "every control is placed")
+
+  const unknown = await open()
+  assert.ok(unknown.layout.column && !unknown.layout.grid)
+})
+
+test("the Map page's caption is a line to a control, wrapped to the pane, and not cut off", async () => {
+  const face = { fontFamily: null, fontSize: 13, scaledFontSize: 13 }
+  const p = await panel([], { width: 360, height: 640, typography: { mono: face, label: face, body: face } })
+  const list = await p.render(t0)
+  await p.event(t0, list.controls.find((c) => c.id.startsWith("open:") && c.opacity !== 0)!.id, "open")
+  await p.event(t0, "tab", "tab", { text: "map" })
+  const map = await p.render(t0)
+  const words = map.controls.filter((c) => /^mapKey_\d+$/.test(c.id)) as unknown as { id: string; label: string }[]
+  assert.equal(words.map((w) => w.label).join(" "), "Solid while it is above your horizon, from the green dot to the red. The ringed dot is where it is now, and the shaded circle is where it can be heard from.")
+  assert.ok(JSON.stringify(map.layout).includes('"wrap"'), "the app breaks the lines")
+  assert.equal(map.strings.mapKey.length > 100, true, "the string is the whole caption")
+})
+
+test("the Report page scrolls in a short pane too, and what will be sent is wrapped to the pane", async () => {
+  const face = { fontFamily: null, fontSize: 13, scaledFontSize: 13 }
+  const open = async (environment: Record<string, unknown>) => {
+    const p = await panel([], environment)
+    const list = await p.render(t0)
+    await p.event(t0, list.controls.find((c) => c.id.startsWith("open:") && c.opacity !== 0)!.id, "open")
+    await p.event(t0, "tab", "tab", { text: "report" })
+    return (await p.render(t0)) as unknown as { layout: { grid?: unknown[]; column?: unknown[] }; strings: Record<string, string>; controls: { id: string }[] }
+  }
+  const short = await open({ width: 800, height: 300, typography: { mono: face, label: face, body: face } })
+  assert.ok(short.layout.grid, "a grid, which the app scrolls")
+  assert.ok(short.controls.every((c) => JSON.stringify(short.layout).includes(`"${c.id}"`)))
+  const narrow = await open({ width: 220, height: 640, typography: { mono: face, label: face, body: face } })
+  assert.ok(narrow.controls.some((c) => /^summary_\d+$/.test(c.id)), "what will be sent is words, which the app breaks")
+  assert.ok(narrow.strings.summary.length > 30)
 })

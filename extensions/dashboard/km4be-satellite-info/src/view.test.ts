@@ -316,7 +316,8 @@ test("switching on Log contacts via this satellite gives the contact being typed
   await p.event(cfg, t0, "tab_radio", "tab-radio", { value: 1 })
   const off = (await p.render(cfg, t0)).scene as unknown as { values: Record<string, number>; strings: Record<string, string> }
   assert.equal(off.values.fill, 0)
-  assert.match(off.strings.fillLine, /SAT_NAME and PROP_MODE/)
+  // The line is set a text control to a line, and a long one takes more than one.
+  assert.match([off.strings.fillLine, off.strings.fillLine_1, off.strings.fillLine_2, off.strings.fillLine_3].filter(Boolean).join(" "), /SAT_NAME and PROP_MODE/)
   await p.event(cfg, t0, "fill", "fill", { value: 1 })
   assert.equal(drafts.length, 1)
   const patch = drafts[0].patch as { refs: { type: string; ref: string }[] }
